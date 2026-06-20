@@ -108,5 +108,17 @@
 
 **Источники + камни:** Kenney/Quaternius (CC0, чисто) · Godot Asset Library (⚠️ открывать репо, читать LICENSE — тег врёт) · itch.io (CC0-фильтр надёжен, прочее — на странице) · OpenGameArt (⚠️ СМЕСЬ — бери только CC0/CC-BY) · CraftPix (своя «free», не CC0, raw не коммитить).
 
+**ДОБОР (2-й прогон ресёрча, общий чат 20.06 — оба прогона сошлись на ядре = высокая уверенность):**
+- ⭐ **Maaack's Game Template** (Maaack/Godot-Game-Template, MIT) — готовые меню/настройки/пауза/титры/загрузчик сцен/сохранение настроек/геймпад. Стартовый каркас, огромная экономия для соло. ⚠️ проверить ATTRIBUTION.md (логотип Godot CC-BY).
+- **Wyvernbox** (don-tnowe/godot-wyvernbox-inventory, MIT) — action-RPG инвентарь с **лут-генераторами/паттернами/торговлей** (ближе к дропу имплантов, чем GLoot).
+- **Kenney — Modular Character Pack** (CC0, 425 элементов, OpenGameArt) — вторая paper-doll база, БЕЗ атрибуции (пара к RGS_Dev).
+- **Penusbmic — Cyberpunk Pixels / Sci-Fi Character Packs** (itch, custom: коммерция ок, НЕ перепродавать, НЕ CC0; в каждом паке есть free-спрайт) — киберпанк-пиксель-персонажи.
+- **Wenrexa — UI Sci-Fi** (CC0, itch) — доп UI-кит (⚠️ CC0 в комментах автора — скриншотить).
+- **Debug Menu** (godot-extended-libraries, MIT) — FPS/CPU/GPU-метрики в экспортном билде (перф-контроль).
+- **SaveKit** (fernforestgames, MIT, Godot 4.5+) — save с защитой от code-injection из user-файлов (альтернатива SaveMadeEasy).
+- **ThemeGen / Themey** (MIT) — генерация/готовые UI-Theme. **godot-loot-tables** (PieKing1215, MIT) — ещё loot. **csv-to-gettext-converter** — локализация в Poedit.
+- Шрифты (+OFL): **Rajdhani** (плотный HUD), **Exo 2** (читаем в body), Audiowide/Aldrich/Tomorrow.
+- ⚠️ Tileset **Neo Zero Cyberpunk City** (itch, custom: коммерция ок, не перепродавать/распространять — НЕ CC0).
+
 ## 7. СВЯЗЬ С ПРЕДЫДУЩИМ ОПЫТОМ
 Переносится из Movement Parkour Racer: любовь к киберпанку, идея модульного кибер-тела (тут стала ФИШКОЙ), честность монетизации (не p2w), читаемость силуэта/билда. Соло-разработка, нулевой бюджет, параллельно с основной работой → scope держать УЗКИМ (урок §17-бис паркура: не раздувать, одна читаемая полка).
