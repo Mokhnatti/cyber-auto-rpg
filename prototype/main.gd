@@ -28,6 +28,9 @@ var hud: Control
 var wave_label: Label
 var status_label: Label
 var hero_ults := []         # кнопки ульт
+var boss_bg: ColorRect      # полоса HP босса вверху
+var boss_fill: ColorRect
+var boss_lbl: Label
 
 func _ready() -> void:
 	randomize()
@@ -77,7 +80,7 @@ func _spawn_wave() -> void:
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
 			"dmg": int((10 if boss else 7) * (1.0 + wave * 0.12)),
-			"atk": 1.5 if boss else 1.1, "t": 1.5, "alive": true,
+			"atk": 1.5 if boss else 1.1, "t": 1.5, "alive": true, "boss": boss,
 			"home": Vector2(px, GROUND_Y), "atk_anim": 0.0
 		})
 		var tw := create_tween()
@@ -203,9 +206,13 @@ func _anim_doll(o: Dictionary, t: float, marching: bool, delta: float) -> void:
 		if spr.animation != want:
 			spr.play(want)
 		spr.position.x = (o["atk_anim"] / 0.18) * 10.0   # выпад вперёд (local +x = к врагу)
-	# hp-бар
+	# hp-бар над головой — только если ранен (и не босс: у него полоса сверху)
+	var hbg: ColorRect = d.get_node("HpBg")
 	var bar: ColorRect = d.get_node("HpFill")
-	bar.size.x = 44.0 * (float(o["hp"]) / float(o["max"]))
+	var wounded: bool = o["alive"] and o["hp"] < o["max"] and not o.get("boss", false)
+	hbg.visible = wounded
+	bar.visible = wounded
+	bar.size.x = 40.0 * (float(o["hp"]) / float(o["max"]))
 
 # --- УТИЛЫ ---
 func _first_alive(arr: Array):
@@ -245,17 +252,22 @@ func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2
 	# неон-платформа/тень под ногами (цвет класса, симметрична → ок при flip)
 	root.add_child(_rect("Glow", Vector2(-28, -8), Vector2(56, 13), Color(glow.r, glow.g, glow.b, 0.35)))
 	# анимированный спрайт (CC0 RGS_Dev)
+	# персонаж в кадре занимает yc 106..174 → ставим ногами на 0 (землю), крупнее
 	var spr := AnimatedSprite2D.new()
 	spr.name = "Spr"
 	spr.sprite_frames = _frames(folder)
-	spr.scale = Vector2(0.55, 0.55)
-	spr.position = Vector2(0, -52)
+	spr.scale = Vector2(0.9, 0.9)
+	spr.position = Vector2(0, -66.6)   # ноги (yc174) → ~0, голова (yc106) → ~-61
 	spr.animation = "idle"
 	spr.play("idle")
 	root.add_child(spr)
-	# hp-бар над головой
-	root.add_child(_rect("HpBg", Vector2(-22, -122), Vector2(44, 6), Color(0, 0, 0, 0.6)))
-	root.add_child(_rect("HpFill", Vector2(-22, -122), Vector2(44, 6), glow.lightened(0.1)))
+	# hp-бар над головой — виден ТОЛЬКО когда ранен (управляется в _anim_doll)
+	var hbg := _rect("HpBg", Vector2(-20, -74), Vector2(40, 5), Color(0, 0, 0, 0.65))
+	hbg.visible = false
+	root.add_child(hbg)
+	var hf := _rect("HpFill", Vector2(-20, -74), Vector2(40, 5), glow.lightened(0.1))
+	hf.visible = false
+	root.add_child(hf)
 	return root
 
 func _frames(folder: String) -> SpriteFrames:
@@ -282,6 +294,18 @@ func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
 # --- HUD ---
 func _refresh_hud() -> void:
 	wave_label.text = "ВОЛНА  %d" % max(wave, 0) + ("   ⚔ БОЙ" if phase == "fight" else ("   ▶ марш" if phase == "march" else ""))
+	# полоса босса
+	var bz = null
+	for e in enemies:
+		if e.get("boss", false) and e["alive"]:
+			bz = e; break
+	var has_boss: bool = bz != null
+	boss_bg.visible = has_boss
+	boss_fill.visible = has_boss
+	boss_lbl.visible = has_boss
+	if has_boss:
+		boss_fill.size.x = (W - 66) * (float(bz["hp"]) / float(bz["max"]))
+		boss_lbl.text = "⚠ БОСС   %d / %d" % [bz["hp"], bz["max"]]
 	for i in heroes.size():
 		var hh = heroes[i]
 		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
@@ -307,6 +331,24 @@ func _build() -> void:
 	wave_label.add_theme_font_size_override("font_size", 22)
 	wave_label.position = Vector2(20, 16)
 	hud.add_child(wave_label)
+
+	# полоса HP босса вверху (появляется в босс-волне)
+	boss_bg = ColorRect.new()
+	boss_bg.color = Color(0, 0, 0, 0.55)
+	boss_bg.position = Vector2(30, 50); boss_bg.size = Vector2(W - 60, 22)
+	boss_bg.visible = false
+	hud.add_child(boss_bg)
+	boss_fill = ColorRect.new()
+	boss_fill.color = Color("#ff2d95")
+	boss_fill.position = Vector2(33, 53); boss_fill.size = Vector2(W - 66, 16)
+	boss_fill.visible = false
+	hud.add_child(boss_fill)
+	boss_lbl = Label.new()
+	boss_lbl.add_theme_color_override("font_color", Color("#ffffff"))
+	boss_lbl.add_theme_font_size_override("font_size", 13)
+	boss_lbl.position = Vector2(36, 52)
+	boss_lbl.visible = false
+	hud.add_child(boss_lbl)
 
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 24)
