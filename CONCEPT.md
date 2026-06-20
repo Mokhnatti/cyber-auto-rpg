@@ -80,5 +80,33 @@
 - **MCP (опционально, для скринов/захвата ошибок):** Coding-Solo/godot-mcp (MIT, ~3.9k★) или GoPeak/HaD0Yun (MIT, 95+ тулзов) или IvanMurzak/Godot-MCP (Apache-2.0, C#-аддон). Все коммерчески чисты. GDAI — проприетарный, НЕ вендорить.
 - ⚠️ **Подводные камни:** `.uid`-сайдкары (Godot 4.4+) КОММИТИТЬ в git (не в .gitignore), руками не выдумывать; CLI молча глотает опечатки во флагах; на свежем чекауте сначала прогрев `--headless --import`, потом экспорт/тесты.
 
+## 9. АССЕТЫ И БИБЛИОТЕКИ (ресёрч 20.06.2026, лицензии проверены по LICENSE-файлам)
+🚨 ПРАВИЛО: CC0/MIT/Apache/BSD = бери; CC-BY/OFL = бери + кредиты; **GPL/AGPL/CC-NC/CC-BY-SA-арт/«no license» = ЧЁРНЫЙ СПИСОК.** Default-deny. Вести `THIRD_PARTY_NOTICES` + credits-экран.
+
+**⭐ ТОП-5 под наш кейс (paper-doll импланты + иконки + UI):**
+1. **game-icons.net** (CC BY 3.0) — ~4000 перекрашиваемых иконок прямо под импланты/абилки/статусы. ⚠️ атрибуция по каждому автору → credits-экран сразу. Ядро визуала имплантов.
+2. **RGS_Dev — CC0 Modular Animated Vector Characters 2D** (CC0, itch) — лучшая бесплатная paper-doll база (своп частей + перекраска в движке) = прямой маппинг на «модульный корпус киборга».
+3. **Kenney — UI Pack: Sci-Fi** (CC0) — готовый HUD/меню-скин под неон, 0 обязательств.
+4. **ansimuz — Warped City + Warped City 2** (CC0, OpenGameArt) — весь неон-город (параллакс/тайлсет/пропсы) одним махом.
+5. **GLoot (MIT) + Lootie/WeightedChoice (MIT) + Inventory Forge (MIT)** — инвентарь имплантов + weighted-дроп. Gacha = их таблица + свой pity-счётчик (готового gacha-плагина под Godot 4 НЕТ).
+
+**Плагины-код (все MIT = как сам Godot):**
+- Диалоги: Dialogue Manager (nathanhoad, code-first) / Dialogic (editor-driven).
+- AI/состояния (авто-бой): **LimboAI** (BT+FSM, C++, визуал) / Beehave (GDScript BT) / godot-statecharts.
+- Инвентарь: GLoot / Inventory Forge (+ weighted loot). Save: SaveMadeEasy. Loot: Lootie / WeightedChoice.
+- Камера: Phantom Camera (ramokz, upstream!). Консоль/читы: Limbo Console / Panku Console. Tween: Godot-Tween-Suite (KoBeWi). Локализация: Godot4LocalizationEditor.
+
+**Арт CC0:** Kenney (UI Sci-Fi / Particle Pack / Game Icons / Audio — всё CC0, без атрибуции). VFX неон-glow дёшево — встроенный WorldEnvironment Glow (emissive>1.0), без сторонних лицензий.
+
+**Аудио:** Kenney (CC0, безопасно) · Sonniss GDC (royalty-free, ⚠️ запрет AI-тренинга, хранить PDF) · OpenGameArt synthwave CC0 (Space Synth Wave, CC0-Dark/Retro Music) · Cyberscapes (CC-BY, кредит). ⚠️ Ovani free-пак ТРЕБУЕТ кредит.
+
+**Шрифты (все OFL, коммерция ок):** Orbitron (титул) + Chakra Petch/Oxanium (UI) + Share Tech Mono/JetBrains Mono (терминал/цифры). ⛔ НЕ брать: «Cyberpunk» (Lyon ArtZ), Good Times, Eurostile/Square 721, Blender Pro — personal-use/платные.
+
+**Шейдеры (godotshaders.com — ⚠️ у КАЖДОГО своя лицензия в футере: CC0/MIT/GPL):** 2D Hologram (CC0), Glitch Effect G4 (MIT). GPL-шейдеры пропускать. Демо-текстуры НЕ лицензированы.
+
+**⛔ ЧЁРНЫЙ СПИСОК:** Universal LPC Spritesheet Generator / RapidLPC (GPL+CC-BY-SA, заражают арт!); любой GPL/AGPL-аддон в рантайме; репо без LICENSE (= all rights reserved); CC-NC музыка/арт; CC-BY-SA-арт; «no copyright» YouTube-музыка; CraftPix raw в публичный git (no-redistribute).
+
+**Источники + камни:** Kenney/Quaternius (CC0, чисто) · Godot Asset Library (⚠️ открывать репо, читать LICENSE — тег врёт) · itch.io (CC0-фильтр надёжен, прочее — на странице) · OpenGameArt (⚠️ СМЕСЬ — бери только CC0/CC-BY) · CraftPix (своя «free», не CC0, raw не коммитить).
+
 ## 7. СВЯЗЬ С ПРЕДЫДУЩИМ ОПЫТОМ
 Переносится из Movement Parkour Racer: любовь к киберпанку, идея модульного кибер-тела (тут стала ФИШКОЙ), честность монетизации (не p2w), читаемость силуэта/билда. Соло-разработка, нулевой бюджет, параллельно с основной работой → scope держать УЗКИМ (урок §17-бис паркура: не раздувать, одна читаемая полка).
