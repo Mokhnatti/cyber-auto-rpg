@@ -399,12 +399,6 @@ func _build() -> void:
 	stage_label.position = Vector2(20, 80)
 	hud.add_child(stage_label)
 
-func _cycle_speed() -> void:
-	speed_idx = (speed_idx + 1) % 3
-	var v: float = [1.0, 2.0, 3.0][speed_idx]
-	Engine.time_scale = v
-	speed_btn.text = "⏩ x%d" % int(v)
-
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 24)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -454,3 +448,9 @@ func _cycle_speed() -> void:
 	restart.position = Vector2(W * 0.5 - 80, H - 38)
 	restart.pressed.connect(_reset)
 	hud.add_child(restart)
+
+func _cycle_speed() -> void:
+	speed_idx = (speed_idx + 1) % 3
+	var v: float = [1.0, 2.0, 3.0][speed_idx]
+	Engine.time_scale = v
+	speed_btn.text = "⏩ x%d" % int(v)
