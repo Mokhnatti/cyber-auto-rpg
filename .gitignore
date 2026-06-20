@@ -1,0 +1,4 @@
+# Godot 4 кэш проекта
+prototype/.godot/
+prototype/*.tmp
+.DS_Store

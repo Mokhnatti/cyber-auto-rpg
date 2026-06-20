@@ -1,0 +1,23 @@
+; Cyber Auto-RPG — прототип №1 (болванка авто-боя)
+; Godot 4.7, GDScript, gl_compatibility (для Web на GitHub Pages)
+
+config_version=5
+
+[application]
+
+config/name="Cyber Auto-RPG — болванка"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=600
+window/size/viewport_height=960
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.04, 0.04, 0.07, 1)
