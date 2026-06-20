@@ -46,7 +46,7 @@ func _reset() -> void:
 	# спавн отряда
 	for i in HEROES.size():
 		var h = HEROES[i]
-		var d := _make_doll(h["color"], 1, 1.0)
+		var d := _make_char("hero%d" % (i + 1), 1, 1.0, h["color"])
 		d.position = Vector2(70 + i * 52, GROUND_Y)
 		world.add_child(d)
 		heroes.append({
@@ -67,9 +67,9 @@ func _spawn_wave() -> void:
 	var count := (1 if boss else (1 + (wave % 3)))
 	var hpmul := 1.0 + wave * 0.25
 	for j in count:
-		var col := Color("#ff5050") if not boss else Color("#ff2d95")
+		var glow := Color("#ff5050") if not boss else Color("#ff2d95")
 		var sc := 1.0 if not boss else 1.7
-		var d := _make_doll(col, -1, sc)
+		var d := _make_char("enemy", -1, sc, glow)
 		var px := 540.0 - j * 56.0
 		d.position = Vector2(680, GROUND_Y)            # въезжают справа
 		world.add_child(d)
@@ -195,31 +195,17 @@ func _animate(delta: float) -> void:
 func _anim_doll(o: Dictionary, t: float, marching: bool, delta: float) -> void:
 	var d = o["node"]
 	if not is_instance_valid(d): return
-	if not o["alive"]:
-		return
-	var legL: Control = d.get_node("LegL")
-	var legR: Control = d.get_node("LegR")
-	var body: Node2D = d.get_node("Body")
-	if marching:
-		var ph: float = t * 9.0 + d.position.x
-		legL.position.y = 14 - max(0.0, sin(ph)) * 8.0
-		legR.position.y = 14 - max(0.0, sin(ph + PI)) * 8.0
-		body.position.y = -sin(ph * 2.0) * 2.0
-	else:
-		legL.position.y = 14
-		legR.position.y = 14
-		var bob := sin(t * 3.0 + d.position.x) * 1.5
-		body.position.y = bob
-	# выпад при атаке
 	if o["atk_anim"] > 0.0:
 		o["atk_anim"] = max(0.0, o["atk_anim"] - delta)
-		var dir := 1.0 if o.has("data") else -1.0
-		body.position.x = dir * (o["atk_anim"] / 0.18) * 12.0
-	else:
-		body.position.x = 0.0
+	var spr: AnimatedSprite2D = d.get_node("Spr")
+	if o["alive"]:
+		var want := "hit" if o["atk_anim"] > 0.0 else ("walk" if marching else "idle")
+		if spr.animation != want:
+			spr.play(want)
+		spr.position.x = (o["atk_anim"] / 0.18) * 10.0   # выпад вперёд (local +x = к врагу)
 	# hp-бар
 	var bar: ColorRect = d.get_node("HpFill")
-	bar.size.x = 40.0 * (float(o["hp"]) / float(o["max"]))
+	bar.size.x = 44.0 * (float(o["hp"]) / float(o["max"]))
 
 # --- УТИЛЫ ---
 func _first_alive(arr: Array):
@@ -253,23 +239,40 @@ func _popup(txt: String, col: Color, pos: Vector2, size := 26) -> void:
 	tw.chain().tween_callback(l.queue_free)
 
 # --- КОНСТРУКТОР БОЛВАНЧИКА ---
-func _make_doll(col: Color, facing: int, scale: float) -> Node2D:
+func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2D:
 	var root := Node2D.new()
 	root.scale = Vector2(facing * scale, scale)
-	# ноги
-	root.add_child(_rect("LegL", Vector2(-7, 0), Vector2(6, 16), col.darkened(0.3)))
-	root.add_child(_rect("LegR", Vector2(2, 0), Vector2(6, 16), col.darkened(0.3)))
-	# тело-капсула
-	var body := Node2D.new(); body.name = "Body"
-	body.add_child(_rect("T", Vector2(-12, -42), Vector2(24, 42), col))
-	body.add_child(_rect("H", Vector2(-9, -60), Vector2(18, 18), col.lightened(0.2)))
-	# "глаз"-визор
-	body.add_child(_rect("V", Vector2(-7, -54), Vector2(14, 4), Color(1,1,1,0.85)))
-	root.add_child(body)
+	# неон-платформа/тень под ногами (цвет класса, симметрична → ок при flip)
+	root.add_child(_rect("Glow", Vector2(-28, -8), Vector2(56, 13), Color(glow.r, glow.g, glow.b, 0.35)))
+	# анимированный спрайт (CC0 RGS_Dev)
+	var spr := AnimatedSprite2D.new()
+	spr.name = "Spr"
+	spr.sprite_frames = _frames(folder)
+	spr.scale = Vector2(0.55, 0.55)
+	spr.position = Vector2(0, -52)
+	spr.animation = "idle"
+	spr.play("idle")
+	root.add_child(spr)
 	# hp-бар над головой
-	root.add_child(_rect("HpBg", Vector2(-20, -78), Vector2(40, 5), Color(0,0,0,0.6)))
-	root.add_child(_rect("HpFill", Vector2(-20, -78), Vector2(40, 5), col.lightened(0.1)))
+	root.add_child(_rect("HpBg", Vector2(-22, -122), Vector2(44, 6), Color(0, 0, 0, 0.6)))
+	root.add_child(_rect("HpFill", Vector2(-22, -122), Vector2(44, 6), glow.lightened(0.1)))
 	return root
+
+func _frames(folder: String) -> SpriteFrames:
+	var sf := SpriteFrames.new()
+	for spec in [["walk", 10.0, true], ["idle", 6.0, true], ["hit", 14.0, false]]:
+		var anim: String = spec[0]
+		sf.add_animation(anim)
+		sf.set_animation_speed(anim, spec[1])
+		sf.set_animation_loop(anim, spec[2])
+		var i := 0
+		while true:
+			var path := "res://sprites/%s/%s_%d.png" % [folder, anim, i]
+			if not ResourceLoader.exists(path):
+				break
+			sf.add_frame(anim, load(path))
+			i += 1
+	return sf
 
 func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
 	var r := ColorRect.new()
