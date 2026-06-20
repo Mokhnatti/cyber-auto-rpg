@@ -31,6 +31,11 @@ var hero_ults := []         # кнопки ульт
 var boss_bg: ColorRect      # полоса HP босса вверху
 var boss_fill: ColorRect
 var boss_lbl: Label
+var hero_hp := []           # hp-полоски на портретах
+var hero_charge := []       # заливка заряда ульты на портретах
+var speed_btn: Button
+var stage_label: Label
+var speed_idx := 0
 
 func _ready() -> void:
 	randomize()
@@ -310,8 +315,37 @@ func _refresh_hud() -> void:
 		var hh = heroes[i]
 		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
 		hero_ults[i].disabled = not ready_ult
-		hero_ults[i].text = "%s\n%s" % [hh["data"]["icon"], ("УЛЬТА" if ready_ult else "%.0f" % hh["ult_t"])]
-		hero_ults[i].modulate = Color(1,1,1,1) if hh["alive"] else Color(0.4,0.4,0.4,1)
+		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh["data"]["name"], ("⚡УЛЬТА" if ready_ult else "%.0f" % hh["ult_t"])]
+		# свечение когда ульта готова (border ignite à la AFK Arena)
+		if not hh["alive"]:
+			hero_ults[i].modulate = Color(0.4, 0.4, 0.4, 1)
+		elif ready_ult:
+			hero_ults[i].modulate = Color(1.3, 1.3, 1.3, 1)
+		else:
+			hero_ults[i].modulate = Color(0.85, 0.85, 0.85, 1)
+		# заливка заряда ульты (снизу вверх)
+		var cd: float = hh["data"]["ult_cd"]
+		var fill: float = clamp((cd - hh["ult_t"]) / cd, 0.0, 1.0)
+		var ch: ColorRect = hero_charge[i]
+		ch.size.y = 78.0 * fill
+		ch.position.y = 78.0 - 78.0 * fill
+		ch.color.a = 0.5 if ready_ult else 0.22
+		# hp на портрете
+		hero_hp[i].size.x = 118.0 * (float(hh["hp"]) / float(hh["max"]))
+		hero_hp[i].visible = hh["alive"]
+	# прогресс этапа (флажки, 5-я волна = босс)
+	if wave > 0:
+		var win: int = ((wave - 1) % 5) + 1
+		var st: int = ((wave - 1) / 5) + 1
+		var flags := ""
+		for k in range(1, 6):
+			if k <= win:
+				flags += "⚑" if k == 5 else "▪"
+			else:
+				flags += "▫"
+		stage_label.text = "ЭТАП %d   %s" % [st, flags]
+	else:
+		stage_label.text = ""
 
 func _build() -> void:
 	# фон
@@ -350,6 +384,27 @@ func _build() -> void:
 	boss_lbl.visible = false
 	hud.add_child(boss_lbl)
 
+	# кнопка скорости x1/x2/x3 (idle-must)
+	speed_btn = Button.new()
+	speed_btn.text = "⏩ x1"
+	speed_btn.add_theme_font_size_override("font_size", 16)
+	speed_btn.custom_minimum_size = Vector2(78, 36)
+	speed_btn.position = Vector2(W - 94, 14)
+	speed_btn.pressed.connect(_cycle_speed)
+	hud.add_child(speed_btn)
+	# прогресс этапа (флажки до босса)
+	stage_label = Label.new()
+	stage_label.add_theme_color_override("font_color", Color("#7a7f99"))
+	stage_label.add_theme_font_size_override("font_size", 15)
+	stage_label.position = Vector2(20, 80)
+	hud.add_child(stage_label)
+
+func _cycle_speed() -> void:
+	speed_idx = (speed_idx + 1) % 3
+	var v: float = [1.0, 2.0, 3.0][speed_idx]
+	Engine.time_scale = v
+	speed_btn.text = "⏩ x%d" % int(v)
+
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 24)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -359,23 +414,39 @@ func _build() -> void:
 	status_label.size = Vector2(400, 30)
 	hud.add_child(status_label)
 
-	# панель ульт снизу
+	# панель портретов-кнопок ульт снизу (канон auto-battler: портрет = кнопка ульты)
 	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 10)
+	bar.add_theme_constant_override("separation", 8)
 	bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bar.position = Vector2(0, H - 110)
-	bar.size = Vector2(W, 70)
+	bar.position = Vector2(0, H - 118)
+	bar.size = Vector2(W, 84)
 	hud.add_child(bar)
-	hero_ults.clear()
+	hero_ults.clear(); hero_hp.clear(); hero_charge.clear()
 	for i in HEROES.size():
+		var h = HEROES[i]
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(128, 60)
-		b.add_theme_font_size_override("font_size", 15)
+		b.custom_minimum_size = Vector2(134, 78)
+		b.add_theme_font_size_override("font_size", 14)
+		b.clip_contents = true
 		var idx := i
 		b.pressed.connect(func(): _use_ult(idx))
+		# заряд ульты — заливка снизу (цвет класса), управляется в _refresh_hud
+		var ch := ColorRect.new()
+		ch.color = Color(h["color"].r, h["color"].g, h["color"].b, 0.22)
+		ch.position = Vector2(0, 78); ch.size = Vector2(134, 0)
+		ch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(ch)
+		# hp-полоска сверху портрета (цвет класса)
+		var hbg := ColorRect.new(); hbg.color = Color(0, 0, 0, 0.5)
+		hbg.position = Vector2(8, 6); hbg.size = Vector2(118, 7)
+		hbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(hbg)
+		var hpf := ColorRect.new(); hpf.color = h["color"]
+		hpf.position = Vector2(8, 6); hpf.size = Vector2(118, 7)
+		hpf.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(hpf)
 		bar.add_child(b)
-		hero_ults.append(b)
+		hero_ults.append(b); hero_hp.append(hpf); hero_charge.append(ch)
 
 	var restart := Button.new()
 	restart.text = "↻ РЕСТАРТ"
