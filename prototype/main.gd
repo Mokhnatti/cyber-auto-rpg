@@ -1,318 +1,340 @@
 extends Control
-## Cyber Auto-RPG — болванка №1. Авто-бой 4 классов против босса.
-## Цель болванки: пощупать ядро (авто-атаки разных классов + ульты = скилл-клапан).
-## Всё серое/плашки, без арта. Параметры классов — наружу (массив HEROES), крутить легко.
+## Cyber Auto-RPG — болванка №2: РАННЕР-ВИД.
+## Отряд "бежит на месте", параллакс-город едет навстречу, волны врагов догоняют →
+## бой на месте → победили → марш дальше. Бесконечный поход, считаем волны.
+## Болванчики процедурные (без арта). Параметры классов наружу. Ульты = скилл-клапан.
 
-# --- ПАРАМЕТРЫ КЛАССОВ (data-driven, крути тут) ---
 const HEROES := [
-	{"name": "СНАЙПЕР",   "icon": "🎯", "color": Color("#00f0ff"), "hp": 70,  "dmg": 22, "atk": 2.2, "ult": "burst",  "ult_cd": 9.0},
-	{"name": "ШТУРМОВИК", "icon": "🔫", "color": Color("#ffb02e"), "hp": 110, "dmg": 9,  "atk": 0.8, "ult": "barrage","ult_cd": 8.0},
-	{"name": "ТАНК",      "icon": "🦾", "color": Color("#3ad97a"), "hp": 240, "dmg": 6,  "atk": 1.6, "ult": "shield", "ult_cd": 11.0},
-	{"name": "ХАКЕР",     "icon": "💻", "color": Color("#ff2d95"), "hp": 80,  "dmg": 7,  "atk": 1.4, "ult": "hack",   "ult_cd": 10.0},
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 20, "atk": 2.0, "ult": "burst",  "ult_cd": 9.0},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.8, "ult": "barrage","ult_cd": 8.0},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 260, "dmg": 6,  "atk": 1.6, "ult": "shield", "ult_cd": 11.0},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 7,  "atk": 1.4, "ult": "hack",   "ult_cd": 10.0},
 ]
-const BOSS := {"name": "КОРП-ОХРАНА «ГОЛИАФ»", "hp": 1400, "dmg": 18, "atk": 1.5}
+const W := 600.0
+const H := 960.0
+const GROUND_Y := 0.72 * H
 
-var heroes := []          # рантайм-состояние бойцов
-var boss := {}
-var hack_mult := 1.0      # дебафф от хакера (урон по боссу ×)
-var hack_timer := 0.0
-var battle_over := false
+var heroes := []
+var enemies := []
+var phase := "march"      # march | fight | dead
+var wave := 0
+var march_t := 0.0
+var hack_mult := 1.0
+var hack_t := 0.0
 
-# --- UI-ссылки ---
-var boss_bar: ProgressBar
-var boss_label: Label
-var log_label: Label
-var hero_nodes := []      # {panel, hpbar, hplabel, ultbtn, ultlabel}
+var bg                      # parallax Node2D
+var world: Node2D           # контейнер болванчиков
+var hud: Control
+var wave_label: Label
 var status_label: Label
-var play_field: Control
+var hero_ults := []         # кнопки ульт
 
 func _ready() -> void:
-	_build_ui()
+	randomize()
+	_build()
 	_reset()
 
 func _reset() -> void:
-	battle_over = false
-	hack_mult = 1.0
-	hack_timer = 0.0
-	boss = BOSS.duplicate()
-	boss["max"] = BOSS["hp"]
-	boss["t"] = BOSS["atk"]
+	for c in world.get_children():
+		c.queue_free()
 	heroes.clear()
-	for h in HEROES:
-		var s: Dictionary = h.duplicate()
-		s["max"] = h["hp"]
-		s["t"] = h["atk"]          # таймер до атаки
-		s["ult_t"] = h["ult_cd"]   # таймер готовности ульты
-		s["alive"] = true
-		s["shield"] = 0.0
-		heroes.append(s)
+	enemies.clear()
+	wave = 0
+	hack_mult = 1.0
+	hack_t = 0.0
 	status_label.text = ""
-	_log("Контракт принят. Цель: " + str(BOSS["name"]) + ".")
-	_refresh()
+	# спавн отряда
+	for i in HEROES.size():
+		var h = HEROES[i]
+		var d := _make_doll(h["color"], 1, 1.0)
+		d.position = Vector2(70 + i * 52, GROUND_Y)
+		world.add_child(d)
+		heroes.append({
+			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
+			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
+		})
+	_start_march()
+	_refresh_hud()
+
+func _start_march() -> void:
+	phase = "march"
+	march_t = 2.4
+	bg.speed = 220.0
+
+func _spawn_wave() -> void:
+	wave += 1
+	var boss := (wave % 5 == 0)
+	var count := (1 if boss else (1 + (wave % 3)))
+	var hpmul := 1.0 + wave * 0.25
+	for j in count:
+		var col := Color("#ff5050") if not boss else Color("#ff2d95")
+		var sc := 1.0 if not boss else 1.7
+		var d := _make_doll(col, -1, sc)
+		var px := 540.0 - j * 56.0
+		d.position = Vector2(680, GROUND_Y)            # въезжают справа
+		world.add_child(d)
+		var ehp := int((420.0 if boss else 45.0) * hpmul)
+		enemies.append({
+			"node": d, "hp": ehp, "max": ehp,
+			"dmg": int((10 if boss else 7) * (1.0 + wave * 0.12)),
+			"atk": 1.5 if boss else 1.1, "t": 1.5, "alive": true,
+			"home": Vector2(px, GROUND_Y), "atk_anim": 0.0
+		})
+		var tw := create_tween()
+		tw.tween_property(d, "position:x", px, 0.5)
+	phase = "fight"
+	bg.speed = 0.0
+	_refresh_hud()
 
 func _process(delta: float) -> void:
-	if battle_over:
+	if phase == "dead":
 		return
-	# дебафф хакера
-	if hack_timer > 0.0:
-		hack_timer -= delta
-		if hack_timer <= 0.0:
-			hack_mult = 1.0
-	# бойцы атакуют
-	for i in heroes.size():
-		var s = heroes[i]
-		if not s["alive"]:
-			continue
-		s["ult_t"] = max(0.0, s["ult_t"] - delta)
-		s["t"] -= delta
-		if s["t"] <= 0.0:
-			s["t"] = s["atk"]
-			_hero_attack(i, s["dmg"])
-	# босс атакует случайного живого
-	if boss["hp"] > 0:
-		boss["t"] -= delta
-		if boss["t"] <= 0.0:
-			boss["t"] = boss["atk"]
-			_boss_attack()
-	_refresh()
-	_check_end()
+	if hack_t > 0.0:
+		hack_t -= delta
+		if hack_t <= 0.0: hack_mult = 1.0
+	_animate(delta)
 
-func _hero_attack(i: int, dmg: int) -> void:
-	var real := int(round(dmg * hack_mult))
-	boss["hp"] = max(0, boss["hp"] - real)
-	_popup(str(real), heroes[i]["color"], boss_bar.global_position + Vector2(randf_range(40, 220), -10))
-
-func _boss_attack() -> void:
-	var alive := []
-	for i in heroes.size():
-		if heroes[i]["alive"]:
-			alive.append(i)
-	if alive.is_empty():
+	if phase == "march":
+		march_t -= delta
+		if march_t <= 0.0:
+			_spawn_wave()
 		return
-	var idx = alive[randi() % alive.size()]
-	var s = heroes[idx]
-	var dmg: int = boss["dmg"]
-	if s["shield"] > 0.0:
-		dmg = int(dmg * 0.4)   # танк-щит режет урон
-	s["hp"] = max(0, s["hp"] - dmg)
-	var panel: Control = hero_nodes[idx]["panel"]
-	_popup("-" + str(dmg), Color("#ff4d4d"), panel.global_position + Vector2(30, -6))
-	if s["hp"] <= 0:
-		s["alive"] = false
-		_log(s["icon"] + " " + s["name"] + " выведен из строя!")
 
-# --- УЛЬТЫ (скилл-клапан: жмёшь руками, когда авто не вывозит) ---
+	# FIGHT
+	for hh in heroes:
+		if not hh["alive"]: continue
+		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
+		hh["t"] -= delta
+		if hh["t"] <= 0.0:
+			hh["t"] = hh["data"]["atk"]
+			_hero_hit(hh)
+	for e in enemies:
+		if not e["alive"]: continue
+		e["t"] -= delta
+		if e["t"] <= 0.0:
+			e["t"] = e["atk"]
+			_enemy_hit(e)
+	for hh in heroes:
+		if hh["shield"] > 0.0: hh["shield"] = max(0.0, hh["shield"] - delta)
+
+	if _all_dead(enemies):
+		enemies.clear()
+		if _all_dead(heroes):
+			return
+		_start_march()
+	elif _all_dead(heroes):
+		_die()
+	_refresh_hud()
+
+func _hero_hit(hh: Dictionary) -> void:
+	var e = _first_alive(enemies)
+	if e == null: return
+	hh["atk_anim"] = 0.18
+	var d := int(round(hh["data"]["dmg"] * hack_mult))
+	e["hp"] = max(0, e["hp"] - d)
+	_popup(str(d), hh["data"]["color"], e["node"].position + Vector2(randf_range(-10,10), -86))
+	if e["hp"] <= 0 and e["alive"]:
+		e["alive"] = false
+		_fall(e["node"])
+
+func _enemy_hit(e: Dictionary) -> void:
+	var hh = _first_alive(heroes)
+	if hh == null: return
+	e["atk_anim"] = 0.18
+	var dmg: int = e["dmg"]
+	if hh["shield"] > 0.0: dmg = int(dmg * 0.4)
+	hh["hp"] = max(0, hh["hp"] - dmg)
+	_popup("-" + str(dmg), Color("#ff4d4d"), hh["node"].position + Vector2(0, -86))
+	if hh["hp"] <= 0 and hh["alive"]:
+		hh["alive"] = false
+		_fall(hh["node"])
+
 func _use_ult(i: int) -> void:
-	if battle_over:
-		return
-	var s = heroes[i]
-	if not s["alive"] or s["ult_t"] > 0.0:
-		return
-	s["ult_t"] = s["ult_cd"]
-	match s["ult"]:
-		"burst":
-			var d := int(s["dmg"] * 6 * hack_mult)
-			boss["hp"] = max(0, boss["hp"] - d)
-			_popup("УЛЬТА " + str(d), s["color"], boss_bar.global_position + Vector2(90, -20), 46)
-			_log("🎯 Снайпер: прицельный выстрел — " + str(d) + "!")
-		"barrage":
-			var d := int(s["dmg"] * 8 * hack_mult)
-			boss["hp"] = max(0, boss["hp"] - d)
-			_popup("ШКВАЛ " + str(d), s["color"], boss_bar.global_position + Vector2(90, -20), 46)
-			_log("🔫 Штурмовик: шквал огня — " + str(d) + "!")
+	if phase != "fight": return
+	var hh = heroes[i]
+	if not hh["alive"] or hh["ult_t"] > 0.0: return
+	hh["ult_t"] = hh["data"]["ult_cd"]
+	hh["atk_anim"] = 0.25
+	match hh["data"]["ult"]:
+		"burst", "barrage":
+			var e = _first_alive(enemies)
+			if e:
+				var mul := 6 if hh["data"]["ult"] == "burst" else 8
+				var d := int(hh["data"]["dmg"] * mul * hack_mult)
+				e["hp"] = max(0, e["hp"] - d)
+				_popup("УЛЬТА " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 40)
+				if e["hp"] <= 0 and e["alive"]:
+					e["alive"] = false; _fall(e["node"])
 		"shield":
-			for h in heroes:
-				if h["alive"]:
-					h["shield"] = 4.0
-					h["hp"] = min(h["max"], h["hp"] + 25)
-			_log("🦾 Танк: щит отряду + латание брони.")
+			for h2 in heroes:
+				if h2["alive"]:
+					h2["shield"] = 4.0
+					h2["hp"] = min(h2["max"], h2["hp"] + 30)
 		"hack":
-			hack_mult = 2.0
-			hack_timer = 5.0
-			_log("💻 Хакер: взлом брони — весь урон ×2 на 5 сек!")
-	_refresh()
+			hack_mult = 2.0; hack_t = 5.0
+			status_label.text = "💻 ВЗЛОМ: урон ×2"
+			status_label.modulate = Color("#ff2d95")
+			var tw := create_tween()
+			tw.tween_interval(2.0)
+			tw.tween_callback(func(): if phase != "dead": status_label.text = "")
+	_refresh_hud()
 
-func _process_shields(delta: float) -> void:
-	for h in heroes:
-		if h["shield"] > 0.0:
-			h["shield"] = max(0.0, h["shield"] - delta)
+func _die() -> void:
+	phase = "dead"
+	status_label.text = "☠ ОТРЯД ПАЛ — дошли до волны %d" % wave
+	status_label.modulate = Color("#ff4d4d")
 
-func _check_end() -> void:
-	if boss["hp"] <= 0:
-		_end(true)
+# --- АНИМАЦИЯ БОЛВАНЧИКОВ ---
+func _animate(delta: float) -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	for hh in heroes:
+		_anim_doll(hh, t, phase == "march", delta)
+	for e in enemies:
+		_anim_doll(e, t, false, delta)
+
+func _anim_doll(o: Dictionary, t: float, marching: bool, delta: float) -> void:
+	var d = o["node"]
+	if not is_instance_valid(d): return
+	if not o["alive"]:
 		return
-	var any := false
-	for h in heroes:
-		if h["alive"]:
-			any = true
-	if not any:
-		_end(false)
-
-func _end(win: bool) -> void:
-	battle_over = true
-	if win:
-		status_label.text = "✅ ЦЕЛЬ УСТРАНЕНА"
-		status_label.modulate = Color("#3ad97a")
-		_log("Контракт выполнен. Чисто.")
+	var legL: Control = d.get_node("LegL")
+	var legR: Control = d.get_node("LegR")
+	var body: Node2D = d.get_node("Body")
+	if marching:
+		var ph: float = t * 9.0 + d.position.x
+		legL.position.y = 14 - max(0.0, sin(ph)) * 8.0
+		legR.position.y = 14 - max(0.0, sin(ph + PI)) * 8.0
+		body.position.y = -sin(ph * 2.0) * 2.0
 	else:
-		status_label.text = "☠ ОТРЯД ПАЛ"
-		status_label.modulate = Color("#ff4d4d")
-		_log("Провал. Рестарт.")
+		legL.position.y = 14
+		legR.position.y = 14
+		var bob := sin(t * 3.0 + d.position.x) * 1.5
+		body.position.y = bob
+	# выпад при атаке
+	if o["atk_anim"] > 0.0:
+		o["atk_anim"] = max(0.0, o["atk_anim"] - delta)
+		var dir := 1.0 if o.has("data") else -1.0
+		body.position.x = dir * (o["atk_anim"] / 0.18) * 12.0
+	else:
+		body.position.x = 0.0
+	# hp-бар
+	var bar: ColorRect = d.get_node("HpFill")
+	bar.size.x = 40.0 * (float(o["hp"]) / float(o["max"]))
 
-# --- РЕНДЕР СОСТОЯНИЯ ---
-func _refresh() -> void:
-	_process_shields(get_process_delta_time())
-	boss_bar.max_value = boss["max"]
-	boss_bar.value = boss["hp"]
-	boss_label.text = "%s   %d / %d" % [boss["name"], boss["hp"], boss["max"]]
-	for i in heroes.size():
-		var s = heroes[i]
-		var n = hero_nodes[i]
-		n["hpbar"].max_value = s["max"]
-		n["hpbar"].value = s["hp"]
-		n["hplabel"].text = "%d/%d" % [s["hp"], s["max"]]
-		var ready_ult: bool = s["alive"] and s["ult_t"] <= 0.0
-		n["ultbtn"].disabled = not ready_ult
-		n["ultlabel"].text = "УЛЬТА" if ready_ult else ("%.0f" % s["ult_t"])
-		n["panel"].modulate = Color(1,1,1,1) if s["alive"] else Color(0.3,0.3,0.3,1)
+# --- УТИЛЫ ---
+func _first_alive(arr: Array):
+	for x in arr:
+		if x["alive"]: return x
+	return null
 
-# --- ВСПЛЫВАЮЩИЕ ЦИФРЫ УРОНА ---
-func _popup(txt: String, col: Color, pos: Vector2, size := 30) -> void:
+func _all_dead(arr: Array) -> bool:
+	for x in arr:
+		if x["alive"]: return false
+	return true
+
+func _fall(node: Node2D) -> void:
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(node, "rotation", 1.4, 0.3)
+	tw.tween_property(node, "modulate:a", 0.25, 0.3)
+
+func _popup(txt: String, col: Color, pos: Vector2, size := 26) -> void:
 	var l := Label.new()
 	l.text = txt
 	l.add_theme_color_override("font_color", col)
 	l.add_theme_font_size_override("font_size", size)
 	l.position = pos
-	l.z_index = 100
-	add_child(l)
+	l.z_index = 50
+	world.add_child(l)
 	var tw := create_tween()
 	tw.set_parallel(true)
-	tw.tween_property(l, "position:y", pos.y - 60, 0.8)
-	tw.tween_property(l, "modulate:a", 0.0, 0.8)
+	tw.tween_property(l, "position:y", pos.y - 50, 0.7)
+	tw.tween_property(l, "modulate:a", 0.0, 0.7)
 	tw.chain().tween_callback(l.queue_free)
 
-func _log(msg: String) -> void:
-	log_label.text = msg
+# --- КОНСТРУКТОР БОЛВАНЧИКА ---
+func _make_doll(col: Color, facing: int, scale: float) -> Node2D:
+	var root := Node2D.new()
+	root.scale = Vector2(facing * scale, scale)
+	# ноги
+	root.add_child(_rect("LegL", Vector2(-7, 0), Vector2(6, 16), col.darkened(0.3)))
+	root.add_child(_rect("LegR", Vector2(2, 0), Vector2(6, 16), col.darkened(0.3)))
+	# тело-капсула
+	var body := Node2D.new(); body.name = "Body"
+	body.add_child(_rect("T", Vector2(-12, -42), Vector2(24, 42), col))
+	body.add_child(_rect("H", Vector2(-9, -60), Vector2(18, 18), col.lightened(0.2)))
+	# "глаз"-визор
+	body.add_child(_rect("V", Vector2(-7, -54), Vector2(14, 4), Color(1,1,1,0.85)))
+	root.add_child(body)
+	# hp-бар над головой
+	root.add_child(_rect("HpBg", Vector2(-20, -78), Vector2(40, 5), Color(0,0,0,0.6)))
+	root.add_child(_rect("HpFill", Vector2(-20, -78), Vector2(40, 5), col.lightened(0.1)))
+	return root
 
-# --- ПОСТРОЕНИЕ UI (программно — без ручных .tscn) ---
-func _build_ui() -> void:
+func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
+	var r := ColorRect.new()
+	r.name = nm; r.position = pos; r.size = size; r.color = col
+	return r
+
+# --- HUD ---
+func _refresh_hud() -> void:
+	wave_label.text = "ВОЛНА  %d" % max(wave, 0) + ("   ⚔ БОЙ" if phase == "fight" else ("   ▶ марш" if phase == "march" else ""))
+	for i in heroes.size():
+		var hh = heroes[i]
+		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
+		hero_ults[i].disabled = not ready_ult
+		hero_ults[i].text = "%s\n%s" % [hh["data"]["icon"], ("УЛЬТА" if ready_ult else "%.0f" % hh["ult_t"])]
+		hero_ults[i].modulate = Color(1,1,1,1) if hh["alive"] else Color(0.4,0.4,0.4,1)
+
+func _build() -> void:
 	# фон
-	var bg := ColorRect.new()
-	bg.color = Color("#0a0a12")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg = preload("res://parallax.gd").new()
 	add_child(bg)
+	# мир болванчиков
+	world = Node2D.new()
+	add_child(world)
+	# HUD поверх
+	hud = Control.new()
+	hud.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(hud)
 
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 14)
-	root.offset_left = 18; root.offset_right = -18
-	root.offset_top = 18; root.offset_bottom = -18
-	add_child(root)
+	wave_label = Label.new()
+	wave_label.add_theme_color_override("font_color", Color("#ffb02e"))
+	wave_label.add_theme_font_size_override("font_size", 22)
+	wave_label.position = Vector2(20, 16)
+	hud.add_child(wave_label)
 
-	# заголовок
-	var title := Label.new()
-	title.text = "CYBER AUTO-RPG · болванка боя"
-	title.add_theme_color_override("font_color", Color("#ffb02e"))
-	title.add_theme_font_size_override("font_size", 22)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(title)
-
-	# босс
-	boss_label = Label.new()
-	boss_label.add_theme_color_override("font_color", Color("#ff4d4d"))
-	boss_label.add_theme_font_size_override("font_size", 16)
-	boss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(boss_label)
-	boss_bar = ProgressBar.new()
-	boss_bar.custom_minimum_size = Vector2(0, 26)
-	boss_bar.show_percentage = false
-	_tint_bar(boss_bar, Color("#ff2d95"))
-	root.add_child(boss_bar)
-
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 10)
-	root.add_child(spacer)
-
-	# статус + лог
 	status_label = Label.new()
-	status_label.add_theme_font_size_override("font_size", 26)
+	status_label.add_theme_font_size_override("font_size", 24)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(status_label)
+	status_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	status_label.position = Vector2(W * 0.5 - 200, 70)
+	status_label.custom_minimum_size = Vector2(400, 0)
+	status_label.size = Vector2(400, 30)
+	hud.add_child(status_label)
 
-	log_label = Label.new()
-	log_label.add_theme_color_override("font_color", Color("#7a7f99"))
-	log_label.add_theme_font_size_override("font_size", 14)
-	log_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	root.add_child(log_label)
-
-	# растяжка вниз
-	var grow := Control.new()
-	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(grow)
-
-	# отряд (4 героя в ряд)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_child(row)
-	hero_nodes.clear()
+	# панель ульт снизу
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 10)
+	bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.position = Vector2(0, H - 110)
+	bar.size = Vector2(W, 70)
+	hud.add_child(bar)
+	hero_ults.clear()
 	for i in HEROES.size():
-		var h = HEROES[i]
-		var box := VBoxContainer.new()
-		box.add_theme_constant_override("separation", 5)
-		box.custom_minimum_size = Vector2(128, 0)
-
-		var panel := PanelContainer.new()
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(h["color"].r, h["color"].g, h["color"].b, 0.18)
-		sb.border_color = h["color"]
-		sb.set_border_width_all(2)
-		sb.set_corner_radius_all(8)
-		sb.set_content_margin_all(8)
-		panel.add_theme_stylebox_override("panel", sb)
-		var name_l := Label.new()
-		name_l.text = h["icon"] + "\n" + h["name"]
-		name_l.add_theme_color_override("font_color", h["color"])
-		name_l.add_theme_font_size_override("font_size", 15)
-		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		panel.add_child(name_l)
-		box.add_child(panel)
-
-		var hpbar := ProgressBar.new()
-		hpbar.custom_minimum_size = Vector2(0, 16)
-		hpbar.show_percentage = false
-		_tint_bar(hpbar, h["color"])
-		box.add_child(hpbar)
-
-		var hpl := Label.new()
-		hpl.add_theme_font_size_override("font_size", 12)
-		hpl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		box.add_child(hpl)
-
-		var ult := Button.new()
-		ult.custom_minimum_size = Vector2(0, 34)
-		ult.add_theme_font_size_override("font_size", 13)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(128, 60)
+		b.add_theme_font_size_override("font_size", 15)
 		var idx := i
-		ult.pressed.connect(func(): _use_ult(idx))
-		box.add_child(ult)
+		b.pressed.connect(func(): _use_ult(idx))
+		bar.add_child(b)
+		hero_ults.append(b)
 
-		row.add_child(box)
-		hero_nodes.append({"panel": panel, "hpbar": hpbar, "hplabel": hpl, "ultbtn": ult, "ultlabel": ult})
-
-	# рестарт
 	var restart := Button.new()
 	restart.text = "↻ РЕСТАРТ"
-	restart.custom_minimum_size = Vector2(0, 40)
+	restart.custom_minimum_size = Vector2(160, 36)
+	restart.position = Vector2(W * 0.5 - 80, H - 38)
 	restart.pressed.connect(_reset)
-	root.add_child(restart)
-
-func _tint_bar(bar: ProgressBar, col: Color) -> void:
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(1, 1, 1, 0.08)
-	bg.set_corner_radius_all(6)
-	var fg := StyleBoxFlat.new()
-	fg.bg_color = col
-	fg.set_corner_radius_all(6)
-	bar.add_theme_stylebox_override("background", bg)
-	bar.add_theme_stylebox_override("fill", fg)
+	hud.add_child(restart)
