@@ -146,6 +146,17 @@ const ENEMY_TYPES := {
 	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#ff2d95", "s": 1.0, "heal": true},
 }
 
+const PRESTIGE_LVL := 100   # престиж открывается, когда боец достиг этого уровня (мид-гейм, ~вечер)
+
+func _max_hero_level() -> int:
+	var m := 1
+	for hh in heroes:
+		if hh["level"] > m: m = hh["level"]
+	return m
+
+func _can_prestige() -> bool:
+	return _max_hero_level() >= PRESTIGE_LVL
+
 func _enemy_pool() -> Array:
 	var pool := ["grunt"]
 	if stage >= 2: pool.append("swift")
@@ -191,6 +202,7 @@ var slots_bought := 0     # докуплено слотов за ядра
 var reboot_panel: Control
 var reboot_list: VBoxContainer
 var reboot_info: Label
+var rb_main: Button
 # вычисленные множители аугментов (через _apply_augments)
 var aug_dmg := 1.0
 var aug_hp := 1.0
@@ -342,7 +354,7 @@ func _augsum(stat: String) -> float:
 # всего слотов: база 3 + докупленные + бесплатные за рубежи стадий
 func _slot_total() -> int:
 	var milestones := 0
-	for t in [20, 60, 120, 220]:
+	for t in [8, 18, 35, 60]:
 		if best_stage >= t: milestones += 1
 	return min(10, 3 + slots_bought + milestones)
 
@@ -400,7 +412,7 @@ func _aug_cost(id: String) -> int:
 
 func _cores_gain() -> int:
 	# ЯДРА: супер-линейно (квадратично) по достигнутой стадии × аугмент Нейросеть
-	return int(floor(stage * stage / 6.0) * aug_core)
+	return int(floor(stage * stage / 4.0) * aug_core)
 
 func _buy_aug(id: String) -> void:
 	var c := _aug_cost(id)
@@ -414,6 +426,8 @@ func _buy_aug(id: String) -> void:
 	_refresh_hud()
 
 func _reboot() -> void:
+	if not _can_prestige():
+		return   # престиж заблокирован до достижения уровня PRESTIGE_LVL
 	# ПЕРЕЗАГРУЗКА (лор «обнуление кибернетики»): +ЯДРА за забег; сброс уровней/золота/стадии;
 	# шмот/лом/ядра/аугменты — ОСТАЮТСЯ. Старт выше по Memory-Bonus.
 	var gain := _cores_gain()
@@ -469,6 +483,7 @@ func _build_reboot() -> void:
 	rsb.border_color = Color("#b46bff"); rsb.set_border_width_all(2)
 	for st in ["normal", "hover", "pressed", "focus"]: rb.add_theme_stylebox_override(st, rsb)
 	rb.pressed.connect(_reboot)
+	rb_main = rb
 	reboot_panel.add_child(rb)
 	var sc := ScrollContainer.new()
 	sc.position = Vector2(W * 0.5 - 270, 190); sc.custom_minimum_size = Vector2(540, 560); sc.size = Vector2(540, 560)
@@ -483,9 +498,16 @@ func _build_reboot() -> void:
 	reboot_panel.add_child(close)
 
 func _refresh_reboot() -> void:
-	reboot_info.text = "🧬 ЯДЕР: %d   +%d за перезагрузку   старт стадия %d   🎒 слоты %d/%d" % [cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5))), equipped_augs.size(), _slot_total()]
+	var unlocked := _can_prestige()
+	if unlocked:
+		reboot_info.text = "🧬 ЯДЕР: %d   +%d за перезагрузку   старт стадия %d   🎒 слоты %d/%d" % [cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5))), equipped_augs.size(), _slot_total()]
+	else:
+		reboot_info.text = "🔒 Престиж откроется на УРОВНЕ %d (сейчас макс %d)\nкачай бойцов — это мид-гейм" % [PRESTIGE_LVL, _max_hero_level()]
+	rb_main.disabled = not unlocked
 	for c in reboot_list.get_children():
 		c.queue_free()
+	if not unlocked:
+		return   # витрина аугментов скрыта до открытия престижа
 	# карточка докупки слота
 	var scard := PanelContainer.new()
 	var ssb := StyleBoxFlat.new()
@@ -557,8 +579,8 @@ func _ready() -> void:
 	_load()   # подхватить сейв (по слоту)
 	if bot:
 		auto_battle = true
-		Engine.time_scale = 4.0   # ускоренный плейтест
-		print("TTBOT enabled tactic=%s slot=%s time_scale=4" % [bot_tactic, save_slot])
+		Engine.time_scale = 8.0   # ускоренный плейтест (бот; игроку 1X/2X отдельно)
+		print("TTBOT enabled tactic=%s slot=%s time_scale=8" % [bot_tactic, save_slot])
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -634,33 +656,40 @@ func _bot_tick(delta: float) -> void:
 	if bot_boss_t <= 0.0 and not in_boss and phase == "fight":
 		bot_boss_t = 5.0
 		_go_boss()
-	# застой → престиж (порог зависит от тактики)
-	var stall_lim: float = {"balanced": 45.0, "rush": 18.0, "hoard": 120.0, "skill": 50.0}.get(bot_tactic, 45.0)
+	# застой → престиж (только если престиж ОТКРЫТ; пороги выше → дольше грайндят)
+	var stall_lim: float = {"balanced": 90.0, "rush": 40.0, "hoard": 240.0, "skill": 90.0}.get(bot_tactic, 90.0)
 	if stage > bot_last_stage:
 		bot_last_stage = stage; bot_stall_t = 0.0
 	else:
 		bot_stall_t += delta
-	if bot_stall_t > stall_lim and stage >= 4:
+	if bot_stall_t > stall_lim and _can_prestige():
 		bot_stall_t = 0.0; bot_last_stage = 1
 		_reboot()
 
 func _bot_augments() -> void:
-	for a in AUGMENTS:
-		if _al(a["id"]) > 0 and not a["id"] in equipped_augs and equipped_augs.size() < _slot_total():
-			equipped_augs.append(a["id"])
-	var focus: Array = {"rush": ["core", "dmg"], "hoard": ["core"], "skill": ["ultcd", "qte", "crit"], "balanced": []}.get(bot_tactic, [])
-	var best := ""; var bc := 99999999
-	for a in AUGMENTS:
-		if focus.size() > 0 and not a["stat"] in focus:
+	# приоритет тактики: какие семейства держим в слотах
+	var pri: Array = {
+		"rush": ["neuro", "coproc", "blade", "reactor"],
+		"hoard": ["neuro", "qcore", "reactor", "armor"],
+		"skill": ["exploit", "reflex", "scope", "neuro"],
+		"balanced": ["neuro", "coproc", "reactor", "scope"],
+	}.get(bot_tactic, ["neuro", "coproc", "reactor", "scope"])
+	# 1) заполняем слоты приоритетными (открыв при необходимости)
+	for id in pri:
+		if equipped_augs.size() >= _slot_total():
+			break
+		if id in equipped_augs:
 			continue
-		var c := _aug_cost(a["id"])
+		if _al(id) == 0 and cores >= _aug_cost(id):
+			_buy_aug(id)   # открыть (0→1)
+		if _al(id) > 0 and not id in equipped_augs and equipped_augs.size() < _slot_total():
+			equipped_augs.append(id)
+	# 2) ГЛУБИНА: качаем самый дешёвый среди НАДЕТЫХ
+	var best := ""; var bc := 1 << 30
+	for id in equipped_augs:
+		var c := _aug_cost(id)
 		if c < bc:
-			bc = c; best = a["id"]
-	if best == "":   # фокус-семейства максимум — берём любой дешёвый
-		for a in AUGMENTS:
-			var c := _aug_cost(a["id"])
-			if c < bc:
-				bc = c; best = a["id"]
+			bc = c; best = id
 	if best != "" and cores >= bc:
 		_buy_aug(best)
 	else:
@@ -764,7 +793,7 @@ func _spawn_wave() -> void:
 	var boss := in_boss
 	wave = (stage - 1) * 5 + (5 if boss else sub)   # сложность по стадии/позиции (фарм НЕ инфлейтит)
 	var count := (1 if boss else (1 + (sub % 3)))
-	var hpmul := pow(1.12, wave)   # мягко-экспоненциальный рост HP (LOOT-RULES §10) → стена→гринд
+	var hpmul := pow(1.10, wave)   # мягко-экспоненциальный рост HP (откалибровано: 1.12→1.10)
 	var pool := _enemy_pool()
 	for j in count:
 		var etype: String = "boss" if boss else pool[randi() % pool.size()]
@@ -777,7 +806,7 @@ func _spawn_wave() -> void:
 		d.position = Vector2(700, ey)                        # въезжают справа
 		d.z_index = int(ey)
 		world.add_child(d)
-		var ehp := int(45.0 * hpmul * (3.0 if boss else et["hp"]) * aug_density)
+		var ehp := int(45.0 * hpmul * (2.5 if boss else et["hp"]) * aug_density)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
 			"dmg": int((10 if boss else 7) * pow(1.075, wave) * (1.0 if boss else et["dmg"])),
@@ -839,7 +868,7 @@ func _process(delta: float) -> void:
 		enemies.clear()
 		if in_boss:
 			# 🏆 БОСС ПРОЙДЕН → шмот (только тут!) + следующая стадия
-			print("TTEVENT bosswin stage=%d" % stage)
+			print("TTEVENT bosswin stage=%d maxlvl=%d gold=%d" % [stage, _max_hero_level(), int(gold)])
 			_qte_clear()
 			_drop_implant()
 			stage += 1
@@ -851,7 +880,7 @@ func _process(delta: float) -> void:
 		_start_march()
 	elif _all_dead(heroes):
 		# ☠ ВАЙП → НЕ рестарт: откат на фарм стадии (отряд воскреснет в _start_march), шмот цел
-		if in_boss: print("TTEVENT bossloss stage=%d" % stage)
+		if in_boss: print("TTEVENT bossloss stage=%d maxlvl=%d gold=%d" % [stage, _max_hero_level(), int(gold)])
 		_popup_center("☠ Босс не пройден — фарми и возвращайся" if in_boss else "☠ Отряд пал — перегруппировка", Color("#ff5050"))
 		_qte_clear()
 		in_boss = false
@@ -1462,7 +1491,7 @@ func _upgrade_level(i: int) -> void:
 	if gold >= hh["lvl_cost"]:
 		gold -= hh["lvl_cost"]
 		hh["level"] += 1
-		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.5)
+		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.12) + 2   # мягкая кривая → быстрые лвлапы до ~100
 		_recalc_hero(hh)
 		_refresh_inv()
 
