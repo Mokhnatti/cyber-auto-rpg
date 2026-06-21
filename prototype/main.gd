@@ -5,11 +5,11 @@ extends Control
 ## Болванчики процедурные (без арта). Параметры классов наружу. Ульты = скилл-клапан.
 
 const HEROES := [
-	# atk_type: snipe=редко+больно (долгий прицел), single=одна цель, aoe=всех по чуть-чуть, tank=держит
-	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "ult": "burst",  "ult_cd": 9.0},
-	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "ult": "barrage","ult_cd": 8.0},
-	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "ult": "shield", "ult_cd": 11.0},
-	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "ult": "hack",   "ult_cd": 10.0},
+	# atk_type: snipe/single/aoe/tank · hpg/dmgg = рост HP/урона за уровень (профиль класса)
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.05, "dmgg": 0.20, "ult": "burst",  "ult_cd": 9.0},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.12, "dmgg": 0.14, "ult": "barrage","ult_cd": 8.0},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.26, "dmgg": 0.06, "ult": "shield", "ult_cd": 11.0},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.10, "dmgg": 0.13, "ult": "hack",   "ult_cd": 10.0},
 ]
 const W := 600.0
 const H := 960.0
@@ -58,9 +58,8 @@ var hero_rows := []   # строки прокачки по героям: {lvl_bt
 # пер-героя прокачка: УРОВЕНЬ (все статы) + ПУШКА (урон). Просто и понятно.
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
-	var gn: int = hh["gun"]
-	hh["dmg"] = int(round(hh["data"]["dmg"] * (1.0 + (gn - 1) * 0.40) * (1.0 + (lv - 1) * 0.12)))
-	hh["max"] = int(hh["data"]["hp"] * (1.0 + (lv - 1) * 0.15))
+	hh["dmg"] = int(round(hh["data"]["dmg"] * (1.0 + (lv - 1) * hh["data"]["dmgg"])))
+	hh["max"] = int(hh["data"]["hp"] * (1.0 + (lv - 1) * hh["data"]["hpg"]))
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _ready() -> void:
@@ -102,7 +101,7 @@ func _reset() -> void:
 		heroes.append({
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
 			"dmg": h["dmg"], "atk_spd": h["atk"],
-			"level": 1, "gun": 1, "lvl_cost": 30, "gun_cost": 25,
+			"level": 1, "lvl_cost": 30,
 			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
 		})
 	_start_march()
@@ -571,15 +570,6 @@ func _upgrade_level(i: int) -> void:
 		_recalc_hero(hh)
 		_refresh_inv()
 
-func _upgrade_gun(i: int) -> void:
-	var hh = heroes[i]
-	if gold >= hh["gun_cost"]:
-		gold -= hh["gun_cost"]
-		hh["gun"] += 1
-		hh["gun_cost"] = int(hh["gun_cost"] * 1.5)
-		_recalc_hero(hh)
-		_refresh_inv()
-
 func _build_inventory() -> void:
 	inv_panel = Control.new()
 	inv_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -623,20 +613,14 @@ func _build_inventory() -> void:
 		nm.custom_minimum_size = Vector2(92, 0)
 		hb.add_child(nm)
 		var lb := Button.new()
-		lb.custom_minimum_size = Vector2(0, 58)
+		lb.custom_minimum_size = Vector2(0, 62)
 		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lb.add_theme_font_size_override("font_size", 14)
+		lb.add_theme_font_size_override("font_size", 16)
 		var idx := i
 		lb.pressed.connect(func(): _upgrade_level(idx))
 		hb.add_child(lb)
-		var gb := Button.new()
-		gb.custom_minimum_size = Vector2(0, 58)
-		gb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		gb.add_theme_font_size_override("font_size", 14)
-		gb.pressed.connect(func(): _upgrade_gun(idx))
-		hb.add_child(gb)
 		rows.add_child(row)
-		hero_rows.append({"lvl_btn": lb, "gun_btn": gb})
+		hero_rows.append({"lvl_btn": lb})
 
 	var close := Button.new()
 	close.text = "✕ ЗАКРЫТЬ"
@@ -650,10 +634,9 @@ func _refresh_inv() -> void:
 	for i in heroes.size():
 		var hh = heroes[i]
 		var r = hero_rows[i]
-		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d\n%d 💰" % [hh["level"], hh["lvl_cost"]]
+		var prof := "🛡 HP" if hh["data"]["hpg"] > hh["data"]["dmgg"] else "⚔ урон"
+		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d   %d💰   (%s)" % [hh["level"], hh["lvl_cost"], prof]
 		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
-		r["gun_btn"].text = "🔫 ПУШКА %d\n%d 💰" % [hh["gun"], hh["gun_cost"]]
-		r["gun_btn"].disabled = gold < hh["gun_cost"]
 
 # дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
 func _drop_implant() -> void:
