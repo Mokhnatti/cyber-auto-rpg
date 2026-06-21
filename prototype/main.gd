@@ -5,10 +5,11 @@ extends Control
 ## Болванчики процедурные (без арта). Параметры классов наружу. Ульты = скилл-клапан.
 
 const HEROES := [
-	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 20, "atk": 2.0, "ult": "burst",  "ult_cd": 9.0},
-	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.8, "ult": "barrage","ult_cd": 8.0},
-	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 260, "dmg": 6,  "atk": 1.6, "ult": "shield", "ult_cd": 11.0},
-	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 7,  "atk": 1.4, "ult": "hack",   "ult_cd": 10.0},
+	# atk_type: snipe=редко+больно (долгий прицел), single=одна цель, aoe=всех по чуть-чуть, tank=держит
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "ult": "burst",  "ult_cd": 9.0},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "ult": "barrage","ult_cd": 8.0},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "ult": "shield", "ult_cd": 11.0},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "ult": "hack",   "ult_cd": 10.0},
 ]
 const W := 600.0
 const H := 960.0
@@ -181,9 +182,18 @@ func _hero_hit(hh: Dictionary) -> void:
 	var e = _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.18
-	var d := int(round(hh["dmg"] * dmg_mult * hack_mult))
+	var base := int(round(hh["dmg"] * dmg_mult * hack_mult))
+	if hh["data"]["atk_type"] == "aoe":
+		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
+		for en in enemies:
+			if en["alive"]:
+				_deal(hh, en, max(1, int(base * 0.55)))
+	else:
+		_deal(hh, e, base)   # снайпер/штурм/танк — одна цель (первый живой)
+
+func _deal(hh: Dictionary, e: Dictionary, d: int) -> void:
 	e["hp"] = max(0, e["hp"] - d)
-	_popup(str(d), hh["data"]["color"], e["node"].position + Vector2(randf_range(-10,10), -86))
+	_popup(str(d), hh["data"]["color"], e["node"].position + Vector2(randf_range(-10, 10), -86))
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
 		gold += (40.0 if e.get("boss", false) else 5.0) * (1.0 + wave * 0.15)
