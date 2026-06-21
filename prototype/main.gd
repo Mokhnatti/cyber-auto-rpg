@@ -1107,7 +1107,7 @@ func _use_ult(i: int) -> void:
 		# СНАЙПЕР: вход в режим прицела (ульта тратится при выстреле)
 		aim_mode = true
 		aim_hero = hh
-		status_label.text = "🎯 ВЫБЕРИ ЦЕЛЬ — тапни врага"
+		status_label.text = "ВЫБЕРИ ЦЕЛЬ — тапни врага"
 		status_label.modulate = hh["data"]["color"]
 		return
 	hh["ult_t"] = hh["ult_cd_eff"]
@@ -1132,7 +1132,7 @@ func _sniper_fire(sn, target) -> void:
 	sn["atk_anim"] = 0.25
 	var d := int(sn["dmg"] * 12 * aura_dmg)
 	_deal(sn, target, d, true)
-	_popup("🎯 " + str(d), Color("#00f0ff"), target["node"].position + Vector2(0, -115), 46)
+	_popup(str(d), Color("#00f0ff"), target["node"].position + Vector2(0, -115), 46)   # без эмодзи (шрифт рисовал □)
 
 # приоритетная цель для авто: передовой враг (ближе всех к отряду = меньший x)
 func _pick_enemy():
@@ -1429,8 +1429,7 @@ func _refresh_hud() -> void:
 	for e in enemies:
 		if e["alive"] and not e.get("boss", false):
 			etypes[ENEMY_TYPES.get(e.get("type", "grunt"), ENEMY_TYPES["grunt"])["name"]] = true
-	var etxt: String = ("  ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
-	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/%d" % [stage, sub, STAGE_WAVES]) + ("   ⚔" if phase == "fight" else "   ▶") + etxt
+	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/%d" % [stage, sub, STAGE_WAVES]) + ("   ⚔" if phase == "fight" else "   ▶")
 	if boss_btn:
 		boss_btn.visible = boss_retry and not in_boss   # кнопка только для ретрая (свежий заход = авто)
 	# полоса босса
@@ -1472,7 +1471,8 @@ func _refresh_hud() -> void:
 	for k in range(1, STAGE_WAVES + 1):
 		flags += "▪" if k <= sub else "▫"
 	flags += "  👹" if in_boss else "  ▷"
-	stage_label.text = flags
+	var etxt: String = ("   ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
+	stage_label.text = flags + etxt   # типы врагов — на строке флажков (не налезают на кнопки)
 	# золото + прокачка урона
 	gold_label.text = "💰 %d  +%d/с   ♻ %d   🧬 %d" % [int(gold), int(gold_ps), scrap, cores]
 	if inv_open and inv_gold:
