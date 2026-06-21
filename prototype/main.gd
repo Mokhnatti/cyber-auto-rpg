@@ -48,6 +48,8 @@ var tele_t := 30.0
 var http: HTTPRequest
 var nick_panel: Control
 var restart_confirm: Control
+var _offline_gold := 0
+var _offline_secs := 0
 # БОТ-ПЛЕЙТЕСТЕР (godot --headless -- --bot): сам играет, логирует TTSTATE
 var bot := false
 var bot_tactic := "balanced"
@@ -152,12 +154,14 @@ const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 const ENEMY_TYPES := {
 	"grunt":  {"name": "Грунт", "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0},
 	"armor":  {"name": "Бронебот", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#3ad97a", "s": 1.28},
-	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.8, "atk": 0.4, "col": "#ffe14d", "s": 0.82},
-	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 1.15, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true},
+	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.82},
+	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true},
 	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#ff2d95", "s": 1.0, "heal": true},
 }
 
-const PRESTIGE_LVL := 60   # мид-гейм; после буста золота с глубиной leveling успевает (боты проверят достижимость, цель ~вечер)
+const STAGE_WAVES := 5         # норм-волн на стадии (потом босс). Кратно 5.
+const PRESTIGE_TOTAL_LVL := 200   # престиж: совместный уровень отряда (нельзя читерить 1 бойцом)
+const PRESTIGE_STAGE := 15        # ИЛИ достижение этой стадии
 
 func _max_hero_level() -> int:
 	var m := 1
@@ -165,8 +169,14 @@ func _max_hero_level() -> int:
 		if hh["level"] > m: m = hh["level"]
 	return m
 
+func _total_levels() -> int:
+	var s := 0
+	for hh in heroes:
+		s += hh["level"]
+	return s
+
 func _can_prestige() -> bool:
-	return _max_hero_level() >= PRESTIGE_LVL
+	return _total_levels() >= PRESTIGE_TOTAL_LVL or best_stage >= PRESTIGE_STAGE or stage >= PRESTIGE_STAGE
 
 func _enemy_pool() -> Array:
 	var pool := ["grunt"]
@@ -548,7 +558,7 @@ func _refresh_reboot() -> void:
 	if unlocked:
 		reboot_info.text = "🧬 ЯДЕР: %d   +%d за перезагрузку   старт стадия %d   🎒 слоты %d/%d" % [cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5))), equipped_augs.size(), _slot_total()]
 	else:
-		reboot_info.text = "🔒 Престиж откроется на УРОВНЕ %d (сейчас макс %d)\nкачай бойцов — это мид-гейм" % [PRESTIGE_LVL, _max_hero_level()]
+		reboot_info.text = "🔒 Престиж: суммарный ур. отряда %d/%d ИЛИ стадия %d (сейчас %d)\nкачай отряд — это мид-гейм" % [_total_levels(), PRESTIGE_TOTAL_LVL, PRESTIGE_STAGE, max(stage, best_stage)]
 	rb_main.disabled = not unlocked
 	for c in reboot_list.get_children():
 		c.queue_free()
@@ -632,6 +642,8 @@ func _ready() -> void:
 		print("TTBOT enabled tactic=%s slot=%s time_scale=8" % [bot_tactic, save_slot])
 	elif nick == "":
 		nick_panel.visible = true   # первый вход → спросить ник
+	elif _offline_gold > 0:
+		_show_offline()
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -753,11 +765,36 @@ func _save_path() -> String:
 func _show_death(was_boss: bool) -> void:
 	if bot: return
 	var msg := "☠ ТЫ ПОГИБ\nПрокачай отряд и попробуй снова" if was_boss else "☠ Отряд пал — перегруппировка"
-	_popup_center(msg, Color("#ff5050"))
+	_popup_center(msg, Color("#ff5050"), 3.8)   # висит дольше
 
 func _ask_restart() -> void:
 	if restart_confirm:
 		restart_confirm.visible = true
+
+func _show_offline() -> void:
+	var hrs := _offline_secs / 3600
+	var mins := (_offline_secs % 3600) / 60
+	var away := ("%dч %dм" % [hrs, mins]) if hrs > 0 else ("%dм" % mins)
+	var panel := Control.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3200
+	hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.7); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.09, 0.14, 0.99); sb.set_corner_radius_all(14); sb.set_content_margin_all(22)
+	sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2)
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = Vector2(W * 0.5 - 200, 400); card.custom_minimum_size = Vector2(400, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	var t := Label.new(); t.text = "🌙 ОТРЯД РАБОТАЛ БЕЗ ТЕБЯ"; t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var d2 := Label.new(); d2.text = "Тебя не было: %s\n\n💰 Заработано: %d золота" % [away, _offline_gold]; d2.add_theme_font_size_override("font_size", 16); d2.add_theme_color_override("font_color", Color("#cfe6ff")); d2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d2)
+	var b := Button.new(); b.text = "ЗАБРАТЬ"; b.add_theme_font_size_override("font_size", 17); b.custom_minimum_size = Vector2(0, 50)
+	b.pressed.connect(func(): panel.queue_free())
+	v.add_child(b)
+	_offline_gold = 0
 
 func _build_restart_confirm() -> void:
 	restart_confirm = Control.new()
@@ -796,7 +833,7 @@ func _save() -> void:
 	for hh in heroes:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "wlvl": hh["wlvl"], "wdupes": hh["wdupes"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
-		"v": 1, "nick": nick, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
+		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "heroes": hs,
 	}
@@ -836,6 +873,17 @@ func _load() -> void:
 	_recalc_auras()
 	for hh in heroes:
 		hh["hp"] = hh["max"]
+	# ОФЛАЙН-ДОХОД: пока игрок отсутствовал — начисляем золото (кап 12ч)
+	if not bot:
+		var last_ts := int(d.get("ts", 0))
+		if last_ts > 0:
+			var away: int = int(Time.get_unix_time_from_system()) - last_ts
+			if away > 60:
+				var capped: int = min(away, 43200)   # кап 12 часов
+				var rate := gold_ps * aug_gold + float(stage) * 1.5   # пассив + грубая оценка фарма/с
+				_offline_gold = int(rate * capped)
+				_offline_secs = capped
+				gold += _offline_gold
 	_refresh_hud()
 
 # JSON делает числа float — возвращаем int там, где нужны индексы/счётчики
@@ -882,12 +930,16 @@ func _back_hero() -> Variant:
 
 func _spawn_wave() -> void:
 	var boss := in_boss
-	wave = (stage - 1) * 5 + (5 if boss else sub)   # сложность по стадии/позиции (фарм НЕ инфлейтит)
-	var count := (1 if boss else (1 + (sub % 3)))
-	var hpmul := pow(1.10, wave)   # мягко-экспоненциальный рост HP (откалибровано: 1.12→1.10)
+	# Сложность ФИКСИРОВАНА на стадию: все норм-волны стадии РАВНЫ по HP/урону (нет качелей внутри
+	# стадии). Босс — единственный скачок. Прогресс — от стадии к стадии (6 шагов экспоненты/стадию).
+	var base_idx := (stage - 1) * (STAGE_WAVES + 1)
+	wave = base_idx + ((STAGE_WAVES + 1) if boss else 3)
+	var count := (1 if boss else clampi(2 + int(stage / 5), 2, 5))   # стабильно в пределах стадии
+	var hpmul := pow(1.10, wave)
 	var pool := _enemy_pool()
 	for j in count:
-		var etype: String = "boss" if boss else pool[randi() % pool.size()]
+		# ДЕТЕРМИНИРОВАННО по (стадия, под-волна, позиция) — одна стадия = одни и те же враги всегда
+		var etype: String = "boss" if boss else pool[(stage * 7 + sub * 3 + j * 2) % pool.size()]
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
 		var glow := Color("#ff2d95") if boss else Color(et["col"])
 		var es: float = 1.9 if boss else (1.35 - j * 0.1) * et["s"]
@@ -900,7 +952,7 @@ func _spawn_wave() -> void:
 		var ehp := int(45.0 * hpmul * (2.5 if boss else et["hp"]) * aug_density)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": int((10 if boss else 7) * pow(1.075, wave) * (1.0 if boss else et["dmg"])),
+			"dmg": int((10 if boss else 7) * pow(1.065, wave) * (1.0 if boss else et["dmg"])),
 			"atk": (1.5 if boss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": boss,
 			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
@@ -973,7 +1025,7 @@ func _process(delta: float) -> void:
 			boss_retry = false
 			_popup_center("🏆 СТАДИЯ %d ПРОЙДЕНА" % (stage - 1), Color("#ffd24a"))
 			_start_march()
-		elif sub < 4:
+		elif sub < STAGE_WAVES:
 			sub += 1                          # идём по волнам стадии
 			_start_march()
 		elif not boss_retry:
@@ -992,7 +1044,7 @@ func _process(delta: float) -> void:
 		_show_death(in_boss)
 		_qte_clear()
 		in_boss = false
-		sub = 4 if boss_retry else 1          # ретрай — крутимся на волне 4
+		sub = STAGE_WAVES if boss_retry else 1   # ретрай — крутимся на последней волне
 		_start_march()
 	_refresh_hud()
 
@@ -1378,7 +1430,7 @@ func _refresh_hud() -> void:
 		if e["alive"] and not e.get("boss", false):
 			etypes[ENEMY_TYPES.get(e.get("type", "grunt"), ENEMY_TYPES["grunt"])["name"]] = true
 	var etxt: String = ("  ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
-	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/4" % [stage, sub]) + ("   ⚔" if phase == "fight" else "   ▶") + etxt
+	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/%d" % [stage, sub, STAGE_WAVES]) + ("   ⚔" if phase == "fight" else "   ▶") + etxt
 	if boss_btn:
 		boss_btn.visible = boss_retry and not in_boss   # кнопка только для ретрая (свежий заход = авто)
 	# полоса босса
@@ -1415,9 +1467,9 @@ func _refresh_hud() -> void:
 		# hp на портрете
 		hero_hp[i].size.x = 118.0 * (float(hh["hp"]) / float(hh["max"]))
 		hero_hp[i].visible = hh["alive"]
-	# прогресс стадии: 4 норм-волны + ворота-босс
+	# прогресс стадии: STAGE_WAVES норм-волн + ворота-босс
 	var flags := ""
-	for k in range(1, 5):
+	for k in range(1, STAGE_WAVES + 1):
 		flags += "▪" if k <= sub else "▫"
 	flags += "  👹" if in_boss else "  ▷"
 	stage_label.text = flags
@@ -1701,12 +1753,24 @@ func _refresh_inv() -> void:
 		inv_gold.text = "💰 %d   +%d/с" % [int(gold), int(gold_ps)]
 	for pair in buy_btns:   # подсветка выбранного множителя
 		pair[1].modulate = Color(1.4, 1.4, 0.6) if pair[0] == buy_mult else Color(0.7, 0.7, 0.7)
-	var mtxt := "MAX" if buy_mult == 0 else "x%d" % buy_mult
 	for i in heroes.size():
 		var hh = heroes[i]
 		var r = hero_rows[i]
+		var mtxt := "x%d" % buy_mult
+		if buy_mult == 0:
+			mtxt = "MAX: %d ур" % _affordable_levels(hh)   # сколько вкачается за всё золото
 		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (%s)\nслед: %d 💰" % [hh["level"], mtxt, hh["lvl_cost"]]
 		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
+
+func _affordable_levels(hh: Dictionary) -> int:
+	var g := gold
+	var cost: int = hh["lvl_cost"]
+	var n := 0
+	while g >= cost and n < 100000:
+		g -= cost
+		cost = int(cost * 1.12) + 2
+		n += 1
+	return n
 
 # --- ИМПЛАНТ-ИНВЕНТАРЬ (шмотки → база статов; уровень множит) ---
 func _toggle_impl() -> void:
@@ -2203,11 +2267,11 @@ func _merge_weapon(i: int) -> void:
 		_recalc_hero(hh)
 		_refresh_inv()
 
-func _popup_center(txt: String, col: Color) -> void:
+func _popup_center(txt: String, col: Color, life := 1.4) -> void:
 	var l := Label.new()
 	l.text = txt
 	l.add_theme_color_override("font_color", col)
-	l.add_theme_font_size_override("font_size", 19)
+	l.add_theme_font_size_override("font_size", 22 if life > 2.0 else 19)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.position = Vector2(W * 0.5 - 200, H * 0.42)
 	l.custom_minimum_size = Vector2(400, 0)
@@ -2215,7 +2279,6 @@ func _popup_center(txt: String, col: Color) -> void:
 	l.z_index = 80
 	hud.add_child(l)
 	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(l, "position:y", H * 0.42 - 70, 1.4)
-	tw.tween_property(l, "modulate:a", 0.0, 1.4)
+	tw.tween_property(l, "position:y", H * 0.42 - 70, life)   # дрейф вверх
+	tw.parallel().tween_property(l, "modulate:a", 0.0, life * 0.5).set_delay(life * 0.5)   # держится, потом тает
 	tw.chain().tween_callback(l.queue_free)
