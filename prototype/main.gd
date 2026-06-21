@@ -176,12 +176,18 @@ func _item_power(it: Dictionary) -> int:   # грубая сила для сра
 		s += int(r["val"])
 	return s + it["rarity"] * 8
 
-# гейт редкости по прогрессу (CONCEPT §14): рано топ не выпадет; поздно растёт нижний порог
+# гейт редкости по прогрессу (CONCEPT §14, LOOT-RULES): лестница ДЛИННАЯ — топ это chase на недели,
+# не на 20 волн. Серое носишь долго; цвет открывается редко и далеко.
 func _max_rarity() -> int:
-	return clamp(1 + int(wave / 5), 1, 4)
+	if wave >= 220: return 4   # Фиолет — очень поздно
+	if wave >= 100: return 3   # Синий
+	if wave >= 35: return 2    # Зелёный
+	return 1                   # старт: только Серый (≈первые 35 волн)
 
 func _min_rarity() -> int:
-	return clamp(int(wave / 15), 1, 3)
+	# пол поднимается ОЧЕНЬ поздно, чтобы серое/зелёное оставалось актуально долго
+	if wave >= 300: return 2
+	return 1
 
 func _roll_rarity() -> int:
 	var hi := _max_rarity()
