@@ -39,6 +39,7 @@ var qte_hits := 0         # поймано
 var qte_spawn_t := 0.0    # до спавна следующего маркера
 var qte_markers := []     # активные маркеры: {node, life}
 var march_t := 0.0
+var save_t := 5.0         # автосейв-таймер
 var hack_mult := 1.0
 var hack_t := 0.0
 
@@ -407,6 +408,7 @@ func _reboot() -> void:
 	_qte_clear()
 	if reboot_panel: reboot_panel.visible = false
 	_popup_center("♻ ПЕРЕЗАГРУЗКА +%d 🧬 ЯДЕР" % gain, Color("#b46bff"))
+	_save()
 	_start_march()
 	_refresh_hud()
 
@@ -520,6 +522,7 @@ func _ready() -> void:
 	_setup_font()
 	_build()
 	_reset()
+	_load()   # подхватить сохранение (если есть)
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -576,6 +579,68 @@ func _reset() -> void:
 	_start_march()
 	_refresh_hud()
 
+# === СОХРАНЕНИЕ (user://save.json → в web это IndexedDB, переживает перезапуск) ===
+func _hard_restart() -> void:
+	if FileAccess.file_exists("user://save.json"):
+		DirAccess.remove_absolute("user://save.json")
+	_reset()
+
+func _save() -> void:
+	var hs := []
+	for hh in heroes:
+		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "wlvl": hh["wlvl"], "wdupes": hh["wdupes"], "gear": hh["gear"], "equip": hh["equip"]})
+	var d := {
+		"v": 1, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores,
+		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "heroes": hs,
+	}
+	var f := FileAccess.open("user://save.json", FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(d)); f.close()
+
+func _load() -> void:
+	if not FileAccess.file_exists("user://save.json"):
+		return
+	var f := FileAccess.open("user://save.json", FileAccess.READ)
+	if not f:
+		return
+	var txt := f.get_as_text(); f.close()
+	var d = JSON.parse_string(txt)
+	if typeof(d) != TYPE_DICTIONARY:
+		return
+	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
+	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
+	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0))
+	slots_bought = int(d.get("slots_bought", 0))
+	equipped_augs = d.get("equipped_augs", [])
+	var al := {}
+	var sal = d.get("aug_lvl", {})
+	for k in sal:
+		al[k] = int(sal[k])
+	aug_lvl = al
+	var hs = d.get("heroes", [])
+	for i in min(hs.size(), heroes.size()):
+		var s = hs[i]
+		heroes[i]["level"] = int(s.get("level", 1)); heroes[i]["lvl_cost"] = int(s.get("lvl_cost", 30))
+		heroes[i]["wlvl"] = int(s.get("wlvl", 1)); heroes[i]["wdupes"] = int(s.get("wdupes", 0))
+		if s.has("gear"): heroes[i]["gear"] = _coerce_gear(s["gear"])
+		if s.has("equip"): heroes[i]["equip"] = s["equip"]
+	_apply_augments()
+	_recalc_auras()
+	for hh in heroes:
+		hh["hp"] = hh["max"]
+	_refresh_hud()
+
+# JSON делает числа float — возвращаем int там, где нужны индексы/счётчики
+func _coerce_gear(gear: Dictionary) -> Dictionary:
+	for slot in gear:
+		for key in gear[slot]:
+			var it = gear[slot][key]
+			it["rarity"] = int(it["rarity"]); it["lvl"] = int(it["lvl"]); it["dupes"] = int(it["dupes"])
+			for r in it["rolls"]:
+				r["val"] = int(r["val"])
+	return gear
+
 func _start_march() -> void:
 	# HP восстанавливается между боями (роли в бою, но без накопит. гринда)
 	for hh in heroes:
@@ -627,6 +692,10 @@ func _spawn_wave() -> void:
 	_refresh_hud()
 
 func _process(delta: float) -> void:
+	save_t -= delta
+	if save_t <= 0.0:
+		save_t = 10.0
+		_save()
 	if phase == "dead":
 		return
 	gold += gold_ps * delta * aug_gold   # пассивный доход (idle-кор) × аугмент
@@ -1258,7 +1327,7 @@ func _build() -> void:
 	restart.add_theme_font_size_override("font_size", 18)
 	restart.custom_minimum_size = Vector2(46, 32)
 	restart.position = Vector2(10, 14)
-	restart.pressed.connect(_reset)
+	restart.pressed.connect(_hard_restart)
 	hud.add_child(restart)
 
 func _cycle_speed() -> void:
