@@ -42,6 +42,8 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # БОТ-ПЛЕЙТЕСТЕР (godot --headless -- --bot): сам играет, логирует TTSTATE
 var bot := false
+var bot_tactic := "balanced"
+var save_slot := ""       # суффикс файла сейва (для нескольких ботов)
 var bot_boss_t := 0.0
 var bot_stall_t := 0.0
 var bot_last_stage := 1
@@ -527,13 +529,19 @@ func _ready() -> void:
 	randomize()
 	_setup_font()
 	_build()
+	for a in OS.get_cmdline_user_args():   # парсинг флагов ДО загрузки
+		if a == "--bot":
+			bot = true
+		elif a.begins_with("--tactic="):
+			bot_tactic = a.split("=")[1]
+		elif a.begins_with("--slot="):
+			save_slot = "_" + a.split("=")[1]
 	_reset()
-	_load()   # подхватить сохранение (если есть)
-	if "--bot" in OS.get_cmdline_user_args():
-		bot = true
+	_load()   # подхватить сейв (по слоту)
+	if bot:
 		auto_battle = true
 		Engine.time_scale = 4.0   # ускоренный плейтест
-		print("TTBOT enabled, time_scale=4")
+		print("TTBOT enabled tactic=%s slot=%s time_scale=4" % [bot_tactic, save_slot])
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -609,12 +617,13 @@ func _bot_tick(delta: float) -> void:
 	if bot_boss_t <= 0.0 and not in_boss and phase == "fight":
 		bot_boss_t = 5.0
 		_go_boss()
-	# застой → престиж
+	# застой → престиж (порог зависит от тактики)
+	var stall_lim: float = {"balanced": 45.0, "rush": 18.0, "hoard": 120.0, "skill": 50.0}.get(bot_tactic, 45.0)
 	if stage > bot_last_stage:
 		bot_last_stage = stage; bot_stall_t = 0.0
 	else:
 		bot_stall_t += delta
-	if bot_stall_t > 45.0 and stage >= 4:
+	if bot_stall_t > stall_lim and stage >= 4:
 		bot_stall_t = 0.0; bot_last_stage = 1
 		_reboot()
 
@@ -622,19 +631,30 @@ func _bot_augments() -> void:
 	for a in AUGMENTS:
 		if _al(a["id"]) > 0 and not a["id"] in equipped_augs and equipped_augs.size() < _slot_total():
 			equipped_augs.append(a["id"])
+	var focus: Array = {"rush": ["core", "dmg"], "hoard": ["core"], "skill": ["ultcd", "qte", "crit"], "balanced": []}.get(bot_tactic, [])
 	var best := ""; var bc := 99999999
 	for a in AUGMENTS:
+		if focus.size() > 0 and not a["stat"] in focus:
+			continue
 		var c := _aug_cost(a["id"])
 		if c < bc:
 			bc = c; best = a["id"]
+	if best == "":   # фокус-семейства максимум — берём любой дешёвый
+		for a in AUGMENTS:
+			var c := _aug_cost(a["id"])
+			if c < bc:
+				bc = c; best = a["id"]
 	if best != "" and cores >= bc:
 		_buy_aug(best)
 	else:
 		_apply_augments(); _recalc_auras()
 
+func _save_path() -> String:
+	return "user://save%s.json" % save_slot
+
 func _hard_restart() -> void:
-	if FileAccess.file_exists("user://save.json"):
-		DirAccess.remove_absolute("user://save.json")
+	if FileAccess.file_exists(_save_path()):
+		DirAccess.remove_absolute(_save_path())
 	_reset()
 
 func _save() -> void:
@@ -646,14 +666,14 @@ func _save() -> void:
 		"best_stage": best_stage, "scrap": scrap, "cores": cores,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "heroes": hs,
 	}
-	var f := FileAccess.open("user://save.json", FileAccess.WRITE)
+	var f := FileAccess.open(_save_path(), FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(d)); f.close()
 
 func _load() -> void:
-	if not FileAccess.file_exists("user://save.json"):
+	if not FileAccess.file_exists(_save_path()):
 		return
-	var f := FileAccess.open("user://save.json", FileAccess.READ)
+	var f := FileAccess.open(_save_path(), FileAccess.READ)
 	if not f:
 		return
 	var txt := f.get_as_text(); f.close()
