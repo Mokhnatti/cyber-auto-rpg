@@ -154,7 +154,7 @@ const ENEMY_TYPES := {
 	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#ff2d95", "s": 1.0, "heal": true},
 }
 
-const PRESTIGE_LVL := 25   # СТОПГАП: 100 был недостижим (экономика капит ур.~30) → софтлок. 25 активирует мета-петлю. Восстановить ~мид-гейм после прокачки экономики золота.
+const PRESTIGE_LVL := 60   # мид-гейм; после буста золота с глубиной leveling успевает (боты проверят достижимость, цель ~вечер)
 
 func _max_hero_level() -> int:
 	var m := 1
@@ -971,7 +971,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: int, is_crit := false) -> void:
 	_popup(str(d) + ("!" if is_crit else ""), col, e["node"].position + Vector2(randf_range(-10, 10), -86), sz)
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
-		gold += (40.0 if e.get("boss", false) else 5.0) * (1.0 + wave * 0.15) * aug_gold
+		gold += (40.0 if e.get("boss", false) else 5.0) * pow(1.09, wave) * aug_gold   # доход растёт с глубиной (в пару с HP врагов) → leveling успевает
 		_fall_enemy(e["node"])
 
 func _enemy_hit(e: Dictionary) -> void:
