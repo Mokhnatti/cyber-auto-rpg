@@ -6,10 +6,10 @@ extends Control
 
 const HEROES := [
 	# atk_type: snipe/single/aoe/tank · hpg/dmgg = рост HP/урона за уровень (профиль класса)
-	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.05, "dmgg": 0.20, "ult": "burst",  "ult_cd": 9.0},
-	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.12, "dmgg": 0.14, "ult": "barrage","ult_cd": 8.0},
-	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.26, "dmgg": 0.06, "ult": "shield", "ult_cd": 11.0},
-	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.10, "dmgg": 0.13, "ult": "hack",   "ult_cd": 10.0},
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "ult": "burst",  "ult_cd": 9.0},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "ult": "barrage","ult_cd": 8.0},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "ult": "shield", "ult_cd": 11.0},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "ult": "hack",   "ult_cd": 10.0},
 ]
 const W := 600.0
 const H := 960.0
@@ -634,8 +634,8 @@ func _refresh_inv() -> void:
 	for i in heroes.size():
 		var hh = heroes[i]
 		var r = hero_rows[i]
-		var prof := "🛡 HP" if hh["data"]["hpg"] > hh["data"]["dmgg"] else "⚔ урон"
-		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d   %d💰   (%s)" % [hh["level"], hh["lvl_cost"], prof]
+		var prio := "🛡 HP" if hh["data"]["hpg"] > hh["data"]["dmgg"] else "⚔ урон"
+		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d   %d 💰\n+HP +урон · приоритет %s" % [hh["level"], hh["lvl_cost"], prio]
 		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
 
 # дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
