@@ -50,6 +50,11 @@ var nick_panel: Control
 var restart_confirm: Control
 var _offline_gold := 0
 var _offline_secs := 0
+var show_dmg := true        # цифры урона над врагами (настройка)
+var settings_panel: Control
+var set_dmg_btn: Button
+var nick_input: LineEdit
+var set_nick_input: LineEdit
 # БОТ-ПЛЕЙТЕСТЕР (godot --headless -- --bot): сам играет, логирует TTSTATE
 var bot := false
 var bot_tactic := "balanced"
@@ -502,10 +507,10 @@ func _build_nick_prompt() -> void:
 	nick_panel.add_child(v)
 	var t := Label.new(); t.text = "ВВЕДИ НИК"; t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
 	var sub2 := Label.new(); sub2.text = "для теста (прогресс сохраняется по нику)"; sub2.add_theme_font_size_override("font_size", 13); sub2.add_theme_color_override("font_color", Color("#7a7f99")); sub2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(sub2)
-	var le := LineEdit.new(); le.placeholder_text = "ник"; le.custom_minimum_size = Vector2(0, 50); le.add_theme_font_size_override("font_size", 20); v.add_child(le)
+	nick_input = LineEdit.new(); nick_input.placeholder_text = "ник"; nick_input.custom_minimum_size = Vector2(0, 50); nick_input.add_theme_font_size_override("font_size", 20); nick_input.virtual_keyboard_enabled = true; v.add_child(nick_input)
 	var b := Button.new(); b.text = "▶ ИГРАТЬ"; b.add_theme_font_size_override("font_size", 20); b.custom_minimum_size = Vector2(0, 54); v.add_child(b)
 	b.pressed.connect(func():
-		nick = le.text.strip_edges()
+		nick = nick_input.text.strip_edges()
 		if nick == "": nick = "гость"
 		nick_panel.visible = false
 		_save()
@@ -642,6 +647,7 @@ func _ready() -> void:
 		print("TTBOT enabled tactic=%s slot=%s time_scale=8" % [bot_tactic, save_slot])
 	elif nick == "":
 		nick_panel.visible = true   # первый вход → спросить ник
+		nick_input.grab_focus()     # сразу фокус → всплывает клавиатура (фикс пустых ников)
 	elif _offline_gold > 0:
 		_show_offline()
 
@@ -767,6 +773,49 @@ func _show_death(was_boss: bool) -> void:
 	var msg := "☠ ТЫ ПОГИБ\nПрокачай отряд и попробуй снова" if was_boss else "☠ Отряд пал — перегруппировка"
 	_popup_center(msg, Color("#ff5050"), 3.8)   # висит дольше
 
+func _toggle_settings() -> void:
+	if settings_panel == null:
+		_build_settings()
+	settings_panel.visible = not settings_panel.visible
+	_refresh_settings()
+
+func _refresh_settings() -> void:
+	if set_dmg_btn:
+		set_dmg_btn.text = "Цифры урона над врагами: %s" % ("ВКЛ ✅" if show_dmg else "ВЫКЛ ⬜")
+	if set_nick_input and nick != "" and nick != "гость":
+		set_nick_input.text = nick
+
+func _build_settings() -> void:
+	settings_panel = Control.new()
+	settings_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	settings_panel.visible = false
+	settings_panel.z_index = 3000
+	hud.add_child(settings_panel)
+	var bg := ColorRect.new()
+	bg.color = Color(0.04, 0.04, 0.08, 0.99); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: settings_panel.visible = false)
+	settings_panel.add_child(bg)
+	var t := Label.new(); t.text = "⚙ НАСТРОЙКИ"; t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; t.position = Vector2(0, 50); t.size = Vector2(W, 34)
+	settings_panel.add_child(t)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14)
+	v.position = Vector2(30, 130); v.size = Vector2(W - 60, 0)
+	settings_panel.add_child(v)
+	set_dmg_btn = Button.new(); set_dmg_btn.add_theme_font_size_override("font_size", 16); set_dmg_btn.custom_minimum_size = Vector2(0, 52)
+	set_dmg_btn.pressed.connect(func(): show_dmg = not show_dmg; _save(); _refresh_settings())
+	v.add_child(set_dmg_btn)
+	# смена ника (фолбэк, если первый ввод не сработал)
+	var nl := Label.new(); nl.text = "Твой ник (для теста):"; nl.add_theme_font_size_override("font_size", 14); nl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nl)
+	set_nick_input = LineEdit.new(); set_nick_input.placeholder_text = "ник"; set_nick_input.custom_minimum_size = Vector2(0, 48); set_nick_input.add_theme_font_size_override("font_size", 18); set_nick_input.virtual_keyboard_enabled = true; v.add_child(set_nick_input)
+	var save_nick := Button.new(); save_nick.text = "💾 Сохранить ник"; save_nick.add_theme_font_size_override("font_size", 15); save_nick.custom_minimum_size = Vector2(0, 46)
+	save_nick.pressed.connect(func():
+		var n := set_nick_input.text.strip_edges()
+		if n != "":
+			nick = n; _save(); _send_telemetry("nickset"); _popup_center("Ник: " + nick, Color("#00f0ff")))
+	v.add_child(save_nick)
+	var close := Button.new(); close.text = "× ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16); close.custom_minimum_size = Vector2(0, 50)
+	close.pressed.connect(func(): settings_panel.visible = false)
+	v.add_child(close)
+
 func _ask_restart() -> void:
 	if restart_confirm:
 		restart_confirm.visible = true
@@ -833,7 +882,7 @@ func _save() -> void:
 	for hh in heroes:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "wlvl": hh["wlvl"], "wdupes": hh["wdupes"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
-		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
+		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "heroes": hs,
 	}
@@ -852,6 +901,7 @@ func _load() -> void:
 	if typeof(d) != TYPE_DICTIONARY:
 		return
 	nick = str(d.get("nick", ""))
+	show_dmg = bool(d.get("show_dmg", true))
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0))
@@ -1068,7 +1118,8 @@ func _deal(hh: Dictionary, e: Dictionary, d: int, is_crit := false) -> void:
 	e["hp"] = max(0, e["hp"] - d)
 	var col: Color = Color("#ffe14d") if is_crit else hh["data"]["color"]
 	var sz := 38 if is_crit else 26
-	_popup(str(d) + ("!" if is_crit else ""), col, e["node"].position + Vector2(randf_range(-10, 10), -86), sz)
+	if show_dmg:
+		_popup(str(d) + ("!" if is_crit else ""), col, e["node"].position + Vector2(randf_range(-10, 10), -86), sz)
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
 		gold += (40.0 if e.get("boss", false) else 5.0) * pow(1.09, wave) * aug_gold   # доход растёт с глубиной (в пару с HP врагов) → leveling успевает
@@ -1132,7 +1183,8 @@ func _sniper_fire(sn, target) -> void:
 	sn["atk_anim"] = 0.25
 	var d := int(sn["dmg"] * 12 * aura_dmg)
 	_deal(sn, target, d, true)
-	_popup(str(d), Color("#00f0ff"), target["node"].position + Vector2(0, -115), 46)   # без эмодзи (шрифт рисовал □)
+	if show_dmg:
+		_popup(str(d), Color("#00f0ff"), target["node"].position + Vector2(0, -115), 46)   # без эмодзи (шрифт рисовал □)
 
 # приоритетная цель для авто: передовой враг (ближе всех к отряду = меньший x)
 func _pick_enemy():
@@ -1448,7 +1500,7 @@ func _refresh_hud() -> void:
 		var hh = heroes[i]
 		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
 		hero_ults[i].disabled = not ready_ult
-		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh["data"]["name"], ("⚡УЛЬТА" if ready_ult else "%.0f" % hh["ult_t"])]
+		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh["data"]["name"], ("⚡ ГОТОВО" if ready_ult else "⏱ %.0fс" % hh["ult_t"])]
 		# свечение когда ульта готова (border ignite à la AFK Arena)
 		if not hh["alive"]:
 			hero_ults[i].modulate = Color(0.4, 0.4, 0.4, 1)
@@ -1630,7 +1682,7 @@ func _build() -> void:
 	settings_btn.text = "⚙"
 	settings_btn.add_theme_font_size_override("font_size", 18)
 	settings_btn.custom_minimum_size = Vector2(52, 42)
-	settings_btn.pressed.connect(func(): _popup_center("⚙ Настройки — скоро", Color("#7a7f99")))
+	settings_btn.pressed.connect(_toggle_settings)
 	menubar.add_child(settings_btn)
 	_build_inventory()
 	_build_implants()
