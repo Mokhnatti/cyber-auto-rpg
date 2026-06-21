@@ -53,13 +53,35 @@ var gold_label: Label
 var inv_btn: Button
 var inv_panel: Control
 var inv_open := false
-var hero_rows := []   # строки прокачки по героям: {lvl_btn, gun_btn}
+var hero_rows := []   # строки прокачки по героям: {lvl_btn}
+# пассивные ауры классов (пока боец жив — бафает весь отряд)
+var aura_hp := 1.0
+var aura_dmg := 1.0
+var aura_atk := 1.0
+var aura_ult := 1.0
+var atk_buff_t := 0.0   # временный бафф скорости атаки от ульты штурма
+
+func _recalc_auras() -> void:
+	var tank := false; var snipe := false; var storm := false; var hak := false
+	for hh in heroes:
+		if not hh["alive"]: continue
+		match hh["data"]["atk_type"]:
+			"tank": tank = true
+			"snipe": snipe = true
+			"single": storm = true
+			"aoe": hak = true
+	aura_hp = 1.0 + (0.10 if tank else 0.0)    # танк → +10% HP всем
+	aura_dmg = 1.0 + (0.08 if snipe else 0.0)  # снайпер → +8% урон всем
+	aura_atk = 1.0 + (0.10 if storm else 0.0)  # штурм → +10% скор. атаки
+	aura_ult = 0.82 if hak else 1.0            # хакер → ульты заряжаются быстрее
+	for hh in heroes:
+		_recalc_hero(hh)
 
 # пер-героя прокачка: УРОВЕНЬ (все статы) + ПУШКА (урон). Просто и понятно.
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
 	hh["dmg"] = int(round(hh["data"]["dmg"] * (1.0 + (lv - 1) * hh["data"]["dmgg"])))
-	hh["max"] = int(hh["data"]["hp"] * (1.0 + (lv - 1) * hh["data"]["hpg"]))
+	hh["max"] = int(hh["data"]["hp"] * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp)
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _ready() -> void:
@@ -104,6 +126,7 @@ func _reset() -> void:
 			"level": 1, "lvl_cost": 30,
 			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
 		})
+	_recalc_auras()
 	_start_march()
 	_refresh_hud()
 
@@ -115,6 +138,9 @@ func _start_march() -> void:
 			var n = hh["node"]
 			n.rotation = 0.0
 			n.modulate = Color(1, 1, 1, 1)
+		hh["hp"] = hh["max"]
+	_recalc_auras()   # отряд в полном составе → ауры вернулись
+	for hh in heroes:
 		hh["hp"] = hh["max"]
 	phase = "march"
 	march_t = 2.4
@@ -158,6 +184,7 @@ func _process(delta: float) -> void:
 	if phase == "dead":
 		return
 	gold += gold_ps * delta          # пассивный доход (idle-кор)
+	if atk_buff_t > 0.0: atk_buff_t -= delta
 	if hack_t > 0.0:
 		hack_t -= delta
 		if hack_t <= 0.0: hack_mult = 1.0
@@ -175,7 +202,8 @@ func _process(delta: float) -> void:
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			hh["t"] = hh["atk_spd"]
+			var spd := aura_atk * (1.4 if atk_buff_t > 0.0 else 1.0)
+			hh["t"] = hh["atk_spd"] / spd
 			_hero_hit(hh)
 	for e in enemies:
 		if not e["alive"]: continue
@@ -200,7 +228,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	var e = _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.18
-	var base := int(round(hh["dmg"] * hack_mult))
+	var base := int(round(hh["dmg"] * aura_dmg * hack_mult))
 	if hh["data"]["atk_type"] == "aoe":
 		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
 		for en in enemies:
@@ -228,35 +256,39 @@ func _enemy_hit(e: Dictionary) -> void:
 	if hh["hp"] <= 0 and hh["alive"]:
 		hh["alive"] = false
 		_fall(hh["node"])
+		_recalc_auras()   # пал боец → пропала его аура
 
 func _use_ult(i: int) -> void:
 	if phase != "fight": return
 	var hh = heroes[i]
 	if not hh["alive"] or hh["ult_t"] > 0.0: return
-	hh["ult_t"] = hh["data"]["ult_cd"]
+	hh["ult_t"] = hh["data"]["ult_cd"] * aura_ult
 	hh["atk_anim"] = 0.25
 	match hh["data"]["ult"]:
-		"burst", "barrage":
+		"burst":
+			# СНАЙПЕР: мощный выстрел (пока в первого; тап-таргет позже)
 			var e = _first_alive(enemies)
 			if e:
-				var mul := 6 if hh["data"]["ult"] == "burst" else 8
-				var d := int(hh["dmg"] * mul * hack_mult)
-				e["hp"] = max(0, e["hp"] - d)
-				_popup("УЛЬТА " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 40)
-				if e["hp"] <= 0 and e["alive"]:
-					e["alive"] = false; _fall(e["node"])
+				var d := int(hh["dmg"] * 9 * aura_dmg * hack_mult)
+				_deal(hh, e, d)
+				_popup("ВЫСТРЕЛ " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 42)
+		"barrage":
+			# ШТУРМ: всем +скорость атаки на время
+			atk_buff_t = 6.0
+			_popup_center("🔫 ШКВАЛ\nотряд: скорость атаки ↑", hh["data"]["color"])
 		"shield":
+			# ТАНК: щит всей команде
 			for h2 in heroes:
 				if h2["alive"]:
 					h2["shield"] = 4.0
 					h2["hp"] = min(h2["max"], h2["hp"] + 30)
+			_popup_center("🦾 ЩИТ ОТРЯДУ", hh["data"]["color"])
 		"hack":
-			hack_mult = 2.0; hack_t = 5.0
-			status_label.text = "💻 ВЗЛОМ: урон ×2"
-			status_label.modulate = Color("#ff2d95")
-			var tw := create_tween()
-			tw.tween_interval(2.0)
-			tw.tween_callback(func(): if phase != "dead": status_label.text = "")
+			# ХАКЕР: мощная плюха по всем врагам
+			for en in enemies:
+				if en["alive"]:
+					_deal(hh, en, int(hh["dmg"] * 5 * aura_dmg * hack_mult))
+			_popup_center("💻 ВЗЛОМ-ПЛЮХА", hh["data"]["color"])
 	_refresh_hud()
 
 func _die() -> void:
