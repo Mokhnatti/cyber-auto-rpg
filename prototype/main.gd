@@ -138,14 +138,19 @@ var conf_cost: Label
 var conf_btn: Button
 
 # стартовый комплект: каждый боец владеет MK1-моделью каждого слота (серый, ★1) и носит её
+# ключ предмета = модель@редкость (редкость и звёзды — РАЗНЫЕ оси, §11)
+func _ik(vid: String, rarity: int) -> String:
+	return vid + "@" + str(rarity)
+
 func _new_gear() -> Dictionary:
 	var gear := {}
 	var equip := {}
 	for slot in ITEM_VARIANTS:
 		gear[slot] = {}
 		var first = ITEM_VARIANTS[slot][0]
-		gear[slot][first["id"]] = {"owned": true, "rarity": 1, "lvl": 1, "dupes": 0, "rolls": [_roll_stat(first["stat"])]}
-		equip[slot] = first["id"]
+		var key := _ik(first["id"], 1)
+		gear[slot][key] = {"vid": first["id"], "rarity": 1, "lvl": 1, "dupes": 0, "rolls": [_roll_stat(first["stat"])]}
+		equip[slot] = key
 	return {"gear": gear, "equip": equip}
 
 func _roll_stat(stat: String) -> Dictionary:
@@ -168,7 +173,7 @@ func _make_item(slot: String, vid: String, rarity: int) -> Dictionary:
 	others.shuffle()
 	for i in range(min(rarity - 1, others.size())):
 		rolls.append(_roll_stat(others[i]))
-	return {"owned": true, "rarity": rarity, "lvl": 1, "dupes": 0, "rolls": rolls}
+	return {"vid": vid, "rarity": rarity, "lvl": 1, "dupes": 0, "rolls": rolls}
 
 func _item_power(it: Dictionary) -> int:   # грубая сила для сравнения «перефармить?»
 	var s := 0
@@ -206,18 +211,20 @@ func _roll_rarity() -> int:
 func _gear_bonus(hh: Dictionary, stat: String) -> float:
 	var total := 0.0
 	for slot in hh["equip"]:
-		var vid: String = hh["equip"][slot]
-		if vid == "" or not hh["gear"][slot].has(vid):
+		var key: String = hh["equip"][slot]
+		if key == "" or not hh["gear"][slot].has(key):
 			continue
-		var inst = hh["gear"][slot][vid]
+		var inst = hh["gear"][slot][key]
 		var mult: float = 1.0 + (inst["lvl"] - 1) * 0.25
 		for r in inst["rolls"]:
 			if r["stat"] == stat:
 				total += r["val"] * mult
 	return total
 
-func _merge_cost(hh: Dictionary, slot: String, vid: String) -> int:
-	return hh["gear"][slot][vid]["lvl"] * 50
+# стоимость ★-апа: растёт со звёздами И с редкостью (топ-★ топ-редкости = дорого, §11)
+func _merge_cost(hh: Dictionary, slot: String, key: String) -> int:
+	var inst = hh["gear"][slot][key]
+	return inst["lvl"] * 50 * inst["rarity"]
 # пассивные ауры классов (пока боец жив — бафает весь отряд)
 var aura_hp := 1.0
 var aura_dmg := 1.0
@@ -950,23 +957,23 @@ func _toggle_impl() -> void:
 	impl_panel.visible = impl_open
 	if impl_open: _refresh_impl()
 
-func _merge_gear(idx: int, slot: String, vid: String) -> void:
+func _merge_gear(idx: int, slot: String, key: String) -> void:
 	var hh = heroes[idx]
-	if not hh["gear"][slot].has(vid):
+	if not hh["gear"][slot].has(key):
 		return
-	var inst = hh["gear"][slot][vid]
-	var cost := _merge_cost(hh, slot, vid)
+	var inst = hh["gear"][slot][key]
+	var cost := _merge_cost(hh, slot, key)
 	if inst["dupes"] >= 2 and gold >= cost:
 		inst["dupes"] -= 2
-		inst["lvl"] += 1      # +1 звезда → роллы этой модели множатся
+		inst["lvl"] += 1      # +1 звезда ВНУТРИ редкости → роллы этой модели множатся
 		gold -= cost
 		_recalc_hero(hh)
 		_refresh_impl()
 
-func _equip(slot: String, vid: String) -> void:
+func _equip(slot: String, key: String) -> void:
 	var hh = heroes[impl_sel]
-	if hh["gear"][slot].has(vid) and hh["gear"][slot][vid]["owned"]:
-		hh["equip"][slot] = vid
+	if hh["gear"][slot].has(key):
+		hh["equip"][slot] = key
 		_recalc_hero(hh)
 		_refresh_impl()
 		_select_slot(slot)   # перерисовать панель (отметка «надето»)
@@ -1236,17 +1243,20 @@ func _refresh_detail() -> void:
 		det_list.add_child(_weapon_row(hh))
 		return
 	det_title.text = "%s %s — что наденем" % [IMPL_DEFS[slot]["icon"], IMPL_DEFS[slot]["name"]]
-	# только то, что ЕСТЬ у бойца в этом слоте (надетое — первым)
-	var owned_ids: Array = hh["gear"][slot].keys()
-	owned_ids.sort_custom(func(a, b): return hh["equip"][slot] == a)
-	for vid in owned_ids:
-		det_list.add_child(_variant_row(hh, slot, vid))
+	# все ПРЕДМЕТЫ (модель+редкость) этого слота; надетый — первым, дальше по редкости
+	var keys: Array = hh["gear"][slot].keys()
+	keys.sort_custom(func(a, b):
+		if hh["equip"][slot] == a: return true
+		if hh["equip"][slot] == b: return false
+		return hh["gear"][slot][a]["rarity"] > hh["gear"][slot][b]["rarity"])
+	for key in keys:
+		det_list.add_child(_variant_row(hh, slot, key))
 
-func _variant_row(hh: Dictionary, slot: String, vid: String) -> Control:
-	var v := _variant(slot, vid)
-	var inst = hh["gear"][slot][vid]
+func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
+	var inst = hh["gear"][slot][key]
+	var v := _variant(slot, inst["vid"])
 	var rar: int = inst["rarity"]
-	var equipped: bool = hh["equip"][slot] == vid
+	var equipped: bool = hh["equip"][slot] == key
 	var card := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.11, 0.13, 0.2, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
@@ -1261,11 +1271,11 @@ func _variant_row(hh: Dictionary, slot: String, vid: String) -> Control:
 	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); box.add_child(hb)
 	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 13); eqb.custom_minimum_size = Vector2(190, 38)
 	eqb.text = "НАДЕТО" if equipped else "НАДЕТЬ"; eqb.disabled = equipped
-	eqb.pressed.connect(func(): _equip(slot, vid))
+	eqb.pressed.connect(func(): _equip(slot, key))
 	hb.add_child(eqb)
 	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(190, 38)
 	upb.text = "⬆ УРОВЕНЬ (%d/2)" % inst["dupes"]; upb.disabled = inst["dupes"] < 2
-	upb.pressed.connect(func(): impl_selv = vid; _open_confirm())
+	upb.pressed.connect(func(): impl_selv = key; _open_confirm())
 	hb.add_child(upb)
 	return card
 
@@ -1324,9 +1334,9 @@ func _refresh_confirm() -> void:
 		nm = "%s %s" % [hh["data"]["wicon"], hh["data"]["wname"]]
 		dupes = hh["wdupes"]; cost = hh["wlvl"] * 50
 	else:
-		var v := _variant(impl_seln, impl_selv)
 		var inst = hh["gear"][impl_seln][impl_selv]
-		nm = "%s %s" % [IMPL_DEFS[impl_seln]["icon"], v["name"]]
+		var v := _variant(impl_seln, inst["vid"])
+		nm = "%s %s · %s" % [IMPL_DEFS[impl_seln]["icon"], v["name"], RARITY[inst["rarity"]]["name"]]
 		dupes = inst["dupes"]; cost = _merge_cost(hh, impl_seln, impl_selv)
 	conf_item.text = "%s   (дублей: %d / 2)" % [nm, dupes]
 	conf_cost.text = "Сумма прокачки: %d 💰" % cost
@@ -1360,27 +1370,28 @@ func _drop_implant() -> void:
 		hh["wdupes"] += amount
 		_popup_center("🔫 ОРУЖИЕ: %s · %s %s\n+%d дубль" % [hh["data"]["name"], hh["data"]["wicon"], hh["data"]["wname"], amount], Color("#ffb02e"))
 	else:
-		# случайный слот+модель; редкость по прогрессу; роллы значений
+		# случайный слот+модель; редкость по прогрессу; предмет = модель@редкость
 		var slot: String = IMPL_DEFS.keys()[randi() % IMPL_DEFS.size()]
 		var variants = ITEM_VARIANTS[slot]
 		var v = variants[randi() % variants.size()]
 		var vid: String = v["id"]
 		var rar := _roll_rarity()
+		var key := _ik(vid, rar)
 		var g = hh["gear"][slot]
-		if g.has(vid) and g[vid]["owned"]:
-			# дубль: +кол-во для мерджа; если новый ролл/редкость лучше — заменяем базу (перефарм)
-			g[vid]["dupes"] += amount
+		if g.has(key):
+			# дубль ТОЙ ЖЕ модели И редкости → для ★-апа; роллы держим лучшие (перефарм внутри редкости)
+			g[key]["dupes"] += amount
 			var fresh := _make_item(slot, vid, rar)
-			if _item_power(fresh) > _item_power(g[vid]):
-				fresh["dupes"] = g[vid]["dupes"]; fresh["lvl"] = g[vid]["lvl"]
-				g[vid] = fresh
+			if _item_power(fresh) > _item_power(g[key]):
+				fresh["dupes"] = g[key]["dupes"]; fresh["lvl"] = g[key]["lvl"]
+				g[key] = fresh
 				_popup_center("📦 %s · %s %s\nЛУЧШИЙ РОЛЛ!" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]))
 			else:
-				_popup_center("📦 %s · %s\n+%d дубль" % [hh["data"]["name"], v["name"], amount], Color(RARITY[rar]["col"]))
+				_popup_center("📦 %s · %s %s\n+%d дубль" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], amount], Color(RARITY[rar]["col"]))
 		else:
 			var it := _make_item(slot, vid, rar)
 			it["dupes"] = amount - 1
-			g[vid] = it
+			g[key] = it
 			_popup_center("✨ НОВАЯ: %s · %s %s\n%s" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], _rolls_text(it)], Color(RARITY[rar]["col"]))
 	_recalc_hero(hh)
 
