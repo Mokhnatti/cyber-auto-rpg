@@ -59,16 +59,20 @@ var impl_btn: Button
 var impl_panel: Control
 var impl_open := false
 var impl_rows := {}
+# lvl = звёзды (база статов), dupes = дубликаты в запасе (падают с боссов). 2 дубля + золото → +1 звезда
 var impl := {
-	"core":  {"icon": "🫀", "name": "Реактор · тело", "slot": "+HP",        "lvl": 1, "cost": 50, "c0": 50},
-	"arms":  {"icon": "🦾", "name": "Сервоприводы · руки", "slot": "+урон", "lvl": 1, "cost": 45, "c0": 45},
-	"optic": {"icon": "👁", "name": "Оптика · глаза", "slot": "+крит",      "lvl": 1, "cost": 55, "c0": 55},
-	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки","lvl": 1, "cost": 50, "c0": 50},
-	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт","lvl": 1, "cost": 60, "c0": 60},
+	"core":  {"icon": "🫀", "name": "Реактор · тело", "slot": "+HP",        "lvl": 1, "dupes": 0},
+	"arms":  {"icon": "🦾", "name": "Сервоприводы · руки", "slot": "+урон", "lvl": 1, "dupes": 0},
+	"optic": {"icon": "👁", "name": "Оптика · глаза", "slot": "+крит",      "lvl": 1, "dupes": 0},
+	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки","lvl": 1, "dupes": 0},
+	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт","lvl": 1, "dupes": 0},
 }
 
 func _impl_lv(key: String) -> int:
-	return impl[key]["lvl"] - 1   # вклад импланта (lvl 1 = базовый, без бонуса)
+	return impl[key]["lvl"] - 1   # вклад импланта (1 звезда = базовый, без бонуса)
+
+func _merge_cost(key: String) -> int:
+	return impl[key]["lvl"] * 50   # золото за объединение (растёт со звёздами)
 # пассивные ауры классов (пока боец жив — бафает весь отряд)
 var aura_hp := 1.0
 var aura_dmg := 1.0
@@ -130,7 +134,7 @@ func _reset() -> void:
 	gold_ps = 2.0
 	for k in impl:
 		impl[k]["lvl"] = 1
-		impl[k]["cost"] = impl[k]["c0"]
+		impl[k]["dupes"] = 0
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
@@ -738,12 +742,13 @@ func _toggle_impl() -> void:
 	impl_panel.visible = impl_open
 	if impl_open: _refresh_impl()
 
-func _upgrade_impl(key: String) -> void:
+func _merge_impl(key: String) -> void:
 	var im = impl[key]
-	if gold >= im["cost"]:
-		gold -= im["cost"]
-		im["lvl"] += 1
-		im["cost"] = int(im["cost"] * 1.6)
+	var cost := _merge_cost(key)
+	if im["dupes"] >= 2 and gold >= cost:
+		im["dupes"] -= 2
+		im["lvl"] += 1      # +1 звезда → база статов выросла
+		gold -= cost
 		for hh in heroes: _recalc_hero(hh)
 		_refresh_impl()
 
@@ -793,7 +798,7 @@ func _build_implants() -> void:
 		hb.add_child(info)
 		var ab := Button.new(); ab.custom_minimum_size = Vector2(100, 48); ab.add_theme_font_size_override("font_size", 12)
 		var k: String = key
-		ab.pressed.connect(func(): _upgrade_impl(k))
+		ab.pressed.connect(func(): _merge_impl(k))
 		hb.add_child(ab)
 		rows.add_child(row)
 		impl_rows[key] = {"stat": st, "btn": ab}
@@ -807,47 +812,23 @@ func _refresh_impl() -> void:
 	for key in impl:
 		var im = impl[key]
 		var r = impl_rows[key]
-		r["stat"].text = "★%d · %s (база)" % [im["lvl"], im["slot"]]
-		r["btn"].text = "↑ ★%d\n%d 💰" % [im["lvl"] + 1, im["cost"]]
-		r["btn"].disabled = gold < im["cost"]
+		r["stat"].text = "★%d · %s · дублей: %d" % [im["lvl"], im["slot"], im["dupes"]]
+		var cost := _merge_cost(key)
+		r["btn"].text = "⚙ ОБЪЕДИНИТЬ\n2 дубля + %d 💰" % cost
+		r["btn"].disabled = im["dupes"] < 2 or gold < cost
 
-# дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
+# дроп ШМОТКИ-дубликата после волны (босс гарант 2, обычная волна шанс 1) → копишь → мерджишь
 func _drop_implant() -> void:
 	var was_boss := (wave % 5 == 0)
-	var r := randf()
-	var rarity := "обычный"; var rcol := Color("#9aa0b5"); var mult := 1.0
-	if was_boss or r > 0.93:
-		rarity = "ЛЕГЕНДА"; rcol = Color("#ffb02e"); mult = 4.0
-	elif r > 0.72:
-		rarity = "эпик"; rcol = Color("#ff2d95"); mult = 2.5
-	elif r > 0.42:
-		rarity = "редкий"; rcol = Color("#00f0ff"); mult = 1.6
-	var types := [
-		{"n": "👁 Оптика", "stat": "dmg"},
-		{"n": "🦾 Сервоприводы", "stat": "atk_spd"},
-		{"n": "🫀 Реактор", "stat": "max"},
-	]
-	var t = types[randi() % types.size()]
-	var alive := []
-	for hh in heroes:
-		if hh["alive"]: alive.append(hh)
-	if alive.is_empty(): return
-	var hero = alive[randi() % alive.size()]
-	var label := ""
-	match t["stat"]:
-		"dmg":
-			var a := int(3 * mult)
-			hero["dmg"] += a
-			label = "+%d урон" % a
-		"max":
-			var a := int(28 * mult)
-			hero["max"] += a; hero["hp"] += a
-			label = "+%d HP" % a
-		"atk_spd":
-			hero["atk_spd"] = max(0.3, hero["atk_spd"] - 0.07 * mult)
-			label = "быстрее атака"
+	if not was_boss and randf() > 0.5:
+		return
+	var keys := impl.keys()
+	var key: String = keys[randi() % keys.size()]
+	var amount := 2 if was_boss else 1
+	impl[key]["dupes"] += amount
 	implants_count += 1
-	_popup_center("📦 %s [%s]\n%s → %s" % [t["n"], rarity, label, hero["data"]["name"]], rcol)
+	var im = impl[key]
+	_popup_center("📦 ШМОТКА: %s %s\n+%d дубль (★%d, дублей %d)" % [im["icon"], im["name"], amount, im["lvl"], im["dupes"]], Color("#00f0ff"))
 
 func _popup_center(txt: String, col: Color) -> void:
 	var l := Label.new()
