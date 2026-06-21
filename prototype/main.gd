@@ -642,6 +642,7 @@ func _build_inventory() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color(0.04, 0.04, 0.08, 0.99)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_inv())  # тап по фону = закрыть
 	inv_panel.add_child(bg)
 
 	var title := Label.new()
@@ -688,8 +689,8 @@ func _build_inventory() -> void:
 	var close := Button.new()
 	close.text = "✕ ЗАКРЫТЬ"
 	close.add_theme_font_size_override("font_size", 16)
-	close.custom_minimum_size = Vector2(200, 48)
-	close.position = Vector2(W * 0.5 - 100, H - 78)
+	close.custom_minimum_size = Vector2(200, 50)
+	close.position = Vector2(W * 0.5 - 100, H - 150)   # выше рестарта (не перекрываются)
 	close.pressed.connect(_toggle_inv)
 	inv_panel.add_child(close)
 
