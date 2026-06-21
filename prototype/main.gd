@@ -6,10 +6,10 @@ extends Control
 
 const HEROES := [
 	# atk_type: snipe/single/aoe/tank · hpg/dmgg = рост HP/урона за уровень (профиль класса)
-	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "crit": 0.30, "critx": 2.2, "ult": "burst",  "ult_cd": 9.0},
-	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "crit": 0.10, "critx": 1.6, "ult": "barrage","ult_cd": 8.0},
-	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0},
-	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0},
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "crit": 0.30, "critx": 2.2, "ult": "burst",  "ult_cd": 9.0,  "wname": "Рельса-винтовка", "wicon": "🔭"},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "crit": 0.10, "critx": 1.6, "ult": "barrage","ult_cd": 8.0,  "wname": "Штурм-ган", "wicon": "🔫"},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0, "wname": "Тяж-орудие", "wicon": "💥"},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0, "wname": "Взлом-дрон", "wicon": "📡"},
 ]
 const W := 600.0
 const H := 960.0
@@ -101,7 +101,8 @@ func _recalc_auras() -> void:
 # пер-героя прокачка: УРОВЕНЬ (все статы) + ПУШКА (урон). Просто и понятно.
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
-	var base_dmg: int = hh["data"]["dmg"] + _impl_lv("arms") * 3    # база = класс + руки(шмотка)
+	var wbonus: int = (hh["wlvl"] - 1) * int(max(5, hh["data"]["dmg"] * 0.35))   # ОРУЖИЕ = главный урон (база)
+	var base_dmg: int = hh["data"]["dmg"] + wbonus + _impl_lv("arms") * 3   # база = класс + оружие + руки
 	var base_hp: int = hh["data"]["hp"] + _impl_lv("core") * 25     # база = класс + реактор(шмотка)
 	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"])))   # × множитель уровня
 	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp)
@@ -150,6 +151,7 @@ func _reset() -> void:
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
 			"dmg": h["dmg"], "atk_spd": h["atk"],
 			"level": 1, "lvl_cost": 30,
+			"wlvl": 1, "wdupes": 0,
 			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
 		})
 	_recalc_auras()
@@ -717,8 +719,13 @@ func _build_inventory() -> void:
 		var idx := i
 		lb.pressed.connect(func(): _upgrade_level(idx))
 		hb.add_child(lb)
+		var wb := Button.new()   # ОРУЖИЕ пер-класс (мердж дублей → главный урон)
+		wb.custom_minimum_size = Vector2(156, 62)
+		wb.add_theme_font_size_override("font_size", 12)
+		wb.pressed.connect(func(): _merge_weapon(idx))
+		hb.add_child(wb)
 		rows.add_child(row)
-		hero_rows.append({"lvl_btn": lb})
+		hero_rows.append({"lvl_btn": lb, "wpn_btn": wb})
 
 	var close := Button.new()
 	close.text = "✕ ЗАКРЫТЬ"
@@ -735,6 +742,9 @@ func _refresh_inv() -> void:
 		var prio := "🛡 HP" if hh["data"]["hpg"] > hh["data"]["dmgg"] else "⚔ урон"
 		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d   %d 💰\n+HP +урон · приоритет %s" % [hh["level"], hh["lvl_cost"], prio]
 		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
+		var wc: int = hh["wlvl"] * 50
+		r["wpn_btn"].text = "%s %s\n★%d · дубл %d\n⚙ мердж +%d💰" % [hh["data"]["wicon"], hh["data"]["wname"], hh["wlvl"], hh["wdupes"], wc]
+		r["wpn_btn"].disabled = hh["wdupes"] < 2 or gold < wc
 
 # --- ИМПЛАНТ-ИНВЕНТАРЬ (шмотки → база статов; уровень множит) ---
 func _toggle_impl() -> void:
@@ -817,18 +827,35 @@ func _refresh_impl() -> void:
 		r["btn"].text = "⚙ ОБЪЕДИНИТЬ\n2 дубля + %d 💰" % cost
 		r["btn"].disabled = im["dupes"] < 2 or gold < cost
 
-# дроп ШМОТКИ-дубликата после волны (босс гарант 2, обычная волна шанс 1) → копишь → мерджишь
+# дроп дубликата после волны (босс гарант 2, обычная волна шанс) → копишь → мерджишь.
+# 40% оружие (под случайного бойца), 60% имплант-шмотка (отрядная)
 func _drop_implant() -> void:
 	var was_boss := (wave % 5 == 0)
 	if not was_boss and randf() > 0.5:
 		return
-	var keys := impl.keys()
-	var key: String = keys[randi() % keys.size()]
 	var amount := 2 if was_boss else 1
-	impl[key]["dupes"] += amount
 	implants_count += 1
-	var im = impl[key]
-	_popup_center("📦 ШМОТКА: %s %s\n+%d дубль (★%d, дублей %d)" % [im["icon"], im["name"], amount, im["lvl"], im["dupes"]], Color("#00f0ff"))
+	if randf() < 0.4:
+		var i := randi() % heroes.size()
+		heroes[i]["wdupes"] += amount
+		var hh = heroes[i]
+		_popup_center("🔫 ОРУЖИЕ: %s %s\n+%d дубль (★%d, дублей %d)" % [hh["data"]["wicon"], hh["data"]["wname"], amount, hh["wlvl"], hh["wdupes"]], Color("#ffb02e"))
+	else:
+		var keys := impl.keys()
+		var key: String = keys[randi() % keys.size()]
+		impl[key]["dupes"] += amount
+		var im = impl[key]
+		_popup_center("📦 ШМОТКА: %s %s\n+%d дубль (★%d, дублей %d)" % [im["icon"], im["name"], amount, im["lvl"], im["dupes"]], Color("#00f0ff"))
+
+func _merge_weapon(i: int) -> void:
+	var hh = heroes[i]
+	var cost: int = hh["wlvl"] * 50
+	if hh["wdupes"] >= 2 and gold >= cost:
+		hh["wdupes"] -= 2
+		hh["wlvl"] += 1      # +1 звезда оружия → главный урон вырос
+		gold -= cost
+		_recalc_hero(hh)
+		_refresh_inv()
 
 func _popup_center(txt: String, col: Color) -> void:
 	var l := Label.new()
