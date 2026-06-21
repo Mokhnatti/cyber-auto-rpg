@@ -47,6 +47,7 @@ var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
 var nick_panel: Control
+var restart_confirm: Control
 # БОТ-ПЛЕЙТЕСТЕР (godot --headless -- --bot): сам играет, логирует TTSTATE
 var bot := false
 var bot_tactic := "balanced"
@@ -746,6 +747,37 @@ func _bot_augments() -> void:
 
 func _save_path() -> String:
 	return "user://save%s.json" % save_slot
+
+func _ask_restart() -> void:
+	if restart_confirm:
+		restart_confirm.visible = true
+
+func _build_restart_confirm() -> void:
+	restart_confirm = Control.new()
+	restart_confirm.set_anchors_preset(Control.PRESET_FULL_RECT)
+	restart_confirm.visible = false
+	restart_confirm.z_index = 3500
+	hud.add_child(restart_confirm)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: restart_confirm.visible = false)
+	restart_confirm.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.12, 0.05, 0.05, 0.99); sb.set_corner_radius_all(14); sb.set_content_margin_all(20)
+	sb.border_color = Color("#ff5050"); sb.set_border_width_all(2)
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = Vector2(W * 0.5 - 200, 380); card.custom_minimum_size = Vector2(400, 0)
+	restart_confirm.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14); card.add_child(v)
+	var t := Label.new(); t.text = "♻ СБРОСИТЬ ВЕСЬ ПРОГРЕСС?"; t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#ff6060")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var d := Label.new(); d.text = "Сотрёт уровни, шмот, ядра, аугменты, стадию.\nЭто новая игра с нуля."; d.add_theme_font_size_override("font_size", 13); d.add_theme_color_override("font_color", Color("#c9a0a0")); d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d)
+	var yes := Button.new(); yes.text = "ДА, СБРОСИТЬ"; yes.add_theme_font_size_override("font_size", 16); yes.custom_minimum_size = Vector2(0, 50)
+	yes.pressed.connect(func(): restart_confirm.visible = false; _hard_restart())
+	v.add_child(yes)
+	var no := Button.new(); no.text = "ОТМЕНА"; no.add_theme_font_size_override("font_size", 16); no.custom_minimum_size = Vector2(0, 46)
+	no.pressed.connect(func(): restart_confirm.visible = false)
+	v.add_child(no)
 
 func _hard_restart() -> void:
 	if FileAccess.file_exists(_save_path()):
@@ -1547,6 +1579,7 @@ func _build() -> void:
 	_build_inventory()
 	_build_implants()
 	_build_reboot()
+	_build_restart_confirm()
 
 	# === РЕСТАРТ — в левом верхнем углу (слева от «ВОЛНА»), чтоб не задеть случайно ===
 	var restart := Button.new()
@@ -1554,7 +1587,7 @@ func _build() -> void:
 	restart.add_theme_font_size_override("font_size", 18)
 	restart.custom_minimum_size = Vector2(46, 32)
 	restart.position = Vector2(10, 14)
-	restart.pressed.connect(_hard_restart)
+	restart.pressed.connect(_ask_restart)
 	hud.add_child(restart)
 
 func _cycle_speed() -> void:
