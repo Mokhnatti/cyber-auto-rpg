@@ -130,12 +130,24 @@ const ROLL_TIERS := [1.0, 0.9, 0.8, 0.7]   # по 25% каждая
 const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 # === ПРЕСТИЖ-АУГМЕНТЫ (LOOT-RULES §12): детерминированный выбор, перма-множители ===
 const AUGMENTS := [
-	{"id": "neuro", "icon": "🧬", "name": "Нейросеть-протокол", "desc": "+15%/ур к приходу ЯДЕР"},
-	{"id": "coproc", "icon": "🗲", "name": "Боевой ко-процессор", "desc": "+12%/ур урон всему отряду"},
-	{"id": "scope", "icon": "✷", "name": "Оптический прицел", "desc": "+2%/ур шанс крита"},
-	{"id": "reactor", "icon": "🛡", "name": "Перегрузка реактора", "desc": "+10%/ур HP отряду"},
-	{"id": "miner", "icon": "💰", "name": "Майнинг-демон", "desc": "+15%/ур золото и лом"},
-	{"id": "exploit", "icon": "⏱", "name": "Эксплойт ядра", "desc": "−4%/ур КД ульт"},
+	{"id": "neuro", "icon": "🧬", "name": "Нейросеть-протокол", "stat": "core", "per": 0.15, "desc": "+15%/ур к приходу ЯДЕР"},
+	{"id": "qcore", "icon": "🔮", "name": "Квантовое ядро", "stat": "core", "per": 0.10, "desc": "+10%/ур к приходу ЯДЕР"},
+	{"id": "coproc", "icon": "🗲", "name": "Боевой ко-процессор", "stat": "dmg", "per": 0.12, "desc": "+12%/ур урон всему отряду"},
+	{"id": "blade", "icon": "🔪", "name": "Перегрузочный клинок", "stat": "dmg", "per": 0.10, "desc": "+10%/ур урон всему отряду"},
+	{"id": "oclock", "icon": "♨", "name": "Разгон ядра", "stat": "dmg", "per": 0.08, "desc": "+8%/ур урон всему отряду"},
+	{"id": "reactor", "icon": "🛡", "name": "Перегрузка реактора", "stat": "hp", "per": 0.10, "desc": "+10%/ур HP отряду"},
+	{"id": "armor", "icon": "🧱", "name": "Композитная броня", "stat": "hp", "per": 0.08, "desc": "+8%/ур HP отряду"},
+	{"id": "scope", "icon": "✷", "name": "Оптический прицел", "stat": "crit", "per": 0.02, "desc": "+2%/ур шанс крита"},
+	{"id": "snchip", "icon": "🎯", "name": "Снайпер-чип", "stat": "crit", "per": 0.015, "desc": "+1.5%/ур шанс крита"},
+	{"id": "burst", "icon": "💥", "name": "Разрывные импланты", "stat": "critx", "per": 0.08, "desc": "+0.08/ур множитель крит-урона"},
+	{"id": "hyper", "icon": "⚙", "name": "Гиперпривод", "stat": "atk", "per": 0.05, "desc": "+5%/ур скорость атаки"},
+	{"id": "turbo", "icon": "🌀", "name": "Турбо-сервы", "stat": "atk", "per": 0.04, "desc": "+4%/ур скорость атаки"},
+	{"id": "miner", "icon": "💰", "name": "Майнинг-демон", "stat": "gold", "per": 0.15, "desc": "+15%/ур золото и лом"},
+	{"id": "scrapc", "icon": "♻", "name": "Скрап-коллектор", "stat": "gold", "per": 0.10, "desc": "+10%/ур золото и лом"},
+	{"id": "exploit", "icon": "⏱", "name": "Эксплойт ядра", "stat": "ultcd", "per": 0.04, "desc": "−4%/ур КД ульт"},
+	{"id": "recoil", "icon": "🔁", "name": "Контур перезаряда", "stat": "ultcd", "per": 0.03, "desc": "−3%/ур КД ульт"},
+	{"id": "reflex", "icon": "⚡", "name": "Рефлекс-усилитель", "stat": "qte", "per": 0.06, "desc": "+0.06с/ур окно QTE"},
+	{"id": "sweep", "icon": "👾", "name": "Эксплойт зачистки", "stat": "density", "per": 0.04, "desc": "−4%/ур HP врагов"},
 ]
 var impl_sel := 0          # выбранный боец в экране экипировки
 var impl_hero_btns := []   # кнопки-портреты переключения бойца
@@ -156,9 +168,13 @@ var reboot_info: Label
 var aug_dmg := 1.0
 var aug_hp := 1.0
 var aug_crit := 0.0
+var aug_critx := 0.0
+var aug_atk := 1.0
 var aug_gold := 1.0
 var aug_ultcd := 1.0
 var aug_core := 1.0
+var aug_qte := 0.0
+var aug_density := 1.0
 var eq_portrait_ic: Label  # портрет бойца слева сверху
 var eq_portrait_nm: Label
 var eq_wpn_stats: Label     # статы пушки (урон/скоростр/крит)
@@ -289,13 +305,24 @@ func _recalc_auras() -> void:
 func _al(id: String) -> int:
 	return aug_lvl.get(id, 0)
 
+func _augsum(stat: String) -> float:
+	var s := 0.0
+	for a in AUGMENTS:
+		if a["stat"] == stat:
+			s += _al(a["id"]) * a["per"]
+	return s
+
 func _apply_augments() -> void:
-	aug_dmg = 1.0 + _al("coproc") * 0.12
-	aug_hp = 1.0 + _al("reactor") * 0.10
-	aug_crit = _al("scope") * 0.02
-	aug_gold = 1.0 + _al("miner") * 0.15
-	aug_ultcd = max(0.4, 1.0 - _al("exploit") * 0.04)
-	aug_core = 1.0 + _al("neuro") * 0.15
+	aug_dmg = 1.0 + _augsum("dmg")
+	aug_hp = 1.0 + _augsum("hp")
+	aug_crit = _augsum("crit")
+	aug_critx = _augsum("critx")
+	aug_atk = 1.0 + _augsum("atk")
+	aug_gold = 1.0 + _augsum("gold")
+	aug_core = 1.0 + _augsum("core")
+	aug_ultcd = max(0.4, 1.0 - _augsum("ultcd"))
+	aug_qte = _augsum("qte")
+	aug_density = max(0.3, 1.0 - _augsum("density"))
 
 # пер-героя: УРОВЕНЬ × БАЗА (класс+пушка+шмот) × АУГМЕНТЫ (престиж)
 func _recalc_hero(hh: Dictionary) -> void:
@@ -307,7 +334,8 @@ func _recalc_hero(hh: Dictionary) -> void:
 	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp * aug_hp)
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
-	hh["atk_mult"] = 1.0 + _gear_bonus(hh, "atk") / 100.0
+	hh["critx"] = hh["data"]["critx"] + aug_critx
+	hh["atk_mult"] = (1.0 + _gear_bonus(hh, "atk") / 100.0) * aug_atk
 	hh["ult_cd_eff"] = hh["data"]["ult_cd"] * aura_ult * max(0.4, 1.0 - _gear_bonus(hh, "ult") / 100.0) * aug_ultcd
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
@@ -518,7 +546,7 @@ func _spawn_wave() -> void:
 		d.position = Vector2(700, ey)                        # въезжают справа
 		d.z_index = int(ey)
 		world.add_child(d)
-		var ehp := int(45.0 * hpmul * (3.0 if boss else 1.0))   # босс = скачок ×3 (стена-пик)
+		var ehp := int(45.0 * hpmul * (3.0 if boss else 1.0) * aug_density)   # босс ×3; аугмент −HP врагов
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
 			"dmg": int((10 if boss else 7) * pow(1.075, wave)),   # урон тоже растёт → живучесть = отдельная стена
@@ -598,7 +626,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	var base := int(round(hh["dmg"] * aura_dmg * hack_mult))
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
-	if is_crit: base = int(base * hh["data"]["critx"])
+	if is_crit: base = int(base * hh.get("critx", hh["data"]["critx"]))
 	if hh["data"]["atk_type"] == "aoe":
 		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
 		for en in enemies:
@@ -745,7 +773,7 @@ func _qte_tick(delta: float) -> void:
 			_popup_center("⚡ ТАПАЙ МАРКЕРЫ!", Color("#ffd24a"))
 
 func _qte_make_marker() -> void:
-	var life: float = max(0.45, 1.25 - qte_idx * 0.16)   # окно жизни сжимается
+	var life: float = max(0.45, 1.25 - qte_idx * 0.16) + aug_qte   # окно сжимается, аугмент удлиняет
 	var pos := Vector2(randf_range(80, W - 150), randf_range(250, 600))
 	var m := Button.new()
 	m.custom_minimum_size = Vector2(74, 74); m.size = Vector2(74, 74)
