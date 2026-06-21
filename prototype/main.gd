@@ -298,8 +298,13 @@ func _popup(txt: String, col: Color, pos: Vector2, size := 26) -> void:
 func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2D:
 	var root := Node2D.new()
 	root.scale = Vector2(facing * scale, scale)
-	# неон-платформа/тень под ногами (цвет класса, симметрична → ок при flip)
-	root.add_child(_rect("Glow", Vector2(-28, -8), Vector2(56, 13), Color(glow.r, glow.g, glow.b, 0.35)))
+	# неон-кружок/эллипс под ногами (цвет класса)
+	var glowp := Polygon2D.new()
+	glowp.name = "Glow"
+	glowp.polygon = _ellipse_pts(30.0, 9.0)
+	glowp.color = Color(glow.r, glow.g, glow.b, 0.38)
+	glowp.position = Vector2(0, 1)
+	root.add_child(glowp)
 	# анимированный спрайт (CC0 RGS_Dev)
 	# персонаж в кадре занимает yc 106..174 → ставим ногами на 0 (землю), крупнее
 	var spr := AnimatedSprite2D.new()
@@ -334,6 +339,13 @@ func _frames(folder: String) -> SpriteFrames:
 			sf.add_frame(anim, load(path))
 			i += 1
 	return sf
+
+func _ellipse_pts(rx: float, ry: float, n: int = 24) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in n:
+		var a := TAU * i / n
+		pts.append(Vector2(cos(a) * rx, sin(a) * ry))
+	return pts
 
 func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
 	var r := ColorRect.new()
