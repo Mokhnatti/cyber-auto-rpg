@@ -128,6 +128,15 @@ const STAT_ROLL := {
 }
 const ROLL_TIERS := [1.0, 0.9, 0.8, 0.7]   # по 25% каждая
 const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
+# === ПРЕСТИЖ-АУГМЕНТЫ (LOOT-RULES §12): детерминированный выбор, перма-множители ===
+const AUGMENTS := [
+	{"id": "neuro", "icon": "🧬", "name": "Нейросеть-протокол", "desc": "+15%/ур к приходу ЯДЕР"},
+	{"id": "coproc", "icon": "🗲", "name": "Боевой ко-процессор", "desc": "+12%/ур урон всему отряду"},
+	{"id": "scope", "icon": "✷", "name": "Оптический прицел", "desc": "+2%/ур шанс крита"},
+	{"id": "reactor", "icon": "🛡", "name": "Перегрузка реактора", "desc": "+10%/ур HP отряду"},
+	{"id": "miner", "icon": "💰", "name": "Майнинг-демон", "desc": "+15%/ур золото и лом"},
+	{"id": "exploit", "icon": "⏱", "name": "Эксплойт ядра", "desc": "−4%/ур КД ульт"},
+]
 var impl_sel := 0          # выбранный боец в экране экипировки
 var impl_hero_btns := []   # кнопки-портреты переключения бойца
 # СКЕЛЕТ-РАСКЛАДКА: слоты имплантов+оружие на неон-силуэте тела (по анатомии)
@@ -136,6 +145,20 @@ var impl_seln := "core"    # выбранный слот
 var impl_selv := ""        # выбранная модель (variant id) для прокачки
 var dry_streak := 0        # дропов подряд без редкого (≥3) — bad-luck protection
 var scrap := 0             # ♻ ЛОМ: валюта с разбора шмота → реролл статов
+# ПРЕСТИЖ:
+var cores := 0            # 🧬 ЯДРА — валюта престижа (трата на аугменты)
+var best_stage := 1       # лучшая достигнутая стадия (для Memory-Bonus старта)
+var aug_lvl := {}         # id аугмента → уровень (persist через перезагрузку)
+var reboot_panel: Control
+var reboot_list: VBoxContainer
+var reboot_info: Label
+# вычисленные множители аугментов (через _apply_augments)
+var aug_dmg := 1.0
+var aug_hp := 1.0
+var aug_crit := 0.0
+var aug_gold := 1.0
+var aug_ultcd := 1.0
+var aug_core := 1.0
 var eq_portrait_ic: Label  # портрет бойца слева сверху
 var eq_portrait_nm: Label
 var eq_wpn_stats: Label     # статы пушки (урон/скоростр/крит)
@@ -262,19 +285,142 @@ func _recalc_auras() -> void:
 	for hh in heroes:
 		_recalc_hero(hh)
 
-# пер-героя: УРОВЕНЬ (множитель) × БАЗА (класс + пушка + НАДЕТЫЕ шмотки с роллами)
+# уровень аугмента + пересчёт множителей престижа
+func _al(id: String) -> int:
+	return aug_lvl.get(id, 0)
+
+func _apply_augments() -> void:
+	aug_dmg = 1.0 + _al("coproc") * 0.12
+	aug_hp = 1.0 + _al("reactor") * 0.10
+	aug_crit = _al("scope") * 0.02
+	aug_gold = 1.0 + _al("miner") * 0.15
+	aug_ultcd = max(0.4, 1.0 - _al("exploit") * 0.04)
+	aug_core = 1.0 + _al("neuro") * 0.15
+
+# пер-героя: УРОВЕНЬ × БАЗА (класс+пушка+шмот) × АУГМЕНТЫ (престиж)
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
 	var wbonus: int = (hh["wlvl"] - 1) * int(max(5, hh["data"]["dmg"] * 0.35))   # ОРУЖИЕ = главный урон
 	var base_dmg: int = hh["data"]["dmg"] + wbonus + int(_gear_bonus(hh, "dmg"))
 	var base_hp: int = hh["data"]["hp"] + int(_gear_bonus(hh, "hp"))
-	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"])))
-	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp)
-	# крит / скорость атаки / заряд ульты — от надетых шмоток
-	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0, 0.0, 0.95)
+	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"]) * aug_dmg))
+	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp * aug_hp)
+	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
+	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["atk_mult"] = 1.0 + _gear_bonus(hh, "atk") / 100.0
-	hh["ult_cd_eff"] = hh["data"]["ult_cd"] * aura_ult * max(0.4, 1.0 - _gear_bonus(hh, "ult") / 100.0)
+	hh["ult_cd_eff"] = hh["data"]["ult_cd"] * aura_ult * max(0.4, 1.0 - _gear_bonus(hh, "ult") / 100.0) * aug_ultcd
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
+
+func _aug_cost(id: String) -> int:
+	return int(floor(8.0 * pow(1.22, _al(id))))   # мягкая кривая, дорожает с уровнем
+
+func _cores_gain() -> int:
+	# ЯДРА: супер-линейно (квадратично) по достигнутой стадии × аугмент Нейросеть
+	return int(floor(stage * stage / 6.0) * aug_core)
+
+func _buy_aug(id: String) -> void:
+	var c := _aug_cost(id)
+	if cores < c:
+		return
+	cores -= c
+	aug_lvl[id] = _al(id) + 1
+	_apply_augments()
+	_recalc_auras()
+	_refresh_reboot()
+	_refresh_hud()
+
+func _reboot() -> void:
+	# ПЕРЕЗАГРУЗКА (лор «обнуление кибернетики»): +ЯДРА за забег; сброс уровней/золота/стадии;
+	# шмот/лом/ядра/аугменты — ОСТАЮТСЯ. Старт выше по Memory-Bonus.
+	var gain := _cores_gain()
+	cores += gain
+	best_stage = max(best_stage, stage)
+	stage = max(1, int(floor(best_stage * 0.5)))   # Memory-Bonus: старт от лучшей стадии
+	sub = 1; in_boss = false
+	gold = 0.0; gold_ps = 2.0
+	for hh in heroes:
+		hh["level"] = 1; hh["lvl_cost"] = 30
+		hh["alive"] = true
+	_apply_augments()
+	_recalc_auras()
+	for hh in heroes:
+		hh["hp"] = hh["max"]
+	_qte_clear()
+	if reboot_panel: reboot_panel.visible = false
+	_popup_center("♻ ПЕРЕЗАГРУЗКА +%d 🧬 ЯДЕР" % gain, Color("#b46bff"))
+	_start_march()
+	_refresh_hud()
+
+func _toggle_reboot() -> void:
+	reboot_panel.visible = not reboot_panel.visible
+	if reboot_panel.visible: _refresh_reboot()
+
+func _build_reboot() -> void:
+	reboot_panel = Control.new()
+	reboot_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	reboot_panel.visible = false
+	reboot_panel.z_index = 2000
+	hud.add_child(reboot_panel)
+	var bg := ColorRect.new()
+	bg.color = Color(0.05, 0.04, 0.09, 0.99); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_reboot())
+	reboot_panel.add_child(bg)
+	var title := Label.new()
+	title.text = "♻ ПЕРЕЗАГРУЗКА · АУГМЕНТЫ"
+	title.add_theme_color_override("font_color", Color("#b46bff")); title.add_theme_font_size_override("font_size", 21)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.position = Vector2(0, 24); title.size = Vector2(W, 30)
+	reboot_panel.add_child(title)
+	reboot_info = Label.new()
+	reboot_info.add_theme_font_size_override("font_size", 14); reboot_info.add_theme_color_override("font_color", Color("#cdbbe8"))
+	reboot_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reboot_info.position = Vector2(0, 60); reboot_info.size = Vector2(W, 60)
+	reboot_panel.add_child(reboot_info)
+	var rb := Button.new()
+	rb.text = "♻ ПЕРЕЗАГРУЗИТЬСЯ"; rb.add_theme_font_size_override("font_size", 17)
+	rb.custom_minimum_size = Vector2(300, 50); rb.position = Vector2(W * 0.5 - 150, 124)
+	var rsb := StyleBoxFlat.new(); rsb.bg_color = Color(0.25, 0.1, 0.4, 0.96); rsb.set_corner_radius_all(10)
+	rsb.border_color = Color("#b46bff"); rsb.set_border_width_all(2)
+	for st in ["normal", "hover", "pressed", "focus"]: rb.add_theme_stylebox_override(st, rsb)
+	rb.pressed.connect(_reboot)
+	reboot_panel.add_child(rb)
+	var sc := ScrollContainer.new()
+	sc.position = Vector2(W * 0.5 - 270, 190); sc.custom_minimum_size = Vector2(540, 560); sc.size = Vector2(540, 560)
+	reboot_panel.add_child(sc)
+	reboot_list = VBoxContainer.new(); reboot_list.add_theme_constant_override("separation", 8)
+	reboot_list.custom_minimum_size = Vector2(540, 0)
+	sc.add_child(reboot_list)
+	var close := Button.new()
+	close.text = "✕ ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16)
+	close.custom_minimum_size = Vector2(200, 48); close.position = Vector2(W * 0.5 - 100, H - 56)
+	close.pressed.connect(_toggle_reboot)
+	reboot_panel.add_child(close)
+
+func _refresh_reboot() -> void:
+	reboot_info.text = "🧬 ЯДЕР: %d    при перезагрузке: +%d    старт со стадии %d" % [cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5)))]
+	for c in reboot_list.get_children():
+		c.queue_free()
+	for a in AUGMENTS:
+		var id: String = a["id"]
+		var cost := _aug_cost(id)
+		var card := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.12, 0.10, 0.18, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
+		sb.border_color = Color("#5a4a78"); sb.set_border_width_all(1)
+		card.add_theme_stylebox_override("panel", sb)
+		card.custom_minimum_size = Vector2(516, 0)
+		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); card.add_child(hb)
+		var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var nm := Label.new(); nm.text = "%s %s  ур.%d" % [a["icon"], a["name"], _al(id)]; nm.add_theme_font_size_override("font_size", 15); nm.add_theme_color_override("font_color", Color("#d9c7ff")); info.add_child(nm)
+		var ds := Label.new(); ds.text = a["desc"]; ds.add_theme_font_size_override("font_size", 12); ds.add_theme_color_override("font_color", Color("#9a8fb5")); info.add_child(ds)
+		hb.add_child(info)
+		var bb := Button.new(); bb.custom_minimum_size = Vector2(150, 48); bb.add_theme_font_size_override("font_size", 13)
+		bb.text = "%s\n%d 🧬" % ["ОТКРЫТЬ" if _al(id) == 0 else "УЛУЧШИТЬ", cost]
+		bb.disabled = cores < cost
+		var aid: String = id
+		bb.pressed.connect(func(): _buy_aug(aid))
+		hb.add_child(bb)
+		reboot_list.add_child(card)
 
 func _ready() -> void:
 	randomize()
@@ -304,6 +450,10 @@ func _reset() -> void:
 	impl_sel = 0
 	dry_streak = 0
 	scrap = 0
+	cores = 0
+	best_stage = 1
+	aug_lvl.clear()
+	_apply_augments()
 	stage = 1
 	sub = 1
 	in_boss = false
@@ -384,7 +534,7 @@ func _spawn_wave() -> void:
 func _process(delta: float) -> void:
 	if phase == "dead":
 		return
-	gold += gold_ps * delta          # пассивный доход (idle-кор)
+	gold += gold_ps * delta * aug_gold   # пассивный доход (idle-кор) × аугмент
 	if atk_buff_t > 0.0: atk_buff_t -= delta
 	if hack_t > 0.0:
 		hack_t -= delta
@@ -464,7 +614,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: int, is_crit := false) -> void:
 	_popup(str(d) + ("!" if is_crit else ""), col, e["node"].position + Vector2(randf_range(-10, 10), -86), sz)
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
-		gold += (40.0 if e.get("boss", false) else 5.0) * (1.0 + wave * 0.15)
+		gold += (40.0 if e.get("boss", false) else 5.0) * (1.0 + wave * 0.15) * aug_gold
 		_fall(e["node"])
 
 func _enemy_hit(e: Dictionary) -> void:
@@ -847,7 +997,7 @@ func _refresh_hud() -> void:
 	flags += "  👹" if in_boss else "  ▷"
 	stage_label.text = flags
 	# золото + прокачка урона
-	gold_label.text = "💰 %d  +%d/с   ♻ %d" % [int(gold), int(gold_ps), scrap]
+	gold_label.text = "💰 %d  +%d/с   ♻ %d   🧬 %d" % [int(gold), int(gold_ps), scrap, cores]
 	if inv_open: _refresh_inv()
 	if impl_open: _refresh_impl()
 
@@ -991,14 +1141,21 @@ func _build() -> void:
 	impl_btn.custom_minimum_size = Vector2(176, 42)
 	impl_btn.pressed.connect(_toggle_impl)
 	menubar.add_child(impl_btn)
+	var reboot_mb := Button.new()
+	reboot_mb.text = "♻ ПРЕСТИЖ"
+	reboot_mb.add_theme_font_size_override("font_size", 13)
+	reboot_mb.custom_minimum_size = Vector2(120, 42)
+	reboot_mb.pressed.connect(_toggle_reboot)
+	menubar.add_child(reboot_mb)
 	var settings_btn := Button.new()
 	settings_btn.text = "⚙"
 	settings_btn.add_theme_font_size_override("font_size", 18)
-	settings_btn.custom_minimum_size = Vector2(60, 42)
+	settings_btn.custom_minimum_size = Vector2(52, 42)
 	settings_btn.pressed.connect(func(): _popup_center("⚙ Настройки — скоро", Color("#7a7f99")))
 	menubar.add_child(settings_btn)
 	_build_inventory()
 	_build_implants()
+	_build_reboot()
 
 	# === РЕСТАРТ — в левом верхнем углу (слева от «ВОЛНА»), чтоб не задеть случайно ===
 	var restart := Button.new()
@@ -1138,7 +1295,7 @@ func _disassemble(slot: String, key: String) -> void:
 	var hh = heroes[impl_sel]
 	if hh["equip"][slot] == key or not hh["gear"][slot].has(key):
 		return   # надетое не разбираем
-	scrap += _scrap_value(hh["gear"][slot][key])
+	scrap += int(_scrap_value(hh["gear"][slot][key]) * aug_gold)
 	hh["gear"][slot].erase(key)
 	_refresh_impl()
 	_select_slot(slot)
