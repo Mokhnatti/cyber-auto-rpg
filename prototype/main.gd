@@ -60,6 +60,8 @@ var aura_dmg := 1.0
 var aura_atk := 1.0
 var aura_ult := 1.0
 var atk_buff_t := 0.0   # временный бафф скорости атаки от ульты штурма
+var aim_mode := false   # снайпер целится (ждём тап по врагу)
+var aim_hero = null
 
 func _recalc_auras() -> void:
 	var tank := false; var snipe := false; var storm := false; var hak := false
@@ -266,16 +268,16 @@ func _use_ult(i: int) -> void:
 	if phase != "fight": return
 	var hh = heroes[i]
 	if not hh["alive"] or hh["ult_t"] > 0.0: return
+	if hh["data"]["ult"] == "burst":
+		# СНАЙПЕР: вход в режим прицела (ульта тратится при выстреле)
+		aim_mode = true
+		aim_hero = hh
+		status_label.text = "🎯 ВЫБЕРИ ЦЕЛЬ — тапни врага"
+		status_label.modulate = hh["data"]["color"]
+		return
 	hh["ult_t"] = hh["data"]["ult_cd"] * aura_ult
 	hh["atk_anim"] = 0.25
 	match hh["data"]["ult"]:
-		"burst":
-			# СНАЙПЕР: мощный выстрел (пока в первого; тап-таргет позже)
-			var e = _first_alive(enemies)
-			if e:
-				var d := int(hh["dmg"] * 9 * aura_dmg * hack_mult)
-				_deal(hh, e, d)
-				_popup("ВЫСТРЕЛ " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 42)
 		"barrage":
 			# ШТУРМ: всем +скорость атаки на время
 			atk_buff_t = 6.0
@@ -294,6 +296,31 @@ func _use_ult(i: int) -> void:
 					_deal(hh, en, int(hh["dmg"] * 5 * aura_dmg * hack_mult))
 			_popup_center("💻 ВЗЛОМ-ПЛЮХА", hh["data"]["color"])
 	_refresh_hud()
+
+# тап по врагу в режиме прицела снайпера → мощный выстрел в него
+func _unhandled_input(event: InputEvent) -> void:
+	if not aim_mode:
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var pos := get_global_mouse_position()
+		var best = null
+		var bd := 130.0
+		for e in enemies:
+			if e["alive"]:
+				var dd: float = e["node"].position.distance_to(pos)
+				if dd < bd:
+					bd = dd; best = e
+		if best and aim_hero != null:
+			var sn = aim_hero
+			sn["ult_t"] = sn["data"]["ult_cd"] * aura_ult
+			sn["atk_anim"] = 0.25
+			var d := int(sn["dmg"] * 12 * aura_dmg)
+			_deal(sn, best, d, true)
+			_popup("🎯 " + str(d), Color("#00f0ff"), best["node"].position + Vector2(0, -115), 46)
+		aim_mode = false
+		aim_hero = null
+		status_label.text = ""
+		_refresh_hud()
 
 func _die() -> void:
 	phase = "dead"

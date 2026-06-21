@@ -16,9 +16,10 @@ with sync_playwright() as p:
     time.sleep(WAIT)  # Godot wasm + coi reload + дать бою пойти
     # опц. клик по canvas-координатам: 3-й арг "click:X,Y"
     if len(sys.argv) > 3 and sys.argv[3].startswith("click:"):
-        x, y = sys.argv[3][6:].split(",")
-        page.mouse.click(float(x), float(y))
-        time.sleep(1.5)
+        for pt in sys.argv[3][6:].split(";"):
+            x, y = pt.split(",")
+            page.mouse.click(float(x), float(y))
+            time.sleep(1.5)
     page.screenshot(path="/tmp/game_shot.png")
     browser.close()
     print("OK saved /tmp/game_shot.png")
