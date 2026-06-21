@@ -43,6 +43,8 @@ var boss_lbl: Label
 var hero_hp := []           # hp-полоски на портретах
 var hero_charge := []       # заливка заряда ульты на портретах
 var speed_btn: Button
+var auto_btn: Button
+var auto_battle := false   # АВТОБОЙ: ульты применяются сами, снайпер сам берёт приоритетную цель
 var stage_label: Label
 var speed_idx := 0
 var implants_count := 0
@@ -258,6 +260,8 @@ func _process(delta: float) -> void:
 			var spd := aura_atk * (1.0 + _impl_lv(hh, "legs") * 0.04) * (1.4 if atk_buff_t > 0.0 else 1.0)
 			hh["t"] = hh["atk_spd"] / spd
 			_hero_hit(hh)
+	if auto_battle:
+		_auto_cast()
 	for e in enemies:
 		if not e["alive"]: continue
 		e["t"] -= delta
@@ -349,6 +353,44 @@ func _use_ult(i: int) -> void:
 			_popup_center("💻 ВЗЛОМ-ПЛЮХА", hh["data"]["color"])
 	_refresh_hud()
 
+# выстрел снайпер-ульты по цели (общий для ручного тапа и авто-боя)
+func _sniper_fire(sn, target) -> void:
+	sn["ult_t"] = sn["data"]["ult_cd"] * aura_ult
+	sn["atk_anim"] = 0.25
+	var d := int(sn["dmg"] * 12 * aura_dmg)
+	_deal(sn, target, d, true)
+	_popup("🎯 " + str(d), Color("#00f0ff"), target["node"].position + Vector2(0, -115), 46)
+
+# приоритетная цель для авто: передовой враг (ближе всех к отряду = меньший x)
+func _pick_enemy():
+	var best = null
+	var bx := 1e9
+	for e in enemies:
+		if e["alive"] and e["node"].position.x < bx:
+			bx = e["node"].position.x; best = e
+	return best
+
+# АВТОБОЙ: каждый готовый герой применяет ульту сам; снайпер бьёт по приоритетной цели
+func _auto_cast() -> void:
+	for i in heroes.size():
+		var hh = heroes[i]
+		if not hh["alive"] or hh["ult_t"] > 0.0:
+			continue
+		if hh["data"]["ult"] == "burst":
+			var tgt = _pick_enemy()
+			if tgt:
+				_sniper_fire(hh, tgt)
+		else:
+			_use_ult(i)
+	_refresh_hud()
+
+func _toggle_auto() -> void:
+	auto_battle = not auto_battle
+	auto_btn.text = "🤖 АВТО on" if auto_battle else "🤖 АВТО off"
+	auto_btn.modulate = Color(1.3, 1.3, 0.6) if auto_battle else Color(1, 1, 1)
+	if auto_battle and aim_mode:   # включили во время ручного прицела — выходим из него
+		aim_mode = false; aim_hero = null; status_label.text = ""
+
 # тап по врагу в режиме прицела снайпера → мощный выстрел в него
 func _unhandled_input(event: InputEvent) -> void:
 	if not aim_mode:
@@ -363,12 +405,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if dd < bd:
 					bd = dd; best = e
 		if best and aim_hero != null:
-			var sn = aim_hero
-			sn["ult_t"] = sn["data"]["ult_cd"] * aura_ult
-			sn["atk_anim"] = 0.25
-			var d := int(sn["dmg"] * 12 * aura_dmg)
-			_deal(sn, best, d, true)
-			_popup("🎯 " + str(d), Color("#00f0ff"), best["node"].position + Vector2(0, -115), 46)
+			_sniper_fire(aim_hero, best)
 		aim_mode = false
 		aim_hero = null
 		status_label.text = ""
@@ -595,6 +632,14 @@ func _build() -> void:
 	speed_btn.position = Vector2(W - 94, 14)
 	speed_btn.pressed.connect(_cycle_speed)
 	hud.add_child(speed_btn)
+	# тумблер АВТОБОЯ
+	auto_btn = Button.new()
+	auto_btn.text = "🤖 АВТО off"
+	auto_btn.add_theme_font_size_override("font_size", 15)
+	auto_btn.custom_minimum_size = Vector2(104, 36)
+	auto_btn.position = Vector2(W - 204, 14)
+	auto_btn.pressed.connect(_toggle_auto)
+	hud.add_child(auto_btn)
 	# прогресс этапа (флажки до босса)
 	stage_label = Label.new()
 	stage_label.add_theme_color_override("font_color", Color("#7a7f99"))
