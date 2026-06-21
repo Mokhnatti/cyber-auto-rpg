@@ -136,6 +136,23 @@ const STAT_ROLL := {
 }
 const ROLL_TIERS := [1.0, 0.9, 0.8, 0.7]   # по 25% каждая
 const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
+# === ТИПЫ ВРАГОВ (стат/поведение поверх стат-обмена) ===
+# hp/dmg/atk — множители; atk<1 = чаще бьёт; back=бьёт заднюю линию; heal=хилит союзников-врагов; s=масштаб
+const ENEMY_TYPES := {
+	"grunt":  {"name": "Грунт", "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0},
+	"armor":  {"name": "Бронебот", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#3ad97a", "s": 1.28},
+	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.8, "atk": 0.4, "col": "#ffe14d", "s": 0.82},
+	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 1.15, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true},
+	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#ff2d95", "s": 1.0, "heal": true},
+}
+
+func _enemy_pool() -> Array:
+	var pool := ["grunt"]
+	if stage >= 2: pool.append("swift")
+	if stage >= 4: pool.append("armor")
+	if stage >= 7: pool.append("archer")
+	if stage >= 11: pool.append("healer")
+	return pool
 # === ПРЕСТИЖ-АУГМЕНТЫ (LOOT-RULES §12): детерминированный выбор, перма-множители ===
 const AUGMENTS := [
 	{"id": "neuro", "icon": "🧬", "name": "Нейросеть-протокол", "stat": "core", "per": 0.15, "desc": "+15%/ур к приходу ЯДЕР"},
@@ -736,26 +753,36 @@ func _front_hero() -> Variant:
 			return heroes[idx]
 	return null
 
+# задняя линия (сквиши): снайпер → хакер → штурм → танк
+func _back_hero() -> Variant:
+	for idx in [0, 3, 1, 2]:
+		if idx < heroes.size() and heroes[idx]["alive"]:
+			return heroes[idx]
+	return null
+
 func _spawn_wave() -> void:
 	var boss := in_boss
 	wave = (stage - 1) * 5 + (5 if boss else sub)   # сложность по стадии/позиции (фарм НЕ инфлейтит)
 	var count := (1 if boss else (1 + (sub % 3)))
 	var hpmul := pow(1.12, wave)   # мягко-экспоненциальный рост HP (LOOT-RULES §10) → стена→гринд
+	var pool := _enemy_pool()
 	for j in count:
-		var glow := Color("#ff5050") if not boss else Color("#ff2d95")
-		var es: float = 1.9 if boss else (1.35 - j * 0.1)
+		var etype: String = "boss" if boss else pool[randi() % pool.size()]
+		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
+		var glow := Color("#ff2d95") if boss else Color(et["col"])
+		var es: float = 1.9 if boss else (1.35 - j * 0.1) * et["s"]
 		var d := _make_char("enemy", -1, es, glow)
 		var px := 420.0 + j * 60.0                          # фронт-враг ближе к центру
 		var ey := GROUND_Y + 62.0 - (0.0 if boss else j * 20.0)  # на дороге, задние чуть выше (изо)
 		d.position = Vector2(700, ey)                        # въезжают справа
 		d.z_index = int(ey)
 		world.add_child(d)
-		var ehp := int(45.0 * hpmul * (3.0 if boss else 1.0) * aug_density)   # босс ×3; аугмент −HP врагов
+		var ehp := int(45.0 * hpmul * (3.0 if boss else et["hp"]) * aug_density)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": int((10 if boss else 7) * pow(1.075, wave)),   # урон тоже растёт → живучесть = отдельная стена
-			"atk": 1.5 if boss else 1.1, "t": 1.5, "alive": true, "boss": boss,
-			"home": Vector2(px, ey), "atk_anim": 0.0
+			"dmg": int((10 if boss else 7) * pow(1.075, wave) * (1.0 if boss else et["dmg"])),
+			"atk": (1.5 if boss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": boss,
+			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
 		var tw := create_tween()
 		tw.tween_property(d, "position:x", px, 0.5)
@@ -859,7 +886,19 @@ func _deal(hh: Dictionary, e: Dictionary, d: int, is_crit := false) -> void:
 		_fall(e["node"])
 
 func _enemy_hit(e: Dictionary) -> void:
-	var hh = _front_hero()
+	var et: String = e.get("type", "grunt")
+	# ЛЕКАРЬ: вместо удара хилит раненого союзника-врага
+	if et == "healer":
+		for o in enemies:
+			if o["alive"] and o != e and o["hp"] < o["max"]:
+				e["atk_anim"] = 0.18
+				var heal: int = int(o["max"] * 0.12)
+				o["hp"] = min(o["max"], o["hp"] + heal)
+				_popup("+" + str(heal), Color("#3ad97a"), o["node"].position + Vector2(0, -86))
+				return
+		# некого хилить → бьёт как обычный
+	# СТРЕЛОК бьёт ЗАДНЮЮ линию (мимо танка), остальные — фронт
+	var hh = _back_hero() if et == "archer" else _front_hero()
 	if hh == null: return
 	e["atk_anim"] = 0.18
 	var dmg: int = e["dmg"]
