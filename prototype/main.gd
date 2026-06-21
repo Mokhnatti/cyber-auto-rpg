@@ -70,38 +70,121 @@ const IMPL_DEFS := {
 	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки"},
 	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт"},
 }
+# === ЛУТ-СИСТЕМА (CONCEPT §14) ===
+# до 3 моделей на слот (пока 2); у каждой основной стат (может отличаться от дефолта слота → билды)
+const ITEM_VARIANTS := {
+	"neuro": [{"id": "neuro1", "name": "Нейро-MK1", "stat": "ult"}, {"id": "neuro2", "name": "Овердрайв", "stat": "ult"}],
+	"optic": [{"id": "optic1", "name": "Оптика-MK1", "stat": "crit"}, {"id": "optic2", "name": "Орлиный глаз", "stat": "crit"}],
+	"core":  [{"id": "core1", "name": "Реактор-MK1", "stat": "hp"}, {"id": "core2", "name": "Броненосец", "stat": "hp"}],
+	"arms":  [{"id": "arms1", "name": "Серво-MK1", "stat": "dmg"}, {"id": "arms2", "name": "Руки гориллы", "stat": "hp"}],
+	"legs":  [{"id": "legs1", "name": "Привод-MK1", "stat": "atk"}, {"id": "legs2", "name": "Тяж-опоры", "stat": "hp"}],
+}
+# редкость = число стат-строк (1..4); индекс 0 не используется
+const RARITY := [
+	{"name": "—", "col": "#666"},
+	{"name": "Серый", "col": "#9aa0a6"},
+	{"name": "Зелёный", "col": "#3ad97a"},
+	{"name": "Синий", "col": "#3a8bd9"},
+	{"name": "Фиолет", "col": "#b46bff"},
+]
+# разброс роллов значений по типу стата
+const STAT_ROLL := {
+	"hp":   {"min": 18, "max": 30, "fmt": "+%d HP"},
+	"dmg":  {"min": 3, "max": 6, "fmt": "+%d урон"},
+	"crit": {"min": 3, "max": 6, "fmt": "+%d%% крит"},
+	"atk":  {"min": 3, "max": 6, "fmt": "+%d%% скор"},
+	"ult":  {"min": 4, "max": 8, "fmt": "+%d%% заряд"},
+}
+const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 var impl_sel := 0          # выбранный боец в экране экипировки
 var impl_hero_btns := []   # кнопки-портреты переключения бойца
 # СКЕЛЕТ-РАСКЛАДКА: слоты имплантов+оружие на неон-силуэте тела (по анатомии)
 var impl_slots := {}       # key -> {btn, sb(стиль рамки), star(★+дубли); weapon ещё ic}
 var impl_seln := "core"    # выбранный слот
+var impl_selv := ""        # выбранная модель (variant id) для прокачки
 var eq_portrait_ic: Label  # портрет бойца слева сверху
 var eq_portrait_nm: Label
 var eq_wpn_stats: Label     # статы пушки (урон/скоростр/крит)
-# ПАНЕЛЬ ИМПЛАНТА (A): открывается тапом по слоту
+# ПАНЕЛЬ СЛОТА (A): список моделей слота (открывается тапом по слоту)
 var impl_detail: Control
-var det_icon: Label
-var det_nm: Label
-var det_stat: Label
-var det_dupes: Label
-var det_up_btn: Button
+var det_title: Label
+var det_list: VBoxContainer
 # ПАНЕЛЬ ПРОКАЧКИ (B): открывается кнопкой «поднять уровень»
 var impl_confirm: Control
 var conf_item: Label
 var conf_cost: Label
 var conf_btn: Button
 
-func _new_impl() -> Dictionary:
-	var d := {}
-	for k in IMPL_DEFS:
-		d[k] = {"lvl": 1, "dupes": 0}
-	return d
+# стартовый комплект: каждый боец владеет MK1-моделью каждого слота (серый, ★1) и носит её
+func _new_gear() -> Dictionary:
+	var gear := {}
+	var equip := {}
+	for slot in ITEM_VARIANTS:
+		gear[slot] = {}
+		var first = ITEM_VARIANTS[slot][0]
+		gear[slot][first["id"]] = {"owned": true, "rarity": 1, "lvl": 1, "dupes": 0, "rolls": [_roll_stat(first["stat"])]}
+		equip[slot] = first["id"]
+	return {"gear": gear, "equip": equip}
 
-func _impl_lv(hh: Dictionary, key: String) -> int:
-	return hh["impl"][key]["lvl"] - 1   # вклад импланта ЭТОГО бойца (1 звезда = базовый)
+func _roll_stat(stat: String) -> Dictionary:
+	var r = STAT_ROLL[stat]
+	return {"stat": stat, "val": randi_range(r["min"], r["max"])}
 
-func _merge_cost(hh: Dictionary, key: String) -> int:
-	return hh["impl"][key]["lvl"] * 50   # золото за объединение (растёт со звёздами)
+func _variant(slot: String, vid: String) -> Dictionary:
+	for v in ITEM_VARIANTS[slot]:
+		if v["id"] == vid:
+			return v
+	return ITEM_VARIANTS[slot][0]
+
+# создать предмет: primary-стат модели + (rarity-1) случайных доп-статов
+func _make_item(slot: String, vid: String, rarity: int) -> Dictionary:
+	var v := _variant(slot, vid)
+	var rolls := [_roll_stat(v["stat"])]
+	var others := STAT_KEYS.duplicate()
+	others.erase(v["stat"])
+	others.shuffle()
+	for i in range(min(rarity - 1, others.size())):
+		rolls.append(_roll_stat(others[i]))
+	return {"owned": true, "rarity": rarity, "lvl": 1, "dupes": 0, "rolls": rolls}
+
+func _item_power(it: Dictionary) -> int:   # грубая сила для сравнения «перефармить?»
+	var s := 0
+	for r in it["rolls"]:
+		s += int(r["val"])
+	return s + it["rarity"] * 8
+
+# гейт редкости по прогрессу (CONCEPT §14): рано топ не выпадет; поздно растёт нижний порог
+func _max_rarity() -> int:
+	return clamp(1 + int(wave / 5), 1, 4)
+
+func _min_rarity() -> int:
+	return clamp(int(wave / 15), 1, 3)
+
+func _roll_rarity() -> int:
+	var hi := _max_rarity()
+	var lo: int = min(_min_rarity(), hi)
+	var pool := []
+	for r in range(lo, hi + 1):
+		for _i in range(int(pow(2, hi - r))):   # выше редкость → реже
+			pool.append(r)
+	return pool[randi() % pool.size()]
+
+# суммарный бонус надетых моделей бойца по типу стата (с учётом уровня модели)
+func _gear_bonus(hh: Dictionary, stat: String) -> float:
+	var total := 0.0
+	for slot in hh["equip"]:
+		var vid: String = hh["equip"][slot]
+		if vid == "" or not hh["gear"][slot].has(vid):
+			continue
+		var inst = hh["gear"][slot][vid]
+		var mult: float = 1.0 + (inst["lvl"] - 1) * 0.25
+		for r in inst["rolls"]:
+			if r["stat"] == stat:
+				total += r["val"] * mult
+	return total
+
+func _merge_cost(hh: Dictionary, slot: String, vid: String) -> int:
+	return hh["gear"][slot][vid]["lvl"] * 50
 # пассивные ауры классов (пока боец жив — бафает весь отряд)
 var aura_hp := 1.0
 var aura_dmg := 1.0
@@ -127,14 +210,18 @@ func _recalc_auras() -> void:
 	for hh in heroes:
 		_recalc_hero(hh)
 
-# пер-героя прокачка: УРОВЕНЬ (все статы) + ПУШКА (урон). Просто и понятно.
+# пер-героя: УРОВЕНЬ (множитель) × БАЗА (класс + пушка + НАДЕТЫЕ шмотки с роллами)
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
-	var wbonus: int = (hh["wlvl"] - 1) * int(max(5, hh["data"]["dmg"] * 0.35))   # ОРУЖИЕ = главный урон (база)
-	var base_dmg: int = hh["data"]["dmg"] + wbonus + _impl_lv(hh, "arms") * 3   # база = класс + оружие + руки
-	var base_hp: int = hh["data"]["hp"] + _impl_lv(hh, "core") * 25     # база = класс + реактор(шмотка)
-	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"])))   # × множитель уровня
+	var wbonus: int = (hh["wlvl"] - 1) * int(max(5, hh["data"]["dmg"] * 0.35))   # ОРУЖИЕ = главный урон
+	var base_dmg: int = hh["data"]["dmg"] + wbonus + int(_gear_bonus(hh, "dmg"))
+	var base_hp: int = hh["data"]["hp"] + int(_gear_bonus(hh, "hp"))
+	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"])))
 	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp)
+	# крит / скорость атаки / заряд ульты — от надетых шмоток
+	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0, 0.0, 0.95)
+	hh["atk_mult"] = 1.0 + _gear_bonus(hh, "atk") / 100.0
+	hh["ult_cd_eff"] = hh["data"]["ult_cd"] * aura_ult * max(0.4, 1.0 - _gear_bonus(hh, "ult") / 100.0)
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _ready() -> void:
@@ -174,11 +261,13 @@ func _reset() -> void:
 		d.position = Vector2(fp["x"], GROUND_Y + fp["y"])
 		d.z_index = int(d.position.y)   # ближние (танк) поверх дальних (снайпер)
 		world.add_child(d)
+		var g: Dictionary = _new_gear()
 		heroes.append({
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
 			"dmg": h["dmg"], "atk_spd": h["atk"],
 			"level": 1, "lvl_cost": 30,
-			"wlvl": 1, "wdupes": 0, "impl": _new_impl(),
+			"wlvl": 1, "wdupes": 0, "gear": g["gear"], "equip": g["equip"],
+			"crit": h["crit"], "atk_mult": 1.0, "ult_cd_eff": h["ult_cd"],
 			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
 		})
 	_recalc_auras()
@@ -257,7 +346,7 @@ func _process(delta: float) -> void:
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			var spd := aura_atk * (1.0 + _impl_lv(hh, "legs") * 0.04) * (1.4 if atk_buff_t > 0.0 else 1.0)
+			var spd: float = aura_atk * hh["atk_mult"] * (1.4 if atk_buff_t > 0.0 else 1.0)
 			hh["t"] = hh["atk_spd"] / spd
 			_hero_hit(hh)
 	if auto_battle:
@@ -286,7 +375,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	if e == null: return
 	hh["atk_anim"] = 0.18
 	var base := int(round(hh["dmg"] * aura_dmg * hack_mult))
-	var crit_ch: float = hh["data"]["crit"] + _impl_lv(hh, "optic") * 0.02   # база крит + оптика(шмотка)
+	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
 	if is_crit: base = int(base * hh["data"]["critx"])
 	if hh["data"]["atk_type"] == "aoe":
@@ -331,7 +420,7 @@ func _use_ult(i: int) -> void:
 		status_label.text = "🎯 ВЫБЕРИ ЦЕЛЬ — тапни врага"
 		status_label.modulate = hh["data"]["color"]
 		return
-	hh["ult_t"] = hh["data"]["ult_cd"] * aura_ult
+	hh["ult_t"] = hh["ult_cd_eff"]
 	hh["atk_anim"] = 0.25
 	match hh["data"]["ult"]:
 		"barrage":
@@ -355,7 +444,7 @@ func _use_ult(i: int) -> void:
 
 # выстрел снайпер-ульты по цели (общий для ручного тапа и авто-боя)
 func _sniper_fire(sn, target) -> void:
-	sn["ult_t"] = sn["data"]["ult_cd"] * aura_ult
+	sn["ult_t"] = sn["ult_cd_eff"]
 	sn["atk_anim"] = 0.25
 	var d := int(sn["dmg"] * 12 * aura_dmg)
 	_deal(sn, target, d, true)
@@ -560,7 +649,7 @@ func _refresh_hud() -> void:
 		else:
 			hero_ults[i].modulate = Color(0.85, 0.85, 0.85, 1)
 		# заливка заряда ульты (снизу вверх)
-		var cd: float = hh["data"]["ult_cd"]
+		var cd: float = hh["ult_cd_eff"]
 		var fill: float = clamp((cd - hh["ult_t"]) / cd, 0.0, 1.0)
 		var ch: ColorRect = hero_charge[i]
 		ch.size.y = 78.0 * fill
@@ -827,16 +916,34 @@ func _toggle_impl() -> void:
 	impl_panel.visible = impl_open
 	if impl_open: _refresh_impl()
 
-func _merge_impl(idx: int, key: String) -> void:
+func _merge_gear(idx: int, slot: String, vid: String) -> void:
 	var hh = heroes[idx]
-	var sl = hh["impl"][key]
-	var cost := _merge_cost(hh, key)
-	if sl["dupes"] >= 2 and gold >= cost:
-		sl["dupes"] -= 2
-		sl["lvl"] += 1      # +1 звезда → база статов ЭТОГО бойца выросла
+	if not hh["gear"][slot].has(vid):
+		return
+	var inst = hh["gear"][slot][vid]
+	var cost := _merge_cost(hh, slot, vid)
+	if inst["dupes"] >= 2 and gold >= cost:
+		inst["dupes"] -= 2
+		inst["lvl"] += 1      # +1 звезда → роллы этой модели множатся
 		gold -= cost
 		_recalc_hero(hh)
 		_refresh_impl()
+
+func _equip(slot: String, vid: String) -> void:
+	var hh = heroes[impl_sel]
+	if hh["gear"][slot].has(vid) and hh["gear"][slot][vid]["owned"]:
+		hh["equip"][slot] = vid
+		_recalc_hero(hh)
+		_refresh_impl()
+		_select_slot(slot)   # перерисовать панель (отметка «надето»)
+
+# строка ролла → текст «+N стат»
+func _rolls_text(it: Dictionary) -> String:
+	var parts := []
+	var mult: float = 1.0 + (it["lvl"] - 1) * 0.25
+	for r in it["rolls"]:
+		parts.append(STAT_ROLL[r["stat"]]["fmt"] % int(r["val"] * mult))
+	return ", ".join(parts)
 
 func _build_implants() -> void:
 	impl_panel = Control.new()
@@ -958,23 +1065,21 @@ func _refresh_impl() -> void:
 	var rof: float = 1.0 / float(hh["data"]["atk"])
 	eq_wpn_stats.text = "%s\n⚔ урон %d\n⏱ скоростр %.1f/с\n✷ крит %d%%" % [
 		hh["data"]["wname"], int(hh["data"]["dmg"]), rof, int(hh["data"]["crit"] * 100)]
-	# слоты: ★уровень, дубли, подсветка готовности
+	# слоты: ★ надетой модели, цвет рамки = редкость надетого; ● = есть дубли для прокачки
 	for key in impl_slots:
-		var lvl: int; var dupes: int; var cost: int
-		if key == "weapon":
-			lvl = hh["wlvl"]; dupes = hh["wdupes"]; cost = hh["wlvl"] * 50
-			impl_slots[key]["ic"].text = hh["data"]["wicon"]
-		else:
-			var sl = hh["impl"][key]
-			lvl = sl["lvl"]; dupes = sl["dupes"]; cost = _merge_cost(hh, key)
-		var ready := dupes >= 2 and gold >= cost
 		var s = impl_slots[key]
-		s["star"].text = "★%d" % lvl + ("  %d●" % dupes if dupes > 0 else "")
-		s["star"].add_theme_color_override("font_color", Color("#ffd24a") if ready else Color("#7a7f99"))
-		if ready:
-			s["sb"].border_color = Color("#ffb02e"); s["sb"].set_border_width_all(3)
+		var lvl: int; var dupes: int; var rar := 1
+		if key == "weapon":
+			lvl = hh["wlvl"]; dupes = hh["wdupes"]
+			s["ic"].text = hh["data"]["wicon"]
+			s["sb"].border_color = Color("#ffb02e"); s["sb"].set_border_width_all(2)
 		else:
-			s["sb"].border_color = Color("#2a3358"); s["sb"].set_border_width_all(2)
+			var vid: String = hh["equip"][key]
+			var inst = hh["gear"][key][vid]
+			lvl = inst["lvl"]; dupes = inst["dupes"]; rar = inst["rarity"]
+			s["sb"].border_color = Color(RARITY[rar]["col"]); s["sb"].set_border_width_all(2)
+		s["star"].text = "★%d" % lvl + ("  %d●" % dupes if dupes > 0 else "")
+		s["star"].add_theme_color_override("font_color", Color("#ffd24a") if dupes >= 2 else Color("#7a7f99"))
 
 func _circle_pts(c: Vector2, r: float, n: int = 26) -> PackedVector2Array:
 	var p := PackedVector2Array()
@@ -1064,7 +1169,7 @@ func _select_slot(key: String) -> void:
 	impl_detail.visible = true
 	_refresh_detail()
 
-# === ПАНЕЛЬ A: имплант (открывается тапом по слоту) ===
+# === ПАНЕЛЬ A: список МОДЕЛЕЙ слота (открывается тапом по слоту) ===
 func _build_impl_detail() -> void:
 	impl_detail = Control.new()
 	impl_detail.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1078,32 +1183,77 @@ func _build_impl_detail() -> void:
 	var card := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.08, 0.10, 0.17, 0.99); sb.set_corner_radius_all(14)
-	sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
 	card.add_theme_stylebox_override("panel", sb)
-	card.position = Vector2(W * 0.5 - 200, 250); card.custom_minimum_size = Vector2(400, 0)
+	card.position = Vector2(W * 0.5 - 212, 178); card.custom_minimum_size = Vector2(424, 0)
 	impl_detail.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	det_icon = Label.new(); det_icon.add_theme_font_size_override("font_size", 46); det_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_icon)
-	det_nm = Label.new(); det_nm.add_theme_font_size_override("font_size", 20); det_nm.add_theme_color_override("font_color", Color("#00f0ff")); det_nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_nm)
-	det_stat = Label.new(); det_stat.add_theme_font_size_override("font_size", 15); det_stat.add_theme_color_override("font_color", Color("#c7ccea")); det_stat.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_stat)
-	det_dupes = Label.new(); det_dupes.add_theme_font_size_override("font_size", 14); det_dupes.add_theme_color_override("font_color", Color("#9aa0bf")); det_dupes.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_dupes)
-	det_up_btn = Button.new(); det_up_btn.text = "⬆ ПОДНЯТЬ УРОВЕНЬ"; det_up_btn.add_theme_font_size_override("font_size", 16); det_up_btn.custom_minimum_size = Vector2(0, 50); det_up_btn.pressed.connect(_open_confirm); v.add_child(det_up_btn)
+	det_title = Label.new(); det_title.add_theme_font_size_override("font_size", 18); det_title.add_theme_color_override("font_color", Color("#00f0ff")); det_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_title)
+	det_list = VBoxContainer.new(); det_list.add_theme_constant_override("separation", 8); v.add_child(det_list)
 	var back := Button.new(); back.text = "НАЗАД"; back.add_theme_font_size_override("font_size", 14); back.custom_minimum_size = Vector2(0, 40); back.pressed.connect(_close_detail); v.add_child(back)
 
 func _refresh_detail() -> void:
+	for c in det_list.get_children():
+		c.queue_free()
 	var hh = heroes[impl_sel]
-	var selk: String = impl_seln
-	if selk == "weapon":
-		det_icon.text = hh["data"]["wicon"]
-		det_nm.text = "%s · ОРУЖИЕ" % hh["data"]["wname"]
-		det_stat.text = "★%d · главный урон" % hh["wlvl"]
-		det_dupes.text = "дублей для прокачки: %d / 2" % hh["wdupes"]
+	var slot: String = impl_seln
+	if slot == "weapon":
+		det_title.text = "%s %s · ОРУЖИЕ" % [hh["data"]["wicon"], hh["data"]["wname"]]
+		det_list.add_child(_weapon_row(hh))
+		return
+	det_title.text = "%s %s — выбери модель" % [IMPL_DEFS[slot]["icon"], IMPL_DEFS[slot]["name"]]
+	for v in ITEM_VARIANTS[slot]:
+		det_list.add_child(_variant_row(hh, slot, v))
+
+func _variant_row(hh: Dictionary, slot: String, v: Dictionary) -> Control:
+	var vid: String = v["id"]
+	var owned: bool = hh["gear"][slot].has(vid)
+	var equipped: bool = hh["equip"][slot] == vid
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.11, 0.13, 0.2, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
+	var rar: int = (hh["gear"][slot][vid]["rarity"] if owned else 0)
+	sb.border_color = Color(RARITY[rar]["col"]) if owned else Color("#2a3358")
+	sb.set_border_width_all(2 if owned else 1)
+	card.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); card.add_child(box)
+	var head := Label.new(); head.add_theme_font_size_override("font_size", 15)
+	if owned:
+		var inst = hh["gear"][slot][vid]
+		head.text = "%s · %s ★%d%s" % [v["name"], RARITY[rar]["name"], inst["lvl"], ("  ✓ НАДЕТО" if equipped else "")]
+		head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
+		box.add_child(head)
+		var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 13); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
+		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); box.add_child(hb)
+		var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 13); eqb.custom_minimum_size = Vector2(190, 38)
+		eqb.text = "НАДЕТО" if equipped else "НАДЕТЬ"; eqb.disabled = equipped
+		eqb.pressed.connect(func(): _equip(slot, vid))
+		hb.add_child(eqb)
+		var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(190, 38)
+		upb.text = "⬆ УРОВЕНЬ (%d/2)" % inst["dupes"]; upb.disabled = inst["dupes"] < 2
+		upb.pressed.connect(func(): impl_selv = vid; _open_confirm())
+		hb.add_child(upb)
 	else:
-		var im = IMPL_DEFS[selk]; var sl = hh["impl"][selk]
-		det_icon.text = im["icon"]
-		det_nm.text = im["name"]
-		det_stat.text = "★%d · %s" % [sl["lvl"], im["slot"]]
-		det_dupes.text = "дублей для прокачки: %d / 2" % sl["dupes"]
+		head.text = "%s · не найдено" % v["name"]
+		head.add_theme_color_override("font_color", Color("#5a6080"))
+		box.add_child(head)
+		var st := Label.new(); st.text = "выбей в бою · базовый стат: %s" % STAT_ROLL[v["stat"]]["fmt"].replace("%d", "?"); st.add_theme_font_size_override("font_size", 12); st.add_theme_color_override("font_color", Color("#4a4f66")); box.add_child(st)
+	return card
+
+func _weapon_row(hh: Dictionary) -> Control:
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.13, 0.10, 0.04, 0.96); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
+	sb.border_color = Color("#ffb02e"); sb.set_border_width_all(2)
+	card.add_theme_stylebox_override("panel", sb)
+	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); card.add_child(box)
+	var head := Label.new(); head.add_theme_font_size_override("font_size", 15); head.add_theme_color_override("font_color", Color("#ffb02e"))
+	head.text = "%s ★%d · главный урон" % [hh["data"]["wname"], hh["wlvl"]]; box.add_child(head)
+	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(0, 38)
+	upb.text = "⬆ УРОВЕНЬ (%d/2)" % hh["wdupes"]; upb.disabled = hh["wdupes"] < 2
+	upb.pressed.connect(func(): _open_confirm())
+	box.add_child(upb)
+	return card
 
 func _close_detail() -> void:
 	impl_confirm.visible = false
@@ -1140,15 +1290,15 @@ func _open_confirm() -> void:
 
 func _refresh_confirm() -> void:
 	var hh = heroes[impl_sel]
-	var selk: String = impl_seln
 	var nm: String; var dupes: int; var cost: int
-	if selk == "weapon":
+	if impl_seln == "weapon":
 		nm = "%s %s" % [hh["data"]["wicon"], hh["data"]["wname"]]
 		dupes = hh["wdupes"]; cost = hh["wlvl"] * 50
 	else:
-		var im = IMPL_DEFS[selk]; var sl = hh["impl"][selk]
-		nm = "%s %s" % [im["icon"], im["name"]]
-		dupes = sl["dupes"]; cost = _merge_cost(hh, selk)
+		var v := _variant(impl_seln, impl_selv)
+		var inst = hh["gear"][impl_seln][impl_selv]
+		nm = "%s %s" % [IMPL_DEFS[impl_seln]["icon"], v["name"]]
+		dupes = inst["dupes"]; cost = _merge_cost(hh, impl_seln, impl_selv)
 	conf_item.text = "%s   (дублей: %d / 2)" % [nm, dupes]
 	conf_cost.text = "Сумма прокачки: %d 💰" % cost
 	var ready := dupes >= 2 and gold >= cost
@@ -1162,7 +1312,7 @@ func _do_merge_selected() -> void:
 	if impl_seln == "weapon":
 		_merge_weapon(impl_sel)
 	else:
-		_merge_impl(impl_sel, impl_seln)
+		_merge_gear(impl_sel, impl_seln, impl_selv)
 	_refresh_impl()
 	_refresh_detail()
 	_refresh_confirm()
@@ -1181,11 +1331,29 @@ func _drop_implant() -> void:
 		hh["wdupes"] += amount
 		_popup_center("🔫 ОРУЖИЕ: %s · %s %s\n+%d дубль" % [hh["data"]["name"], hh["data"]["wicon"], hh["data"]["wname"], amount], Color("#ffb02e"))
 	else:
-		var keys := IMPL_DEFS.keys()
-		var key: String = keys[randi() % keys.size()]
-		hh["impl"][key]["dupes"] += amount
-		var im = IMPL_DEFS[key]
-		_popup_center("📦 ИМПЛАНТ: %s · %s %s\n+%d дубль" % [hh["data"]["name"], im["icon"], im["name"], amount], Color("#00f0ff"))
+		# случайный слот+модель; редкость по прогрессу; роллы значений
+		var slot: String = IMPL_DEFS.keys()[randi() % IMPL_DEFS.size()]
+		var variants = ITEM_VARIANTS[slot]
+		var v = variants[randi() % variants.size()]
+		var vid: String = v["id"]
+		var rar := _roll_rarity()
+		var g = hh["gear"][slot]
+		if g.has(vid) and g[vid]["owned"]:
+			# дубль: +кол-во для мерджа; если новый ролл/редкость лучше — заменяем базу (перефарм)
+			g[vid]["dupes"] += amount
+			var fresh := _make_item(slot, vid, rar)
+			if _item_power(fresh) > _item_power(g[vid]):
+				fresh["dupes"] = g[vid]["dupes"]; fresh["lvl"] = g[vid]["lvl"]
+				g[vid] = fresh
+				_popup_center("📦 %s · %s %s\nЛУЧШИЙ РОЛЛ!" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]))
+			else:
+				_popup_center("📦 %s · %s\n+%d дубль" % [hh["data"]["name"], v["name"], amount], Color(RARITY[rar]["col"]))
+		else:
+			var it := _make_item(slot, vid, rar)
+			it["dupes"] = amount - 1
+			g[vid] = it
+			_popup_center("✨ НОВАЯ: %s · %s %s\n%s" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], _rolls_text(it)], Color(RARITY[rar]["col"]))
+	_recalc_hero(hh)
 
 func _merge_weapon(i: int) -> void:
 	var hh = heroes[i]
