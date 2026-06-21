@@ -68,8 +68,11 @@ const IMPL_DEFS := {
 	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки"},
 	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт"},
 }
-var impl_sel := 0          # выбранный боец в имплант-экране
+var impl_sel := 0          # выбранный боец в экране экипировки
 var impl_hero_btns := []   # кнопки-портреты переключения бойца
+var impl_wpn_nm: Label     # строка оружия выбранного бойца
+var impl_wpn_stat: Label
+var impl_wpn_btn: Button
 
 func _new_impl() -> Dictionary:
 	var d := {}
@@ -598,7 +601,7 @@ func _build() -> void:
 	hud.add_child(inv_btn)
 	_build_inventory()
 	impl_btn = Button.new()
-	impl_btn.text = "🦾 ИМПЛАНТЫ"
+	impl_btn.text = "🦾 ЭКИПИРОВКА"
 	impl_btn.add_theme_font_size_override("font_size", 14)
 	impl_btn.custom_minimum_size = Vector2(152, 40)
 	impl_btn.position = Vector2(W - 168, 146)
@@ -726,13 +729,8 @@ func _build_inventory() -> void:
 		var idx := i
 		lb.pressed.connect(func(): _upgrade_level(idx))
 		hb.add_child(lb)
-		var wb := Button.new()   # ОРУЖИЕ пер-класс (мердж дублей → главный урон)
-		wb.custom_minimum_size = Vector2(156, 62)
-		wb.add_theme_font_size_override("font_size", 12)
-		wb.pressed.connect(func(): _merge_weapon(idx))
-		hb.add_child(wb)
 		rows.add_child(row)
-		hero_rows.append({"lvl_btn": lb, "wpn_btn": wb})
+		hero_rows.append({"lvl_btn": lb})
 
 	var close := Button.new()
 	close.text = "✕ ЗАКРЫТЬ"
@@ -749,9 +747,6 @@ func _refresh_inv() -> void:
 		var prio := "🛡 HP" if hh["data"]["hpg"] > hh["data"]["dmgg"] else "⚔ урон"
 		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d   %d 💰\n+HP +урон · приоритет %s" % [hh["level"], hh["lvl_cost"], prio]
 		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
-		var wc: int = hh["wlvl"] * 50
-		r["wpn_btn"].text = "%s %s\n★%d · дубл %d\n⚙ мердж +%d💰" % [hh["data"]["wicon"], hh["data"]["wname"], hh["wlvl"], hh["wdupes"], wc]
-		r["wpn_btn"].disabled = hh["wdupes"] < 2 or gold < wc
 
 # --- ИМПЛАНТ-ИНВЕНТАРЬ (шмотки → база статов; уровень множит) ---
 func _toggle_impl() -> void:
@@ -782,7 +777,7 @@ func _build_implants() -> void:
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_impl())
 	impl_panel.add_child(bg)
 	var title := Label.new()
-	title.text = "🦾 ИМПЛАНТЫ — на каждого бойца"
+	title.text = "🦾 ЭКИПИРОВКА БОЙЦА"
 	title.add_theme_color_override("font_color", Color("#00f0ff"))
 	title.add_theme_font_size_override("font_size", 22)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -806,8 +801,25 @@ func _build_implants() -> void:
 	# 5 слотов выбранного бойца
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 9)
-	rows.position = Vector2(W * 0.5 - 250, 150); rows.size = Vector2(500, 0)
+	rows.position = Vector2(W * 0.5 - 250, 142); rows.size = Vector2(500, 0)
 	impl_panel.add_child(rows)
+	# ОРУЖИЕ выбранного бойца (главный урон) — первой строкой, золотой акцент
+	var wrow := PanelContainer.new()
+	var wsb := StyleBoxFlat.new()
+	wsb.bg_color = Color(0.17, 0.13, 0.04, 0.95)
+	wsb.set_corner_radius_all(8); wsb.set_content_margin_all(8)
+	wsb.border_color = Color("#ffb02e"); wsb.set_border_width_all(2)
+	wrow.add_theme_stylebox_override("panel", wsb)
+	wrow.custom_minimum_size = Vector2(496, 0)
+	var whb := HBoxContainer.new(); whb.add_theme_constant_override("separation", 8); wrow.add_child(whb)
+	var winfo := VBoxContainer.new(); winfo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	impl_wpn_nm = Label.new(); impl_wpn_nm.add_theme_color_override("font_color", Color("#ffb02e")); impl_wpn_nm.add_theme_font_size_override("font_size", 15); winfo.add_child(impl_wpn_nm)
+	impl_wpn_stat = Label.new(); impl_wpn_stat.add_theme_color_override("font_color", Color("#cdb27a")); impl_wpn_stat.add_theme_font_size_override("font_size", 12); winfo.add_child(impl_wpn_stat)
+	whb.add_child(winfo)
+	impl_wpn_btn = Button.new(); impl_wpn_btn.custom_minimum_size = Vector2(108, 48); impl_wpn_btn.add_theme_font_size_override("font_size", 12)
+	impl_wpn_btn.pressed.connect(func(): _merge_weapon(impl_sel))
+	whb.add_child(impl_wpn_btn)
+	rows.add_child(wrow)
 	impl_rows.clear()
 	for key in IMPL_DEFS:
 		var im = IMPL_DEFS[key]
@@ -839,6 +851,11 @@ func _refresh_impl() -> void:
 	var hh = heroes[impl_sel]
 	for i in impl_hero_btns.size():
 		impl_hero_btns[i].modulate = Color(1, 1, 1) if i == impl_sel else Color(0.5, 0.5, 0.56)
+	var wc: int = hh["wlvl"] * 50
+	impl_wpn_nm.text = "%s %s · ОРУЖИЕ" % [hh["data"]["wicon"], hh["data"]["wname"]]
+	impl_wpn_stat.text = "★%d · главный урон · дублей: %d" % [hh["wlvl"], hh["wdupes"]]
+	impl_wpn_btn.text = "⚙ ОБЪЕДИНИТЬ\n2 дубля + %d 💰" % wc
+	impl_wpn_btn.disabled = hh["wdupes"] < 2 or gold < wc
 	for key in IMPL_DEFS:
 		var im = IMPL_DEFS[key]
 		var sl = hh["impl"][key]
