@@ -6,7 +6,7 @@ var scroll := 0.0
 var speed := 0.0
 const W := 600.0
 const H := 960.0
-const GROUND_Y := 0.62 * H   # горизонт выше → дорога шире
+const GROUND_Y := 0.55 * H   # горизонт выше → дорога ещё шире
 
 func _process(delta: float) -> void:
 	scroll += speed * delta

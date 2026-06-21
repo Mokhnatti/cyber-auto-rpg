@@ -12,14 +12,14 @@ const HEROES := [
 ]
 const W := 600.0
 const H := 960.0
-const GROUND_Y := 0.62 * H   # горизонт выше → дорога шире (под ромб-формацию + до 3 в ряд)
+const GROUND_Y := 0.55 * H   # горизонт выше → дорога ещё шире (под крупные модели + ромб)
 # РОМБ-формация (индекс = HEROES: 0 снайпер, 1 штурм, 2 танк, 3 хакер). y относит. центра, s = масштаб
 # Гибкая: на будущее отряд набирается сам (3 в ряд) — массив легко расширяется.
 const FORMATION := [
-	{"x": 78.0,  "y": 40.0, "s": 0.86},   # СНАЙПЕР — тыл (центр-лево)
-	{"x": 160.0, "y": 12.0, "s": 0.93},   # ШТУРМОВИК — верх-бок (дальняя сторона)
-	{"x": 240.0, "y": 42.0, "s": 1.06},   # ТАНК — остриё/фронт (центр-право, крупный)
-	{"x": 160.0, "y": 72.0, "s": 1.00},   # ХАКЕР — низ-бок (ближняя сторона)
+	{"x": 95.0,  "y": 56.0,  "s": 1.20},   # СНАЙПЕР — тыл (центр-лево)
+	{"x": 195.0, "y": 18.0,  "s": 1.32},   # ШТУРМОВИК — верх-бок (дальняя сторона)
+	{"x": 290.0, "y": 58.0,  "s": 1.52},   # ТАНК — остриё/фронт (центр-право, крупный)
+	{"x": 195.0, "y": 98.0,  "s": 1.38},   # ХАКЕР — низ-бок (ближняя сторона)
 ]
 
 var heroes := []
@@ -115,10 +115,10 @@ func _spawn_wave() -> void:
 	var hpmul := 1.0 + wave * 0.25
 	for j in count:
 		var glow := Color("#ff5050") if not boss else Color("#ff2d95")
-		var es: float = 1.7 if boss else (1.0 - j * 0.07)
+		var es: float = 1.9 if boss else (1.35 - j * 0.1)
 		var d := _make_char("enemy", -1, es, glow)
-		var px := 400.0 + j * 54.0                          # фронт-враг ближе к центру
-		var ey := GROUND_Y + 46.0 - (0.0 if boss else j * 16.0)  # на дороге, задние чуть выше (изо)
+		var px := 420.0 + j * 60.0                          # фронт-враг ближе к центру
+		var ey := GROUND_Y + 62.0 - (0.0 if boss else j * 20.0)  # на дороге, задние чуть выше (изо)
 		d.position = Vector2(700, ey)                        # въезжают справа
 		d.z_index = int(ey)
 		world.add_child(d)
@@ -305,16 +305,16 @@ func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2
 	var spr := AnimatedSprite2D.new()
 	spr.name = "Spr"
 	spr.sprite_frames = _frames(folder)
-	spr.scale = Vector2(0.9, 0.9)
-	spr.position = Vector2(0, -66.6)   # ноги (yc174) → ~0, голова (yc106) → ~-61
+	spr.scale = Vector2(1.0, 1.0)
+	spr.position = Vector2(0, -74.0)   # ноги (yc174) → 0, голова (yc106) → -68; размер задаёт root.scale
 	spr.animation = "idle"
 	spr.play("idle")
 	root.add_child(spr)
 	# hp-бар над головой — виден ТОЛЬКО когда ранен (управляется в _anim_doll)
-	var hbg := _rect("HpBg", Vector2(-20, -74), Vector2(40, 5), Color(0, 0, 0, 0.65))
+	var hbg := _rect("HpBg", Vector2(-20, -86), Vector2(40, 5), Color(0, 0, 0, 0.65))
 	hbg.visible = false
 	root.add_child(hbg)
-	var hf := _rect("HpFill", Vector2(-20, -74), Vector2(40, 5), glow.lightened(0.1))
+	var hf := _rect("HpFill", Vector2(-20, -86), Vector2(40, 5), glow.lightened(0.1))
 	hf.visible = false
 	root.add_child(hf)
 	return root
