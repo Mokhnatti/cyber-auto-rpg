@@ -31,9 +31,13 @@ var stage := 1            # СТАДИЯ (прогресс): 4 норм-волн
 var sub := 1             # позиция в стадии: 1..4 норм-волны (фарм-круг)
 var in_boss := false      # сейчас бой с боссом
 var boss_btn: Button      # кнопка «⚔ К БОССУ»
-var qte_t := 0.0          # до следующего QTE-замаха босса
-var qte_win := 0.0        # окно реакции на активный QTE (>0 = активен)
-var qte_btn: Button       # кнопка «⚡ КОНТЕР!»
+var qte_t := 0.0          # до следующей QTE-серии босса
+var qte_seq := 0          # маркеров осталось ЗАСПАВНИТЬ в текущей серии
+var qte_idx := 0          # индекс в серии (окно жизни сжимается с ростом)
+var qte_total := 0        # всего маркеров в серии (для итога)
+var qte_hits := 0         # поймано
+var qte_spawn_t := 0.0    # до спавна следующего маркера
+var qte_markers := []     # активные маркеры: {node, life}
 var march_t := 0.0
 var hack_mult := 1.0
 var hack_t := 0.0
@@ -131,6 +135,7 @@ var impl_slots := {}       # key -> {btn, sb(стиль рамки), star(★+д
 var impl_seln := "core"    # выбранный слот
 var impl_selv := ""        # выбранная модель (variant id) для прокачки
 var dry_streak := 0        # дропов подряд без редкого (≥3) — bad-luck protection
+var scrap := 0             # ♻ ЛОМ: валюта с разбора шмота → реролл статов
 var eq_portrait_ic: Label  # портрет бойца слева сверху
 var eq_portrait_nm: Label
 var eq_wpn_stats: Label     # статы пушки (урон/скоростр/крит)
@@ -298,6 +303,7 @@ func _reset() -> void:
 	gold_ps = 2.0
 	impl_sel = 0
 	dry_streak = 0
+	scrap = 0
 	stage = 1
 	sub = 1
 	in_boss = false
@@ -417,6 +423,7 @@ func _process(delta: float) -> void:
 		enemies.clear()
 		if in_boss:
 			# 🏆 БОСС ПРОЙДЕН → шмот (только тут!) + следующая стадия
+			_qte_clear()
 			_drop_implant()
 			stage += 1
 			sub = 1
@@ -428,6 +435,7 @@ func _process(delta: float) -> void:
 	elif _all_dead(heroes):
 		# ☠ ВАЙП → НЕ рестарт: откат на фарм стадии (отряд воскреснет в _start_march), шмот цел
 		_popup_center("☠ Босс не пройден — фарми и возвращайся" if in_boss else "☠ Отряд пал — перегруппировка", Color("#ff5050"))
+		_qte_clear()
 		in_boss = false
 		sub = 1
 		_start_march()
@@ -540,69 +548,110 @@ func _go_boss() -> void:
 	if in_boss or phase == "dead":
 		return
 	in_boss = true
-	qte_t = 4.0; qte_win = 0.0
-	if qte_btn: qte_btn.visible = false
+	qte_t = 4.0; qte_seq = 0
+	_qte_clear()
 	for e in enemies:
 		if e["node"]: e["node"].queue_free()
 	enemies.clear()
 	_start_march()   # следующий спавн = босс (in_boss=true)
 	_refresh_hud()
 
-# QTE на боссе: периодически замах → окно реакции → контр-бёрст или тяжёлый удар по отряду
+func _qte_clear() -> void:
+	for m in qte_markers:
+		if is_instance_valid(m["node"]): m["node"].queue_free()
+	qte_markers.clear()
+
+# QTE: серия маркеров появляется ПО ОДНОМУ в рандомные моменты, окно жизни СЖИМАЕТСЯ к концу серии
 func _qte_tick(delta: float) -> void:
 	var boss = null
 	for e in enemies:
 		if e.get("boss", false) and e["alive"]:
 			boss = e; break
 	if boss == null:
-		if qte_btn: qte_btn.visible = false
+		_qte_clear(); qte_seq = 0
 		return
-	if qte_win > 0.0:                       # окно активно
-		qte_win -= delta
-		if qte_win <= 0.0:                   # прозевал → босс бьёт тяжело
-			_qte_miss(boss)
+	var active := qte_seq > 0 or not qte_markers.is_empty()
+	if active:
+		# таймеры жизни активных маркеров (истёк = мимо)
+		for m in qte_markers.duplicate():
+			m["life"] -= delta
+			if m["life"] <= 0.0:
+				if is_instance_valid(m["node"]): m["node"].queue_free()
+				qte_markers.erase(m)
+		# спавн следующего маркера серии
+		if qte_seq > 0:
+			qte_spawn_t -= delta
+			if qte_spawn_t <= 0.0:
+				_qte_make_marker()
+				qte_idx += 1
+				qte_seq -= 1
+				qte_spawn_t = randf_range(0.35, 0.8)
+		if qte_seq == 0 and qte_markers.is_empty():
+			_qte_resolve(boss)
 	else:
 		qte_t -= delta
-		if qte_t <= 0.0:                     # замах → показать кнопку
-			qte_win = 1.3
-			qte_btn.visible = true
-			_popup_center("⚠ ЗАМАХ БОССА — КОНТЕР!", Color("#ffd24a"))
+		if qte_t <= 0.0:
+			qte_seq = 5; qte_idx = 0; qte_total = 5; qte_hits = 0; qte_spawn_t = 0.0
+			_popup_center("⚡ ТАПАЙ МАРКЕРЫ!", Color("#ffd24a"))
 
-func _qte_hit() -> void:
-	if qte_win <= 0.0 or not in_boss:
+func _qte_make_marker() -> void:
+	var life: float = max(0.45, 1.25 - qte_idx * 0.16)   # окно жизни сжимается
+	var pos := Vector2(randf_range(80, W - 150), randf_range(250, 600))
+	var m := Button.new()
+	m.custom_minimum_size = Vector2(74, 74); m.size = Vector2(74, 74)
+	m.position = pos
+	m.pivot_offset = Vector2(37, 37)
+	m.text = "⚡"; m.add_theme_font_size_override("font_size", 34)
+	m.z_index = 300
+	var msb := StyleBoxFlat.new()
+	msb.bg_color = Color(0.0, 0.94, 1.0, 0.4); msb.set_corner_radius_all(37)
+	msb.border_color = Color("#fff7c0"); msb.set_border_width_all(4)
+	for st in ["normal", "hover", "pressed", "focus"]:
+		m.add_theme_stylebox_override(st, msb)
+	var entry := {"node": m, "life": life}
+	m.pressed.connect(func(): _qte_marker_hit(entry))
+	hud.add_child(m)
+	qte_markers.append(entry)
+	var tw := create_tween().set_loops()   # вспышка-пульс
+	tw.tween_property(m, "scale", Vector2(1.2, 1.2), 0.18)
+	tw.tween_property(m, "scale", Vector2(0.92, 0.92), 0.18)
+
+func _qte_marker_hit(entry: Dictionary) -> void:
+	if not entry in qte_markers:
 		return
-	qte_win = 0.0
-	qte_btn.visible = false
+	qte_markers.erase(entry)
+	if is_instance_valid(entry["node"]): entry["node"].queue_free()
+	qte_hits += 1
 	var boss = null
 	for e in enemies:
 		if e.get("boss", false) and e["alive"]:
 			boss = e; break
+	if boss != null:
+		var sq := 0
+		for hh in heroes:
+			if hh["alive"]: sq += int(hh["dmg"])
+		var d: int = int(boss["max"] * 0.03) + sq * 2
+		var att = _first_alive(heroes)
+		if att != null: _deal(att, boss, d, true)
+		else: boss["hp"] = max(0, boss["hp"] - d)
+
+func _qte_resolve(boss) -> void:
+	_qte_clear()
+	qte_t = 4.5
 	if boss == null:
 		return
-	# контр-бёрст: % от HP босса + залп урона отряда
-	var sq := 0
-	for hh in heroes:
-		if hh["alive"]: sq += int(hh["dmg"])
-	var d: int = int(boss["max"] * 0.07) + sq * 3
-	var att = _first_alive(heroes)
-	if att != null:
-		_deal(att, boss, d, true)
+	if qte_hits >= qte_total and qte_total > 0:
+		_popup_center("⚡ ИДЕАЛЬНЫЙ КОНТЕР! %d/%d" % [qte_hits, qte_total], Color("#00f0ff"))
+	elif qte_hits == 0:
+		var fh = _front_hero()       # прозевал всё → босс бьёт тяжело
+		if fh != null:
+			var dmg: int = int(boss["dmg"] * 2.5)
+			fh["hp"] = max(0, fh["hp"] - dmg)
+			_popup(str(dmg), Color("#ff3030"), fh["node"].position + Vector2(0, -90), 34)
+			if fh["hp"] <= 0:
+				fh["alive"] = false; _recalc_auras()
 	else:
-		boss["hp"] = max(0, boss["hp"] - d)
-	_popup_center("⚡ КОНТЕР! −%d" % d, Color("#00f0ff"))
-	qte_t = 4.5                              # до следующего замаха
-
-func _qte_miss(boss) -> void:
-	qte_btn.visible = false
-	var fh = _front_hero()
-	if fh != null:
-		var dmg: int = int(boss["dmg"] * 2.5)
-		fh["hp"] -= dmg
-		_popup(str(dmg), Color("#ff3030"), fh["node"].position + Vector2(0, -90), 34)
-		if fh["hp"] <= 0:
-			fh["hp"] = 0; fh["alive"] = false
-			_recalc_auras()
-	qte_t = 4.5
+		_popup_center("КОНТЕР %d/%d" % [qte_hits, qte_total], Color("#ffd24a"))
 
 func _toggle_auto() -> void:
 	auto_battle = not auto_battle
@@ -798,7 +847,7 @@ func _refresh_hud() -> void:
 	flags += "  👹" if in_boss else "  ▷"
 	stage_label.text = flags
 	# золото + прокачка урона
-	gold_label.text = "💰 %d   +%d/с" % [int(gold), int(gold_ps)]
+	gold_label.text = "💰 %d  +%d/с   ♻ %d" % [int(gold), int(gold_ps), scrap]
 	if inv_open: _refresh_inv()
 	if impl_open: _refresh_impl()
 
@@ -868,22 +917,6 @@ func _build() -> void:
 		boss_btn.add_theme_stylebox_override(st, bsb)
 	boss_btn.pressed.connect(_go_boss)
 	hud.add_child(boss_btn)
-	# QTE-кнопка «КОНТЕР!» (скилл-клапан на боссе) — видна только в активном окне
-	qte_btn = Button.new()
-	qte_btn.text = "⚡ КОНТЕР!"
-	qte_btn.add_theme_font_size_override("font_size", 26)
-	qte_btn.custom_minimum_size = Vector2(260, 84)
-	qte_btn.position = Vector2(W * 0.5 - 130, 470)
-	qte_btn.z_index = 50
-	var qsb := StyleBoxFlat.new()
-	qsb.bg_color = Color(0.95, 0.78, 0.1, 0.96); qsb.set_corner_radius_all(14)
-	qsb.border_color = Color("#fff7c0"); qsb.set_border_width_all(3)
-	for st in ["normal", "hover", "pressed", "focus"]:
-		qte_btn.add_theme_stylebox_override(st, qsb)
-	qte_btn.add_theme_color_override("font_color", Color(0.1, 0.05, 0.0))
-	qte_btn.pressed.connect(_qte_hit)
-	qte_btn.visible = false
-	hud.add_child(qte_btn)
 	# прогресс этапа (флажки до босса)
 	stage_label = Label.new()
 	stage_label.add_theme_color_override("font_color", Color("#7a7f99"))
@@ -1091,6 +1124,39 @@ func _equip(slot: String, key: String) -> void:
 		_recalc_hero(hh)
 		_refresh_impl()
 		_select_slot(slot)   # перерисовать панель (отметка «надето»)
+
+func _scrap_value(inst: Dictionary) -> int:
+	var s: int = inst["rarity"] * 5 + (inst["lvl"] - 1) * 4
+	for r in inst["rolls"]:
+		s += int(r["val"])
+	return s
+
+func _reroll_cost(inst: Dictionary) -> int:
+	return inst["rarity"] * 12 + inst["lvl"] * 4
+
+func _disassemble(slot: String, key: String) -> void:
+	var hh = heroes[impl_sel]
+	if hh["equip"][slot] == key or not hh["gear"][slot].has(key):
+		return   # надетое не разбираем
+	scrap += _scrap_value(hh["gear"][slot][key])
+	hh["gear"][slot].erase(key)
+	_refresh_impl()
+	_select_slot(slot)
+
+func _reroll(slot: String, key: String) -> void:
+	var hh = heroes[impl_sel]
+	if not hh["gear"][slot].has(key):
+		return
+	var inst = hh["gear"][slot][key]
+	var cost := _reroll_cost(inst)
+	if scrap < cost:
+		return
+	scrap -= cost
+	for r in inst["rolls"]:        # те же статы, новые значения-ступени
+		r["val"] = _roll_stat(r["stat"])["val"]
+	_recalc_hero(hh)
+	_refresh_impl()
+	_select_slot(slot)
 
 # строка ролла → текст «+N стат»
 func _rolls_text(it: Dictionary) -> String:
@@ -1391,6 +1457,17 @@ func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	upb.text = "⬆ УРОВЕНЬ (%d/2)" % inst["dupes"]; upb.disabled = inst["dupes"] < 2
 	upb.pressed.connect(func(): impl_selv = key; _open_confirm())
 	hb.add_child(upb)
+	# вторая строка: реролл статов за лом / разбор в лом
+	var hb2 := HBoxContainer.new(); hb2.add_theme_constant_override("separation", 6); box.add_child(hb2)
+	var rrcost := _reroll_cost(inst)
+	var rrb := Button.new(); rrb.add_theme_font_size_override("font_size", 12); rrb.custom_minimum_size = Vector2(190, 34)
+	rrb.text = "🎲 РЕРОЛЛ (%d♻)" % rrcost; rrb.disabled = scrap < rrcost
+	rrb.pressed.connect(func(): _reroll(slot, key))
+	hb2.add_child(rrb)
+	var dsb := Button.new(); dsb.add_theme_font_size_override("font_size", 12); dsb.custom_minimum_size = Vector2(190, 34)
+	dsb.text = ("НАДЕТО — не разобрать" if equipped else "♻ РАЗОБРАТЬ +%d" % _scrap_value(inst)); dsb.disabled = equipped
+	dsb.pressed.connect(func(): _disassemble(slot, key))
+	hb2.add_child(dsb)
 	return card
 
 func _weapon_row(hh: Dictionary) -> Control:
