@@ -70,9 +70,24 @@ const IMPL_DEFS := {
 }
 var impl_sel := 0          # выбранный боец в экране экипировки
 var impl_hero_btns := []   # кнопки-портреты переключения бойца
-var impl_wpn_nm: Label     # строка оружия выбранного бойца
-var impl_wpn_stat: Label
-var impl_wpn_btn: Button
+# СКЕЛЕТ-РАСКЛАДКА: слоты имплантов+оружие на неон-силуэте тела (по анатомии)
+var impl_slots := {}       # key -> {btn, sb(стиль рамки), star(★+дубли); weapon ещё ic}
+var impl_seln := "core"    # выбранный слот
+var eq_portrait_ic: Label  # портрет бойца слева сверху
+var eq_portrait_nm: Label
+var eq_wpn_stats: Label     # статы пушки (урон/скоростр/крит)
+# ПАНЕЛЬ ИМПЛАНТА (A): открывается тапом по слоту
+var impl_detail: Control
+var det_icon: Label
+var det_nm: Label
+var det_stat: Label
+var det_dupes: Label
+var det_up_btn: Button
+# ПАНЕЛЬ ПРОКАЧКИ (B): открывается кнопкой «поднять уровень»
+var impl_confirm: Control
+var conf_item: Label
+var conf_cost: Label
+var conf_btn: Button
 
 func _new_impl() -> Dictionary:
 	var d := {}
@@ -798,72 +813,301 @@ func _build_implants() -> void:
 		pb.pressed.connect(func(): impl_sel = idx; _refresh_impl())
 		sel.add_child(pb)
 		impl_hero_btns.append(pb)
-	# 5 слотов выбранного бойца
-	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 9)
-	rows.position = Vector2(W * 0.5 - 250, 142); rows.size = Vector2(500, 0)
-	impl_panel.add_child(rows)
-	# ОРУЖИЕ выбранного бойца (главный урон) — первой строкой, золотой акцент
-	var wrow := PanelContainer.new()
+	impl_slots.clear()
+	# === СЛЕВА СВЕРХУ: ПОРТРЕТ БОЙЦА (сменный через селектор сверху) ===
+	var pb := Panel.new()
+	var psb := StyleBoxFlat.new()
+	psb.bg_color = Color(0.07, 0.10, 0.18, 0.92); psb.set_corner_radius_all(10)
+	psb.border_color = Color("#00f0ff"); psb.set_border_width_all(1)
+	pb.add_theme_stylebox_override("panel", psb)
+	pb.position = Vector2(16, 138); pb.size = Vector2(168, 92)
+	impl_panel.add_child(pb)
+	eq_portrait_ic = _lbl("", 40, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	eq_portrait_ic.position = Vector2(16, 144); eq_portrait_ic.size = Vector2(168, 48)
+	impl_panel.add_child(eq_portrait_ic)
+	eq_portrait_nm = _lbl("", 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER)
+	eq_portrait_nm.position = Vector2(16, 198); eq_portrait_nm.size = Vector2(168, 22)
+	impl_panel.add_child(eq_portrait_nm)
+	# === СЛЕВА НИЖЕ: ПУШКА (прямоугольник + статы), отдельный предмет ===
+	var wpos := Vector2(16, 246); var wsz := Vector2(168, 200)
 	var wsb := StyleBoxFlat.new()
-	wsb.bg_color = Color(0.17, 0.13, 0.04, 0.95)
-	wsb.set_corner_radius_all(8); wsb.set_content_margin_all(8)
+	wsb.bg_color = Color(0.13, 0.10, 0.03, 0.96); wsb.set_corner_radius_all(10)
 	wsb.border_color = Color("#ffb02e"); wsb.set_border_width_all(2)
-	wrow.add_theme_stylebox_override("panel", wsb)
-	wrow.custom_minimum_size = Vector2(496, 0)
-	var whb := HBoxContainer.new(); whb.add_theme_constant_override("separation", 8); wrow.add_child(whb)
-	var winfo := VBoxContainer.new(); winfo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	impl_wpn_nm = Label.new(); impl_wpn_nm.add_theme_color_override("font_color", Color("#ffb02e")); impl_wpn_nm.add_theme_font_size_override("font_size", 15); winfo.add_child(impl_wpn_nm)
-	impl_wpn_stat = Label.new(); impl_wpn_stat.add_theme_color_override("font_color", Color("#cdb27a")); impl_wpn_stat.add_theme_font_size_override("font_size", 12); winfo.add_child(impl_wpn_stat)
-	whb.add_child(winfo)
-	impl_wpn_btn = Button.new(); impl_wpn_btn.custom_minimum_size = Vector2(108, 48); impl_wpn_btn.add_theme_font_size_override("font_size", 12)
-	impl_wpn_btn.pressed.connect(func(): _merge_weapon(impl_sel))
-	whb.add_child(impl_wpn_btn)
-	rows.add_child(wrow)
-	impl_rows.clear()
-	for key in IMPL_DEFS:
-		var im = IMPL_DEFS[key]
-		var row := PanelContainer.new()
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.1, 0.12, 0.2, 0.92)
-		sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
-		sb.border_color = Color("#2a3358"); sb.set_border_width_all(1)
-		row.add_theme_stylebox_override("panel", sb)
-		row.custom_minimum_size = Vector2(496, 0)
-		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); row.add_child(hb)
-		var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var nm := Label.new(); nm.text = im["icon"] + " " + im["name"]; nm.add_theme_font_size_override("font_size", 14); info.add_child(nm)
-		var st := Label.new(); st.add_theme_color_override("font_color", Color("#7a7f99")); st.add_theme_font_size_override("font_size", 12); info.add_child(st)
-		hb.add_child(info)
-		var ab := Button.new(); ab.custom_minimum_size = Vector2(108, 48); ab.add_theme_font_size_override("font_size", 12)
-		var k: String = key
-		ab.pressed.connect(func(): _merge_impl(impl_sel, k))
-		hb.add_child(ab)
-		rows.add_child(row)
-		impl_rows[key] = {"stat": st, "btn": ab}
+	var wbtn := Button.new()
+	wbtn.position = wpos; wbtn.custom_minimum_size = wsz; wbtn.size = wsz; wbtn.text = ""
+	for st in ["normal", "hover", "pressed", "focus"]:
+		wbtn.add_theme_stylebox_override(st, wsb)
+	wbtn.pressed.connect(func(): _select_slot("weapon"))
+	impl_panel.add_child(wbtn)
+	var wic := _lbl("", 46, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	wic.position = Vector2(wpos.x, wpos.y + 10); wic.size = Vector2(wsz.x, 52)
+	impl_panel.add_child(wic)
+	var wstar := _lbl("", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER)
+	wstar.position = Vector2(wpos.x, wpos.y + 64); wstar.size = Vector2(wsz.x, 18)
+	impl_panel.add_child(wstar)
+	eq_wpn_stats = _lbl("", 13, Color("#e0d4b0"), HORIZONTAL_ALIGNMENT_CENTER)
+	eq_wpn_stats.position = Vector2(wpos.x + 6, wpos.y + 88); eq_wpn_stats.size = Vector2(wsz.x - 12, 104)
+	impl_panel.add_child(eq_wpn_stats)
+	impl_slots["weapon"] = {"btn": wbtn, "sb": wsb, "star": wstar, "ic": wic}
+	# === ЦЕНТР: ТЕЛО (силуэт) ===
+	var bcx := 322.0
+	var body := Polygon2D.new()
+	body.polygon = _body_outline(bcx); body.color = Color(0.0, 0.94, 1.0, 0.10)
+	impl_panel.add_child(body)
+	var bout := Line2D.new()
+	bout.points = _body_outline(bcx); bout.closed = true
+	bout.width = 2.5; bout.default_color = Color(0.0, 0.94, 1.0, 0.5)
+	bout.joint_mode = Line2D.LINE_JOINT_ROUND
+	impl_panel.add_child(bout)
+	var head := Polygon2D.new()
+	head.polygon = _circle_pts(Vector2(bcx, 150), 30); head.color = Color(0.0, 0.94, 1.0, 0.12)
+	impl_panel.add_child(head)
+	_skel_line(_circle_pts(Vector2(bcx, 150), 30))
+	# === СПРАВА: ИМПЛАНТЫ + СТРЕЛКИ к частям тела ===
+	var short := {"neuro": "Мозг", "optic": "Глаза", "core": "Тело", "arms": "Руки", "legs": "Ноги"}
+	var anchors := {
+		"neuro": Vector2(bcx, 150), "optic": Vector2(bcx, 186),
+		"core": Vector2(bcx, 300), "arms": Vector2(bcx + 46, 300), "legs": Vector2(bcx, 478),
+	}
+	var ytop := {"neuro": 125, "optic": 178, "core": 278, "arms": 340, "legs": 452}
+	for key in ["neuro", "optic", "core", "arms", "legs"]:
+		var y: int = ytop[key]
+		_arrow(Vector2(466, y + 25), anchors[key])
+		_add_slot(key, Vector2(470, y), 50, short[key])
+	var hint := Label.new()
+	hint.text = "Тапни пушку или слот импланта"
+	hint.add_theme_color_override("font_color", Color("#5a6080"))
+	hint.add_theme_font_size_override("font_size", 13)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.position = Vector2(0, 636); hint.size = Vector2(W, 20)
+	impl_panel.add_child(hint)
 	var close := Button.new()
 	close.text = "✕ ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16)
 	close.custom_minimum_size = Vector2(200, 50); close.position = Vector2(W * 0.5 - 100, H - 150)
 	close.pressed.connect(_toggle_impl)
 	impl_panel.add_child(close)
+	_build_impl_detail()
+	_build_impl_confirm()
 
 func _refresh_impl() -> void:
 	var hh = heroes[impl_sel]
 	for i in impl_hero_btns.size():
 		impl_hero_btns[i].modulate = Color(1, 1, 1) if i == impl_sel else Color(0.5, 0.5, 0.56)
-	var wc: int = hh["wlvl"] * 50
-	impl_wpn_nm.text = "%s %s · ОРУЖИЕ" % [hh["data"]["wicon"], hh["data"]["wname"]]
-	impl_wpn_stat.text = "★%d · главный урон · дублей: %d" % [hh["wlvl"], hh["wdupes"]]
-	impl_wpn_btn.text = "⚙ ОБЪЕДИНИТЬ\n2 дубля + %d 💰" % wc
-	impl_wpn_btn.disabled = hh["wdupes"] < 2 or gold < wc
-	for key in IMPL_DEFS:
-		var im = IMPL_DEFS[key]
-		var sl = hh["impl"][key]
-		var r = impl_rows[key]
-		r["stat"].text = "★%d · %s · дублей: %d" % [sl["lvl"], im["slot"], sl["dupes"]]
-		var cost := _merge_cost(hh, key)
-		r["btn"].text = "⚙ ОБЪЕДИНИТЬ\n2 дубля + %d 💰" % cost
-		r["btn"].disabled = sl["dupes"] < 2 or gold < cost
+	# портрет бойца слева
+	eq_portrait_ic.text = hh["data"]["icon"]
+	eq_portrait_nm.text = hh["data"]["name"]
+	# статы пушки (база; % от шмоток наложатся позже — система статов пушки в CONCEPT)
+	var rof: float = 1.0 / float(hh["data"]["atk"])
+	eq_wpn_stats.text = "%s\n⚔ урон %d\n⏱ скоростр %.1f/с\n✷ крит %d%%" % [
+		hh["data"]["wname"], int(hh["data"]["dmg"]), rof, int(hh["data"]["crit"] * 100)]
+	# слоты: ★уровень, дубли, подсветка готовности
+	for key in impl_slots:
+		var lvl: int; var dupes: int; var cost: int
+		if key == "weapon":
+			lvl = hh["wlvl"]; dupes = hh["wdupes"]; cost = hh["wlvl"] * 50
+			impl_slots[key]["ic"].text = hh["data"]["wicon"]
+		else:
+			var sl = hh["impl"][key]
+			lvl = sl["lvl"]; dupes = sl["dupes"]; cost = _merge_cost(hh, key)
+		var ready := dupes >= 2 and gold >= cost
+		var s = impl_slots[key]
+		s["star"].text = "★%d" % lvl + ("  %d●" % dupes if dupes > 0 else "")
+		s["star"].add_theme_color_override("font_color", Color("#ffd24a") if ready else Color("#7a7f99"))
+		if ready:
+			s["sb"].border_color = Color("#ffb02e"); s["sb"].set_border_width_all(3)
+		else:
+			s["sb"].border_color = Color("#2a3358"); s["sb"].set_border_width_all(2)
+
+func _circle_pts(c: Vector2, r: float, n: int = 26) -> PackedVector2Array:
+	var p := PackedVector2Array()
+	for i in n + 1:
+		var a := TAU * i / float(n)
+		p.append(c + Vector2(cos(a), sin(a)) * r)
+	return p
+
+func _skel_line(pts: PackedVector2Array) -> void:
+	var l := Line2D.new()
+	l.points = pts
+	l.width = 3.0
+	l.default_color = Color(0.0, 0.94, 1.0, 0.55)
+	l.joint_mode = Line2D.LINE_JOINT_ROUND
+	l.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	l.end_cap_mode = Line2D.LINE_CAP_ROUND
+	impl_panel.add_child(l)
+
+func _lbl(txt: String, sz: int, col: Color, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	var l := Label.new()
+	l.text = txt
+	l.add_theme_font_size_override("font_size", sz)
+	l.add_theme_color_override("font_color", col)
+	l.horizontal_alignment = align
+	return l
+
+func _arrow(p_from: Vector2, p_to: Vector2) -> void:
+	_skel_line(PackedVector2Array([p_from, p_to]))
+	var d := (p_to - p_from).normalized()
+	var a1 := p_to - d.rotated(0.5) * 12.0
+	var a2 := p_to - d.rotated(-0.5) * 12.0
+	_skel_line(PackedVector2Array([a1, p_to, a2]))
+
+func _body_outline(cx: float) -> PackedVector2Array:
+	# профиль правой половины (dx от центра, y абсолют) → зеркалим в полный силуэт
+	var prof := [
+		Vector2(13, 178), Vector2(40, 198), Vector2(52, 212),
+		Vector2(42, 300), Vector2(29, 300), Vector2(30, 218),
+		Vector2(28, 360), Vector2(44, 384), Vector2(38, 474),
+		Vector2(32, 590), Vector2(13, 590), Vector2(2, 402),
+	]
+	var pts := PackedVector2Array()
+	for v in prof:
+		pts.append(Vector2(cx + v.x, v.y))
+	for i in range(prof.size() - 1, -1, -1):
+		pts.append(Vector2(cx - prof[i].x, prof[i].y))
+	return pts
+
+func _add_slot(key: String, pos: Vector2, sz: float, label: String) -> void:
+	var icon: String = "🔫" if key == "weapon" else IMPL_DEFS[key]["icon"]
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(sz, sz); btn.size = Vector2(sz, sz)
+	btn.position = pos
+	btn.text = icon; btn.add_theme_font_size_override("font_size", int(sz * 0.42))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.07, 0.10, 0.18, 0.96); sb.set_corner_radius_all(10)
+	sb.border_color = Color("#2a3358"); sb.set_border_width_all(2)
+	for st in ["normal", "hover", "pressed", "focus"]:
+		btn.add_theme_stylebox_override(st, sb)
+	var k: String = key
+	btn.pressed.connect(func(): _select_slot(k))
+	impl_panel.add_child(btn)
+	var right := pos.x > W * 0.5
+	var nameL := Label.new()
+	nameL.text = label
+	nameL.add_theme_font_size_override("font_size", 13)
+	nameL.add_theme_color_override("font_color", Color("#c7ccea"))
+	var star := Label.new()
+	star.add_theme_font_size_override("font_size", 12)
+	if right:
+		nameL.position = Vector2(pos.x + sz + 10, pos.y + 2); nameL.size = Vector2(W - (pos.x + sz + 10) - 8, 34)
+		nameL.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		star.position = Vector2(pos.x + sz + 10, pos.y + sz - 18); star.size = Vector2(150, 16)
+	else:
+		nameL.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		nameL.position = Vector2(pos.x + sz * 0.5 - 70, pos.y - 22); nameL.size = Vector2(140, 18)
+		star.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		star.position = Vector2(pos.x + sz * 0.5 - 70, pos.y + sz + 2); star.size = Vector2(140, 16)
+	impl_panel.add_child(nameL)
+	impl_panel.add_child(star)
+	impl_slots[key] = {"btn": btn, "sb": sb, "star": star}
+
+func _select_slot(key: String) -> void:
+	impl_seln = key
+	_refresh_impl()
+	impl_confirm.visible = false
+	impl_detail.visible = true
+	_refresh_detail()
+
+# === ПАНЕЛЬ A: имплант (открывается тапом по слоту) ===
+func _build_impl_detail() -> void:
+	impl_detail = Control.new()
+	impl_detail.set_anchors_preset(Control.PRESET_FULL_RECT)
+	impl_detail.visible = false
+	impl_detail.z_index = 2100
+	impl_panel.add_child(impl_detail)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _close_detail())
+	impl_detail.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.10, 0.17, 0.99); sb.set_corner_radius_all(14)
+	sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = Vector2(W * 0.5 - 200, 250); card.custom_minimum_size = Vector2(400, 0)
+	impl_detail.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	det_icon = Label.new(); det_icon.add_theme_font_size_override("font_size", 46); det_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_icon)
+	det_nm = Label.new(); det_nm.add_theme_font_size_override("font_size", 20); det_nm.add_theme_color_override("font_color", Color("#00f0ff")); det_nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_nm)
+	det_stat = Label.new(); det_stat.add_theme_font_size_override("font_size", 15); det_stat.add_theme_color_override("font_color", Color("#c7ccea")); det_stat.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_stat)
+	det_dupes = Label.new(); det_dupes.add_theme_font_size_override("font_size", 14); det_dupes.add_theme_color_override("font_color", Color("#9aa0bf")); det_dupes.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_dupes)
+	det_up_btn = Button.new(); det_up_btn.text = "⬆ ПОДНЯТЬ УРОВЕНЬ"; det_up_btn.add_theme_font_size_override("font_size", 16); det_up_btn.custom_minimum_size = Vector2(0, 50); det_up_btn.pressed.connect(_open_confirm); v.add_child(det_up_btn)
+	var back := Button.new(); back.text = "НАЗАД"; back.add_theme_font_size_override("font_size", 14); back.custom_minimum_size = Vector2(0, 40); back.pressed.connect(_close_detail); v.add_child(back)
+
+func _refresh_detail() -> void:
+	var hh = heroes[impl_sel]
+	var selk: String = impl_seln
+	if selk == "weapon":
+		det_icon.text = hh["data"]["wicon"]
+		det_nm.text = "%s · ОРУЖИЕ" % hh["data"]["wname"]
+		det_stat.text = "★%d · главный урон" % hh["wlvl"]
+		det_dupes.text = "дублей для прокачки: %d / 2" % hh["wdupes"]
+	else:
+		var im = IMPL_DEFS[selk]; var sl = hh["impl"][selk]
+		det_icon.text = im["icon"]
+		det_nm.text = im["name"]
+		det_stat.text = "★%d · %s" % [sl["lvl"], im["slot"]]
+		det_dupes.text = "дублей для прокачки: %d / 2" % sl["dupes"]
+
+func _close_detail() -> void:
+	impl_confirm.visible = false
+	impl_detail.visible = false
+
+# === ПАНЕЛЬ B: подтверждение прокачки (кнопка «поднять уровень») ===
+func _build_impl_confirm() -> void:
+	impl_confirm = Control.new()
+	impl_confirm.set_anchors_preset(Control.PRESET_FULL_RECT)
+	impl_confirm.visible = false
+	impl_confirm.z_index = 2200
+	impl_panel.add_child(impl_confirm)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _close_confirm())
+	impl_confirm.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.10, 0.08, 0.04, 0.99); sb.set_corner_radius_all(14)
+	sb.border_color = Color("#ffb02e"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = Vector2(W * 0.5 - 190, 340); card.custom_minimum_size = Vector2(380, 0)
+	impl_confirm.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	var t := Label.new(); t.text = "Выбери вещь для прокачки"; t.add_theme_font_size_override("font_size", 17); t.add_theme_color_override("font_color", Color("#ffb02e")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	conf_item = Label.new(); conf_item.add_theme_font_size_override("font_size", 15); conf_item.add_theme_color_override("font_color", Color("#e8e0c8")); conf_item.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(conf_item)
+	conf_cost = Label.new(); conf_cost.add_theme_font_size_override("font_size", 14); conf_cost.add_theme_color_override("font_color", Color("#cdb27a")); conf_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(conf_cost)
+	conf_btn = Button.new(); conf_btn.add_theme_font_size_override("font_size", 16); conf_btn.custom_minimum_size = Vector2(0, 50); conf_btn.pressed.connect(_do_merge_selected); v.add_child(conf_btn)
+	var back := Button.new(); back.text = "НАЗАД"; back.add_theme_font_size_override("font_size", 14); back.custom_minimum_size = Vector2(0, 40); back.pressed.connect(_close_confirm); v.add_child(back)
+
+func _open_confirm() -> void:
+	impl_confirm.visible = true
+	_refresh_confirm()
+
+func _refresh_confirm() -> void:
+	var hh = heroes[impl_sel]
+	var selk: String = impl_seln
+	var nm: String; var dupes: int; var cost: int
+	if selk == "weapon":
+		nm = "%s %s" % [hh["data"]["wicon"], hh["data"]["wname"]]
+		dupes = hh["wdupes"]; cost = hh["wlvl"] * 50
+	else:
+		var im = IMPL_DEFS[selk]; var sl = hh["impl"][selk]
+		nm = "%s %s" % [im["icon"], im["name"]]
+		dupes = sl["dupes"]; cost = _merge_cost(hh, selk)
+	conf_item.text = "%s   (дублей: %d / 2)" % [nm, dupes]
+	conf_cost.text = "Сумма прокачки: %d 💰" % cost
+	var ready := dupes >= 2 and gold >= cost
+	conf_btn.text = "ОБЪЕДИНИТЬ ★+1" if ready else ("НУЖНО 2 ДУБЛЯ (%d)" % dupes if dupes < 2 else "НЕ ХВАТАЕТ ЗОЛОТА")
+	conf_btn.disabled = not ready
+
+func _close_confirm() -> void:
+	impl_confirm.visible = false
+
+func _do_merge_selected() -> void:
+	if impl_seln == "weapon":
+		_merge_weapon(impl_sel)
+	else:
+		_merge_impl(impl_sel, impl_seln)
+	_refresh_impl()
+	_refresh_detail()
+	_refresh_confirm()
 
 # дроп дубликата после волны (босс гарант 2, обычная волна шанс) → копишь → мерджишь.
 # 40% оружие / 60% имплант — всё ПОД КОНКРЕТНОГО бойца (случайного)

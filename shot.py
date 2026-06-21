@@ -4,7 +4,7 @@ import sys, time
 from playwright.sync_api import sync_playwright
 
 URL = sys.argv[1] if len(sys.argv) > 1 else "https://mokhnatti.github.io/cyber-auto-rpg/play/"
-WAIT = int(sys.argv[2]) if len(sys.argv) > 2 else 16
+WAIT = int(sys.argv[2]) if len(sys.argv) > 2 else 11  # короче = меньше CPU-нагрев (софт-рендер)
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True, args=[
