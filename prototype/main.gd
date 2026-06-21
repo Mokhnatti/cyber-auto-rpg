@@ -83,6 +83,8 @@ var inv_btn: Button
 var inv_panel: Control
 var inv_gold: Label
 var inv_open := false
+var buy_mult := 1          # сколько уровней за тап: 1/10/100/0=MAX
+var buy_btns := []         # кнопки выбора множителя
 var hero_rows := []   # строки прокачки по героям: {lvl_btn}
 # ИМПЛАНТЫ-СКЕЛЕТ (шмотки) — дают БАЗОВЫЕ статы отряду; уровень потом множит (HP/урон)
 var impl_btn: Button
@@ -748,6 +750,11 @@ func _bot_augments() -> void:
 func _save_path() -> String:
 	return "user://save%s.json" % save_slot
 
+func _show_death(was_boss: bool) -> void:
+	if bot: return
+	var msg := "☠ ТЫ ПОГИБ\nПрокачай отряд и попробуй снова" if was_boss else "☠ Отряд пал — перегруппировка"
+	_popup_center(msg, Color("#ff5050"))
+
 func _ask_restart() -> void:
 	if restart_confirm:
 		restart_confirm.visible = true
@@ -979,7 +986,10 @@ func _process(delta: float) -> void:
 		if in_boss:
 			print("TTEVENT bossloss stage=%d maxlvl=%d gold=%d" % [stage, _max_hero_level(), int(gold)])
 			boss_retry = true                 # теперь к боссу — по КНОПКЕ
-		_popup_center("☠ Босс не пройден — фарми и жми «К БОССУ»" if in_boss else "☠ Отряд пал — перегруппировка", Color("#ff5050"))
+		for e in enemies:                     # ФИКС стака: убрать оставшихся врагов перед откатом
+			if e["node"]: e["node"].queue_free()
+		enemies.clear()
+		_show_death(in_boss)
 		_qte_clear()
 		in_boss = false
 		sub = 4 if boss_retry else 1          # ретрай — крутимся на волне 4
@@ -1052,22 +1062,16 @@ func _use_ult(i: int) -> void:
 	hh["atk_anim"] = 0.25
 	match hh["data"]["ult"]:
 		"barrage":
-			# ШТУРМ: всем +скорость атаки на время
-			atk_buff_t = 6.0
-			_popup_center("🔫 ШКВАЛ\nотряд: скорость атаки ↑", hh["data"]["color"])
+			atk_buff_t = 6.0   # ШТУРМ: всем +скорость атаки (без текста — шум)
 		"shield":
-			# ТАНК: щит всей команде
-			for h2 in heroes:
+			for h2 in heroes:   # ТАНК: щит+хил команде
 				if h2["alive"]:
 					h2["shield"] = 4.0
 					h2["hp"] = min(h2["max"], h2["hp"] + 30)
-			_popup_center("🦾 ЩИТ ОТРЯДУ", hh["data"]["color"])
 		"hack":
-			# ХАКЕР: мощная плюха по всем врагам
-			for en in enemies:
+			for en in enemies:  # ХАКЕР: плюха по всем
 				if en["alive"]:
 					_deal(hh, en, int(hh["dmg"] * 5 * aura_dmg * hack_mult))
-			_popup_center("💻 ВЗЛОМ-ПЛЮХА", hh["data"]["color"])
 	_refresh_hud()
 
 # выстрел снайпер-ульты по цели (общий для ручного тапа и авто-боя)
@@ -1603,10 +1607,14 @@ func _toggle_inv() -> void:
 
 func _upgrade_level(i: int) -> void:
 	var hh = heroes[i]
-	if gold >= hh["lvl_cost"]:
+	var n: int = 100000 if buy_mult == 0 else buy_mult   # 0 = MAX
+	var bought := 0
+	while bought < n and gold >= hh["lvl_cost"]:
 		gold -= hh["lvl_cost"]
 		hh["level"] += 1
-		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.12) + 2   # мягкая кривая → быстрые лвлапы до ~100
+		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.12) + 2   # мягкая кривая → быстрые лвлапы
+		bought += 1
+	if bought > 0:
 		_recalc_hero(hh)
 		_refresh_inv()
 
@@ -1635,11 +1643,22 @@ func _build_inventory() -> void:
 	inv_gold.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	inv_gold.position = Vector2(0, 78); inv_gold.size = Vector2(W, 24)
 	inv_panel.add_child(inv_gold)
+	# переключатель множителя покупки уровней
+	var mbar := HBoxContainer.new(); mbar.add_theme_constant_override("separation", 8)
+	mbar.alignment = BoxContainer.ALIGNMENT_CENTER
+	mbar.position = Vector2(0, 104); mbar.size = Vector2(W, 36)
+	inv_panel.add_child(mbar)
+	buy_btns.clear()
+	for m in [[1, "x1"], [10, "x10"], [100, "x100"], [0, "MAX"]]:
+		var mb := Button.new(); mb.text = m[1]; mb.add_theme_font_size_override("font_size", 15); mb.custom_minimum_size = Vector2(74, 34)
+		var mv: int = m[0]
+		mb.pressed.connect(func(): buy_mult = mv; _refresh_inv())
+		mbar.add_child(mb); buy_btns.append([mv, mb])
 
 	# по строке на каждого героя: УРОВЕНЬ + ПУШКА
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 16)
-	rows.position = Vector2(24, 120); rows.size = Vector2(W - 48, 0)
+	rows.position = Vector2(24, 152); rows.size = Vector2(W - 48, 0)
 	inv_panel.add_child(rows)
 	hero_rows.clear()
 	for i in HEROES.size():
@@ -1680,11 +1699,13 @@ func _build_inventory() -> void:
 func _refresh_inv() -> void:
 	if inv_gold:
 		inv_gold.text = "💰 %d   +%d/с" % [int(gold), int(gold_ps)]
+	for pair in buy_btns:   # подсветка выбранного множителя
+		pair[1].modulate = Color(1.4, 1.4, 0.6) if pair[0] == buy_mult else Color(0.7, 0.7, 0.7)
+	var mtxt := "MAX" if buy_mult == 0 else "x%d" % buy_mult
 	for i in heroes.size():
 		var hh = heroes[i]
 		var r = hero_rows[i]
-		var prio := "🛡 HP" if hh["data"]["hpg"] > hh["data"]["dmgg"] else "⚔ урон"
-		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d   %d 💰\n+HP +урон · приоритет %s" % [hh["level"], hh["lvl_cost"], prio]
+		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (%s)\nслед: %d 💰" % [hh["level"], mtxt, hh["lvl_cost"]]
 		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
 
 # --- ИМПЛАНТ-ИНВЕНТАРЬ (шмотки → база статов; уровень множит) ---
