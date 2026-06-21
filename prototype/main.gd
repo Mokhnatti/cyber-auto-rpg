@@ -342,7 +342,7 @@ func _spawn_wave() -> void:
 	wave += 1
 	var boss := (wave % 5 == 0)
 	var count := (1 if boss else (1 + (wave % 3)))
-	var hpmul := 1.0 + wave * 0.25
+	var hpmul := pow(1.12, wave)   # мягко-экспоненциальный рост HP (LOOT-RULES §10) → стена→гринд
 	for j in count:
 		var glow := Color("#ff5050") if not boss else Color("#ff2d95")
 		var es: float = 1.9 if boss else (1.35 - j * 0.1)
@@ -352,7 +352,7 @@ func _spawn_wave() -> void:
 		d.position = Vector2(700, ey)                        # въезжают справа
 		d.z_index = int(ey)
 		world.add_child(d)
-		var ehp := int((420.0 if boss else 45.0) * hpmul)
+		var ehp := int(45.0 * hpmul * (3.0 if boss else 1.0))   # босс = скачок ×3 (стена-пик)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
 			"dmg": int((10 if boss else 7) * (1.0 + wave * 0.12)),
