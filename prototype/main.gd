@@ -696,6 +696,7 @@ func _process(delta: float) -> void:
 	if save_t <= 0.0:
 		save_t = 10.0
 		_save()
+		print("TTSTATE stage=%d sub=%d boss=%d best=%d cores=%d scrap=%d gold=%d slots=%d/%d" % [stage, sub, (1 if in_boss else 0), best_stage, cores, scrap, int(gold), equipped_augs.size(), _slot_total()])
 	if phase == "dead":
 		return
 	gold += gold_ps * delta * aug_gold   # пассивный доход (idle-кор) × аугмент
