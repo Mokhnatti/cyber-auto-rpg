@@ -13,6 +13,13 @@ const HEROES := [
 const W := 600.0
 const H := 960.0
 const GROUND_Y := 0.72 * H
+# изо-формация (индекс = HEROES: 0 снайпер, 1 штурм, 2 танк, 3 хакер). y<0 = дальше/выше, s = масштаб
+const FORMATION := [
+	{"x": 70.0,  "y": -70.0, "s": 0.80},   # снайпер — задняя линия (дальше, мельче)
+	{"x": 140.0, "y": -32.0, "s": 0.92},   # штурмовик — мид
+	{"x": 220.0, "y": 10.0,  "s": 1.08},   # ТАНК — передняя линия (ближе, крупнее)
+	{"x": 158.0, "y": -54.0, "s": 0.86},   # хакер — мид-зад
+]
 
 var heroes := []
 var enemies := []
@@ -37,6 +44,14 @@ var speed_btn: Button
 var stage_label: Label
 var speed_idx := 0
 var implants_count := 0
+# --- idle-экономика (пассивная модель §4А) ---
+var gold := 0.0
+var gold_ps := 2.0          # пассивный доход в секунду
+var dmg_mult := 1.0         # глобальный множитель урона (прокачка за золото)
+var upg_cost := 50          # цена след. апгрейда урона
+var gold_label: Label
+var upg_btn: Button
+var boss_timer := 0.0       # таймер DPS-гейта на боссе
 
 func _ready() -> void:
 	randomize()
@@ -50,14 +65,19 @@ func _reset() -> void:
 	enemies.clear()
 	wave = 0
 	implants_count = 0
+	gold = 0.0
+	dmg_mult = 1.0
+	upg_cost = 50
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
 	# спавн отряда
 	for i in HEROES.size():
 		var h = HEROES[i]
-		var d := _make_char("hero%d" % (i + 1), 1, 1.0, h["color"])
-		d.position = Vector2(70 + i * 52, GROUND_Y)
+		var fp = FORMATION[i]
+		var d := _make_char("hero%d" % (i + 1), 1, fp["s"], h["color"])
+		d.position = Vector2(fp["x"], GROUND_Y + fp["y"])
+		d.z_index = int(d.position.y)   # ближние (танк) поверх дальних (снайпер)
 		world.add_child(d)
 		heroes.append({
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
@@ -68,9 +88,24 @@ func _reset() -> void:
 	_refresh_hud()
 
 func _start_march() -> void:
+	# HP восстанавливается между боями (роли в бою, но без накопит. гринда)
+	for hh in heroes:
+		if not hh["alive"]:
+			hh["alive"] = true
+			var n = hh["node"]
+			n.rotation = 0.0
+			n.modulate = Color(1, 1, 1, 1)
+		hh["hp"] = hh["max"]
 	phase = "march"
 	march_t = 2.4
 	bg.speed = 220.0
+
+# враги бьют переднюю линию первой: танк(2) → штурм(1)/хакер(3) → снайпер(0)
+func _front_hero() -> Variant:
+	for idx in [2, 1, 3, 0]:
+		if idx < heroes.size() and heroes[idx]["alive"]:
+			return heroes[idx]
+	return null
 
 func _spawn_wave() -> void:
 	wave += 1
@@ -79,17 +114,19 @@ func _spawn_wave() -> void:
 	var hpmul := 1.0 + wave * 0.25
 	for j in count:
 		var glow := Color("#ff5050") if not boss else Color("#ff2d95")
-		var sc := 1.0 if not boss else 1.7
-		var d := _make_char("enemy", -1, sc, glow)
-		var px := 540.0 - j * 56.0
-		d.position = Vector2(680, GROUND_Y)            # въезжают справа
+		var es: float = 1.7 if boss else (1.0 - j * 0.07)
+		var d := _make_char("enemy", -1, es, glow)
+		var px := 430.0 + j * 48.0                          # фронт-враг ближе к центру
+		var ey := GROUND_Y - (0.0 if boss else j * 30.0)    # задние выше (изо)
+		d.position = Vector2(700, ey)                        # въезжают справа
+		d.z_index = int(ey)
 		world.add_child(d)
 		var ehp := int((420.0 if boss else 45.0) * hpmul)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
 			"dmg": int((10 if boss else 7) * (1.0 + wave * 0.12)),
 			"atk": 1.5 if boss else 1.1, "t": 1.5, "alive": true, "boss": boss,
-			"home": Vector2(px, GROUND_Y), "atk_anim": 0.0
+			"home": Vector2(px, ey), "atk_anim": 0.0
 		})
 		var tw := create_tween()
 		tw.tween_property(d, "position:x", px, 0.5)
@@ -100,6 +137,7 @@ func _spawn_wave() -> void:
 func _process(delta: float) -> void:
 	if phase == "dead":
 		return
+	gold += gold_ps * delta          # пассивный доход (idle-кор)
 	if hack_t > 0.0:
 		hack_t -= delta
 		if hack_t <= 0.0: hack_mult = 1.0
@@ -142,15 +180,16 @@ func _hero_hit(hh: Dictionary) -> void:
 	var e = _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.18
-	var d := int(round(hh["dmg"] * hack_mult))
+	var d := int(round(hh["dmg"] * dmg_mult * hack_mult))
 	e["hp"] = max(0, e["hp"] - d)
 	_popup(str(d), hh["data"]["color"], e["node"].position + Vector2(randf_range(-10,10), -86))
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
+		gold += (40.0 if e.get("boss", false) else 5.0) * (1.0 + wave * 0.15)
 		_fall(e["node"])
 
 func _enemy_hit(e: Dictionary) -> void:
-	var hh = _first_alive(heroes)
+	var hh = _front_hero()
 	if hh == null: return
 	e["atk_anim"] = 0.18
 	var dmg: int = e["dmg"]
@@ -172,7 +211,7 @@ func _use_ult(i: int) -> void:
 			var e = _first_alive(enemies)
 			if e:
 				var mul := 6 if hh["data"]["ult"] == "burst" else 8
-				var d := int(hh["dmg"] * mul * hack_mult)
+				var d := int(hh["dmg"] * mul * dmg_mult * hack_mult)
 				e["hp"] = max(0, e["hp"] - d)
 				_popup("УЛЬТА " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 40)
 				if e["hp"] <= 0 and e["alive"]:
@@ -350,6 +389,10 @@ func _refresh_hud() -> void:
 		stage_label.text = "ЭТАП %d   %s" % [st, flags]
 	else:
 		stage_label.text = ""
+	# золото + прокачка урона
+	gold_label.text = "💰 %d   +%d/с" % [int(gold), int(gold_ps)]
+	upg_btn.text = "⬆ УРОН ×%.1f\n%d 💰" % [dmg_mult + 0.5, upg_cost]
+	upg_btn.disabled = gold < upg_cost
 
 func _build() -> void:
 	# фон
@@ -402,6 +445,18 @@ func _build() -> void:
 	stage_label.add_theme_font_size_override("font_size", 15)
 	stage_label.position = Vector2(20, 80)
 	hud.add_child(stage_label)
+
+	gold_label = Label.new()
+	gold_label.add_theme_color_override("font_color", Color("#ffe14d"))
+	gold_label.add_theme_font_size_override("font_size", 18)
+	gold_label.position = Vector2(20, 104)
+	hud.add_child(gold_label)
+	upg_btn = Button.new()
+	upg_btn.add_theme_font_size_override("font_size", 13)
+	upg_btn.custom_minimum_size = Vector2(152, 38)
+	upg_btn.position = Vector2(W - 168, 100)
+	upg_btn.pressed.connect(_buy_upgrade)
+	hud.add_child(upg_btn)
 
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 24)
@@ -458,6 +513,12 @@ func _cycle_speed() -> void:
 	var v: float = [1.0, 2.0, 3.0][speed_idx]
 	Engine.time_scale = v
 	speed_btn.text = "⏩ x%d" % int(v)
+
+func _buy_upgrade() -> void:
+	if gold >= upg_cost:
+		gold -= upg_cost
+		dmg_mult += 0.5
+		upg_cost = int(upg_cost * 1.6)
 
 # дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
 func _drop_implant() -> void:
