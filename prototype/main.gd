@@ -36,6 +36,7 @@ var hero_charge := []       # заливка заряда ульты на пор
 var speed_btn: Button
 var stage_label: Label
 var speed_idx := 0
+var implants_count := 0
 
 func _ready() -> void:
 	randomize()
@@ -48,6 +49,7 @@ func _reset() -> void:
 	heroes.clear()
 	enemies.clear()
 	wave = 0
+	implants_count = 0
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
@@ -59,6 +61,7 @@ func _reset() -> void:
 		world.add_child(d)
 		heroes.append({
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
+			"dmg": h["dmg"], "atk_spd": h["atk"],
 			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
 		})
 	_start_march()
@@ -114,7 +117,7 @@ func _process(delta: float) -> void:
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			hh["t"] = hh["data"]["atk"]
+			hh["t"] = hh["atk_spd"]
 			_hero_hit(hh)
 	for e in enemies:
 		if not e["alive"]: continue
@@ -129,6 +132,7 @@ func _process(delta: float) -> void:
 		enemies.clear()
 		if _all_dead(heroes):
 			return
+		_drop_implant()
 		_start_march()
 	elif _all_dead(heroes):
 		_die()
@@ -138,7 +142,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	var e = _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.18
-	var d := int(round(hh["data"]["dmg"] * hack_mult))
+	var d := int(round(hh["dmg"] * hack_mult))
 	e["hp"] = max(0, e["hp"] - d)
 	_popup(str(d), hh["data"]["color"], e["node"].position + Vector2(randf_range(-10,10), -86))
 	if e["hp"] <= 0 and e["alive"]:
@@ -168,7 +172,7 @@ func _use_ult(i: int) -> void:
 			var e = _first_alive(enemies)
 			if e:
 				var mul := 6 if hh["data"]["ult"] == "burst" else 8
-				var d := int(hh["data"]["dmg"] * mul * hack_mult)
+				var d := int(hh["dmg"] * mul * hack_mult)
 				e["hp"] = max(0, e["hp"] - d)
 				_popup("УЛЬТА " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 40)
 				if e["hp"] <= 0 and e["alive"]:
@@ -298,7 +302,7 @@ func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
 
 # --- HUD ---
 func _refresh_hud() -> void:
-	wave_label.text = "ВОЛНА  %d" % max(wave, 0) + ("   ⚔ БОЙ" if phase == "fight" else ("   ▶ марш" if phase == "march" else ""))
+	wave_label.text = "ВОЛНА  %d   📦 %d" % [max(wave, 0), implants_count] + ("   ⚔" if phase == "fight" else ("   ▶" if phase == "march" else ""))
 	# полоса босса
 	var bz = null
 	for e in enemies:
@@ -454,3 +458,58 @@ func _cycle_speed() -> void:
 	var v: float = [1.0, 2.0, 3.0][speed_idx]
 	Engine.time_scale = v
 	speed_btn.text = "⏩ x%d" % int(v)
+
+# дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
+func _drop_implant() -> void:
+	var was_boss := (wave % 5 == 0)
+	var r := randf()
+	var rarity := "обычный"; var rcol := Color("#9aa0b5"); var mult := 1.0
+	if was_boss or r > 0.93:
+		rarity = "ЛЕГЕНДА"; rcol = Color("#ffb02e"); mult = 4.0
+	elif r > 0.72:
+		rarity = "эпик"; rcol = Color("#ff2d95"); mult = 2.5
+	elif r > 0.42:
+		rarity = "редкий"; rcol = Color("#00f0ff"); mult = 1.6
+	var types := [
+		{"n": "👁 Оптика", "stat": "dmg"},
+		{"n": "🦾 Сервоприводы", "stat": "atk_spd"},
+		{"n": "🫀 Реактор", "stat": "max"},
+	]
+	var t = types[randi() % types.size()]
+	var alive := []
+	for hh in heroes:
+		if hh["alive"]: alive.append(hh)
+	if alive.is_empty(): return
+	var hero = alive[randi() % alive.size()]
+	var label := ""
+	match t["stat"]:
+		"dmg":
+			var a := int(3 * mult)
+			hero["dmg"] += a
+			label = "+%d урон" % a
+		"max":
+			var a := int(28 * mult)
+			hero["max"] += a; hero["hp"] += a
+			label = "+%d HP" % a
+		"atk_spd":
+			hero["atk_spd"] = max(0.3, hero["atk_spd"] - 0.07 * mult)
+			label = "быстрее атака"
+	implants_count += 1
+	_popup_center("📦 %s [%s]\n%s → %s" % [t["n"], rarity, label, hero["data"]["name"]], rcol)
+
+func _popup_center(txt: String, col: Color) -> void:
+	var l := Label.new()
+	l.text = txt
+	l.add_theme_color_override("font_color", col)
+	l.add_theme_font_size_override("font_size", 19)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = Vector2(W * 0.5 - 200, H * 0.42)
+	l.custom_minimum_size = Vector2(400, 0)
+	l.size = Vector2(400, 60)
+	l.z_index = 80
+	hud.add_child(l)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(l, "position:y", H * 0.42 - 70, 1.4)
+	tw.tween_property(l, "modulate:a", 0.0, 1.4)
+	tw.chain().tween_callback(l.queue_free)
