@@ -212,6 +212,7 @@ const AUGMENTS := [
 	{"id": "sweep", "icon": "👾", "name": "Эксплойт зачистки", "stat": "density", "per": 0.04, "desc": "−4%/ур HP врагов"},
 ]
 var impl_sel := 0          # выбранный боец в экране экипировки
+var new_gear := {}         # "героIdx:slot" → true: непросмотренная новая шмотка (подсветка NEW)
 var impl_hero_btns := []   # кнопки-портреты переключения бойца
 # СКЕЛЕТ-РАСКЛАДКА: слоты имплантов+оружие на неон-силуэте тела (по анатомии)
 var impl_slots := {}       # key -> {btn, sb(стиль рамки), star(★+дубли); weapon ещё ic}
@@ -884,7 +885,7 @@ func _save() -> void:
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores,
-		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "heroes": hs,
+		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "new_gear": new_gear, "heroes": hs,
 	}
 	var f := FileAccess.open(_save_path(), FileAccess.WRITE)
 	if f:
@@ -906,6 +907,7 @@ func _load() -> void:
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0))
 	slots_bought = int(d.get("slots_bought", 0))
+	new_gear = d.get("new_gear", {})
 	equipped_augs = d.get("equipped_augs", [])
 	var al := {}
 	var sal = d.get("aug_lvl", {})
@@ -1484,6 +1486,10 @@ func _refresh_hud() -> void:
 	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/%d" % [stage, sub, STAGE_WAVES]) + ("   ⚔" if phase == "fight" else "   ▶")
 	if boss_btn:
 		boss_btn.visible = boss_retry and not in_boss   # кнопка только для ретрая (свежий заход = авто)
+	if impl_btn:
+		var nc := new_gear.size()
+		impl_btn.text = "🦾 ЭКИПИРОВКА" + ("  ●%d" % nc if nc > 0 else "")
+		impl_btn.modulate = Color(1.5, 1.3, 0.3) if nc > 0 else Color(1, 1, 1)   # горит при новом луте
 	# полоса босса
 	var bz = null
 	for e in enemies:
@@ -2001,10 +2007,19 @@ func _build_implants() -> void:
 	_build_impl_detail()
 	_build_impl_confirm()
 
+func _hero_has_new(i: int) -> bool:
+	for k in new_gear:
+		if k.begins_with("%d:" % i):
+			return true
+	return false
+
 func _refresh_impl() -> void:
 	var hh = heroes[impl_sel]
 	for i in impl_hero_btns.size():
-		impl_hero_btns[i].modulate = Color(1, 1, 1) if i == impl_sel else Color(0.5, 0.5, 0.56)
+		if _hero_has_new(i):
+			impl_hero_btns[i].modulate = Color(1.6, 1.3, 0.25)   # NEW → золотое свечение
+		else:
+			impl_hero_btns[i].modulate = Color(1, 1, 1) if i == impl_sel else Color(0.5, 0.5, 0.56)
 	# портрет бойца слева
 	eq_portrait_ic.text = hh["data"]["icon"]
 	eq_portrait_nm.text = hh["data"]["name"]
@@ -2025,8 +2040,11 @@ func _refresh_impl() -> void:
 			var inst = hh["gear"][key][vid]
 			lvl = inst["lvl"]; dupes = inst["dupes"]; rar = inst["rarity"]
 			s["sb"].border_color = Color(RARITY[rar]["col"]); s["sb"].set_border_width_all(2)
-		s["star"].text = "★%d" % lvl + ("  %d●" % dupes if dupes > 0 else "")
-		s["star"].add_theme_color_override("font_color", Color("#ffd24a") if dupes >= 2 else Color("#7a7f99"))
+		var is_new: bool = new_gear.has("%d:%s" % [impl_sel, key])
+		if is_new:
+			s["sb"].border_color = Color("#ffd24a"); s["sb"].set_border_width_all(4)   # золотая обводка NEW
+		s["star"].text = ("NEW " if is_new else "") + "★%d" % lvl + ("  %d●" % dupes if dupes > 0 else "")
+		s["star"].add_theme_color_override("font_color", Color("#ffd24a") if (dupes >= 2 or is_new) else Color("#7a7f99"))
 
 func _circle_pts(c: Vector2, r: float, n: int = 26) -> PackedVector2Array:
 	var p := PackedVector2Array()
@@ -2111,7 +2129,9 @@ func _add_slot(key: String, pos: Vector2, sz: float, label: String) -> void:
 
 func _select_slot(key: String) -> void:
 	impl_seln = key
+	new_gear.erase("%d:%s" % [impl_sel, key])   # посмотрел слот → NEW гаснет
 	_refresh_impl()
+	_refresh_hud()
 	impl_confirm.visible = false
 	impl_detail.visible = true
 	_refresh_detail()
@@ -2282,6 +2302,7 @@ func _drop_implant() -> void:
 	var hh = heroes[i]
 	if randf() < 0.4:
 		hh["wdupes"] += amount
+		new_gear["%d:weapon" % i] = true
 		_popup_center("🔫 ОРУЖИЕ: %s · %s %s\n+%d дубль" % [hh["data"]["name"], hh["data"]["wicon"], hh["data"]["wname"], amount], Color("#ffb02e"))
 	else:
 		# случайный слот+модель; редкость по прогрессу; предмет = модель@редкость
@@ -2291,6 +2312,7 @@ func _drop_implant() -> void:
 		var vid: String = v["id"]
 		var rar := _roll_rarity()
 		var key := _ik(vid, rar)
+		new_gear["%d:%s" % [i, slot]] = true   # пометить слот как NEW (подсветка)
 		var g = hh["gear"][slot]
 		if g.has(key):
 			# дубль ТОЙ ЖЕ модели И редкости → для ★-апа; роллы держим лучшие (перефарм внутри редкости)
