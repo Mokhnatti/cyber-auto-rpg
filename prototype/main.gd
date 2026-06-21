@@ -49,34 +49,19 @@ var implants_count := 0
 # --- idle-экономика (пассивная модель §4А) ---
 var gold := 0.0
 var gold_ps := 2.0          # пассивный доход в секунду (база, растит нейрочип)
-var dmg_mult := 1.0         # производные от уровней имплантов (_apply_implants)
-var atk_mult := 1.0
-var hp_mult := 1.0
-var ult_mult := 1.0
 var gold_label: Label
 var inv_btn: Button
 var inv_panel: Control
 var inv_open := false
-var inv_rows := {}          # ключ слота → {lvl: Label, btn: Button, stat: Label}
-# ИМПЛАНТЫ по слотам тела (псевдо-скелет): уровень апается за золото
-var implants := {
-	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "stat": "доход", "lvl": 0, "cost": 60,  "c0": 60},
-	"optic": {"icon": "👁", "name": "Оптика · глаза", "stat": "урон", "lvl": 0, "cost": 40,  "c0": 40},
-	"arms":  {"icon": "🦾", "name": "Сервоприводы · руки", "stat": "скор. атаки", "lvl": 0, "cost": 45, "c0": 45},
-	"core":  {"icon": "🫀", "name": "Реактор · тело", "stat": "HP отряда", "lvl": 0, "cost": 55, "c0": 55},
-	"ult":   {"icon": "⚡", "name": "Ядро · ульта", "stat": "мощь ульт", "lvl": 0, "cost": 80, "c0": 80},
-}
+var hero_rows := []   # строки прокачки по героям: {lvl_btn, gun_btn}
 
-func _apply_implants() -> void:
-	dmg_mult = 1.0 + implants["optic"]["lvl"] * 0.25
-	atk_mult = 1.0 + implants["arms"]["lvl"] * 0.08
-	hp_mult = 1.0 + implants["core"]["lvl"] * 0.20
-	gold_ps = 2.0 + implants["neuro"]["lvl"] * 1.5
-	ult_mult = 1.0 + implants["ult"]["lvl"] * 0.30
-	for hh in heroes:
-		var base_hp: int = hh["data"]["hp"]
-		hh["max"] = int(base_hp * hp_mult)
-		if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
+# пер-героя прокачка: УРОВЕНЬ (все статы) + ПУШКА (урон). Просто и понятно.
+func _recalc_hero(hh: Dictionary) -> void:
+	var lv: int = hh["level"]
+	var gn: int = hh["gun"]
+	hh["dmg"] = int(round(hh["data"]["dmg"] * (1.0 + (gn - 1) * 0.40) * (1.0 + (lv - 1) * 0.12)))
+	hh["max"] = int(hh["data"]["hp"] * (1.0 + (lv - 1) * 0.15))
+	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _ready() -> void:
 	randomize()
@@ -102,10 +87,7 @@ func _reset() -> void:
 	wave = 0
 	implants_count = 0
 	gold = 0.0
-	for k in implants:
-		implants[k]["lvl"] = 0
-		implants[k]["cost"] = implants[k]["c0"]
-	_apply_implants()
+	gold_ps = 2.0
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
@@ -120,6 +102,7 @@ func _reset() -> void:
 		heroes.append({
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
 			"dmg": h["dmg"], "atk_spd": h["atk"],
+			"level": 1, "gun": 1, "lvl_cost": 30, "gun_cost": 25,
 			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
 		})
 	_start_march()
@@ -193,7 +176,7 @@ func _process(delta: float) -> void:
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			hh["t"] = hh["atk_spd"] / atk_mult
+			hh["t"] = hh["atk_spd"]
 			_hero_hit(hh)
 	for e in enemies:
 		if not e["alive"]: continue
@@ -218,7 +201,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	var e = _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.18
-	var base := int(round(hh["dmg"] * dmg_mult * hack_mult))
+	var base := int(round(hh["dmg"] * hack_mult))
 	if hh["data"]["atk_type"] == "aoe":
 		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
 		for en in enemies:
@@ -258,7 +241,7 @@ func _use_ult(i: int) -> void:
 			var e = _first_alive(enemies)
 			if e:
 				var mul := 6 if hh["data"]["ult"] == "burst" else 8
-				var d := int(hh["dmg"] * mul * dmg_mult * ult_mult * hack_mult)
+				var d := int(hh["dmg"] * mul * hack_mult)
 				e["hp"] = max(0, e["hp"] - d)
 				_popup("УЛЬТА " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 40)
 				if e["hp"] <= 0 and e["alive"]:
@@ -579,104 +562,98 @@ func _toggle_inv() -> void:
 	inv_panel.visible = inv_open
 	if inv_open: _refresh_inv()
 
-func _upgrade_implant(key: String) -> void:
-	var imp = implants[key]
-	if gold >= imp["cost"]:
-		gold -= imp["cost"]
-		imp["lvl"] += 1
-		imp["cost"] = int(imp["cost"] * 1.55)
-		_apply_implants()
+func _upgrade_level(i: int) -> void:
+	var hh = heroes[i]
+	if gold >= hh["lvl_cost"]:
+		gold -= hh["lvl_cost"]
+		hh["level"] += 1
+		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.5)
+		_recalc_hero(hh)
+		_refresh_inv()
+
+func _upgrade_gun(i: int) -> void:
+	var hh = heroes[i]
+	if gold >= hh["gun_cost"]:
+		gold -= hh["gun_cost"]
+		hh["gun"] += 1
+		hh["gun_cost"] = int(hh["gun_cost"] * 1.5)
+		_recalc_hero(hh)
 		_refresh_inv()
 
 func _build_inventory() -> void:
 	inv_panel = Control.new()
 	inv_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	inv_panel.visible = false
-	inv_panel.z_index = 2000   # поверх боевых спрайтов (у них z = позиция ~700)
+	inv_panel.z_index = 2000   # поверх боевых спрайтов
 	hud.add_child(inv_panel)
 	var bg := ColorRect.new()
-	bg.color = Color(0.03, 0.03, 0.07, 0.96)
+	bg.color = Color(0.04, 0.04, 0.08, 0.99)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	inv_panel.add_child(bg)
 
 	var title := Label.new()
-	title.text = "🦾 ИМПЛАНТЫ ОТРЯДА"
+	title.text = "📊 ПРОКАЧКА ОТРЯДА"
 	title.add_theme_color_override("font_color", Color("#ffb02e"))
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 26)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.position = Vector2(0, 30); title.size = Vector2(W, 30)
+	title.position = Vector2(0, 40); title.size = Vector2(W, 34)
 	inv_panel.add_child(title)
 
-	# силуэт-скелет (спрайт танка) слева
-	var sil := AnimatedSprite2D.new()
-	sil.sprite_frames = _frames("hero3")
-	sil.animation = "idle"; sil.play("idle")
-	sil.scale = Vector2(2.2, 2.2)
-	sil.position = Vector2(118, 360)
-	sil.modulate = Color(0.6, 0.75, 1.0, 0.9)
-	inv_panel.add_child(sil)
-	# подпись слотов на силуэте
-	var marks := {"neuro": -150, "optic": -110, "arms": -50, "core": 10, "ult": 70}
-	for key in marks:
-		var ml := Label.new()
-		ml.text = implants[key]["icon"]
-		ml.add_theme_font_size_override("font_size", 24)
-		ml.position = Vector2(92, 360 + marks[key])
-		inv_panel.add_child(ml)
-
-	# слоты-строки справа
+	# по строке на каждого героя: УРОВЕНЬ + ПУШКА
 	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 12)
-	rows.position = Vector2(232, 120); rows.size = Vector2(348, 0)
+	rows.add_theme_constant_override("separation", 16)
+	rows.position = Vector2(24, 120); rows.size = Vector2(W - 48, 0)
 	inv_panel.add_child(rows)
-	inv_rows.clear()
-	for key in implants:
-		var imp = implants[key]
+	hero_rows.clear()
+	for i in HEROES.size():
+		var h = HEROES[i]
 		var row := PanelContainer.new()
 		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.1, 0.11, 0.18, 0.9)
-		sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
-		sb.border_color = Color("#2a3358"); sb.set_border_width_all(1)
+		sb.bg_color = Color(h["color"].r, h["color"].g, h["color"].b, 0.12)
+		sb.border_color = h["color"]; sb.set_border_width_all(2)
+		sb.set_corner_radius_all(10); sb.set_content_margin_all(12)
 		row.add_theme_stylebox_override("panel", sb)
-		row.custom_minimum_size = Vector2(340, 0)
 		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", 8)
+		hb.add_theme_constant_override("separation", 10)
 		row.add_child(hb)
-		var info := VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var nm := Label.new()
-		nm.text = imp["icon"] + " " + imp["name"]
-		nm.add_theme_font_size_override("font_size", 14)
-		info.add_child(nm)
-		var st := Label.new()
-		st.add_theme_color_override("font_color", Color("#7a7f99"))
-		st.add_theme_font_size_override("font_size", 12)
-		info.add_child(st)
-		hb.add_child(info)
-		var ab := Button.new()
-		ab.custom_minimum_size = Vector2(96, 44)
-		ab.add_theme_font_size_override("font_size", 12)
-		var k: String = key
-		ab.pressed.connect(func(): _upgrade_implant(k))
-		hb.add_child(ab)
+		nm.text = h["icon"] + "\n" + h["name"]
+		nm.add_theme_color_override("font_color", h["color"])
+		nm.add_theme_font_size_override("font_size", 15)
+		nm.custom_minimum_size = Vector2(92, 0)
+		hb.add_child(nm)
+		var lb := Button.new()
+		lb.custom_minimum_size = Vector2(0, 58)
+		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lb.add_theme_font_size_override("font_size", 14)
+		var idx := i
+		lb.pressed.connect(func(): _upgrade_level(idx))
+		hb.add_child(lb)
+		var gb := Button.new()
+		gb.custom_minimum_size = Vector2(0, 58)
+		gb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		gb.add_theme_font_size_override("font_size", 14)
+		gb.pressed.connect(func(): _upgrade_gun(idx))
+		hb.add_child(gb)
 		rows.add_child(row)
-		inv_rows[key] = {"stat": st, "btn": ab}
+		hero_rows.append({"lvl_btn": lb, "gun_btn": gb})
 
 	var close := Button.new()
 	close.text = "✕ ЗАКРЫТЬ"
 	close.add_theme_font_size_override("font_size", 16)
-	close.custom_minimum_size = Vector2(180, 44)
-	close.position = Vector2(W * 0.5 - 90, H - 70)
+	close.custom_minimum_size = Vector2(200, 48)
+	close.position = Vector2(W * 0.5 - 100, H - 78)
 	close.pressed.connect(_toggle_inv)
 	inv_panel.add_child(close)
 
 func _refresh_inv() -> void:
-	for key in implants:
-		var imp = implants[key]
-		var r = inv_rows[key]
-		r["stat"].text = "ур.%d · %s   ➜ +%s" % [imp["lvl"], imp["stat"], imp["stat"]]
-		r["btn"].text = "↑ ур.%d\n%d 💰" % [imp["lvl"] + 1, imp["cost"]]
-		r["btn"].disabled = gold < imp["cost"]
+	for i in heroes.size():
+		var hh = heroes[i]
+		var r = hero_rows[i]
+		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d\n%d 💰" % [hh["level"], hh["lvl_cost"]]
+		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
+		r["gun_btn"].text = "🔫 ПУШКА %d\n%d 💰" % [hh["gun"], hh["gun_cost"]]
+		r["gun_btn"].disabled = gold < hh["gun_cost"]
 
 # дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
 func _drop_implant() -> void:
