@@ -1201,43 +1201,38 @@ func _refresh_detail() -> void:
 		det_title.text = "%s %s · ОРУЖИЕ" % [hh["data"]["wicon"], hh["data"]["wname"]]
 		det_list.add_child(_weapon_row(hh))
 		return
-	det_title.text = "%s %s — выбери модель" % [IMPL_DEFS[slot]["icon"], IMPL_DEFS[slot]["name"]]
-	for v in ITEM_VARIANTS[slot]:
-		det_list.add_child(_variant_row(hh, slot, v))
+	det_title.text = "%s %s — что наденем" % [IMPL_DEFS[slot]["icon"], IMPL_DEFS[slot]["name"]]
+	# только то, что ЕСТЬ у бойца в этом слоте (надетое — первым)
+	var owned_ids: Array = hh["gear"][slot].keys()
+	owned_ids.sort_custom(func(a, b): return hh["equip"][slot] == a)
+	for vid in owned_ids:
+		det_list.add_child(_variant_row(hh, slot, vid))
 
-func _variant_row(hh: Dictionary, slot: String, v: Dictionary) -> Control:
-	var vid: String = v["id"]
-	var owned: bool = hh["gear"][slot].has(vid)
+func _variant_row(hh: Dictionary, slot: String, vid: String) -> Control:
+	var v := _variant(slot, vid)
+	var inst = hh["gear"][slot][vid]
+	var rar: int = inst["rarity"]
 	var equipped: bool = hh["equip"][slot] == vid
 	var card := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.11, 0.13, 0.2, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
-	var rar: int = (hh["gear"][slot][vid]["rarity"] if owned else 0)
-	sb.border_color = Color(RARITY[rar]["col"]) if owned else Color("#2a3358")
-	sb.set_border_width_all(2 if owned else 1)
+	sb.border_color = Color(RARITY[rar]["col"]); sb.set_border_width_all(3 if equipped else 2)
 	card.add_theme_stylebox_override("panel", sb)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); card.add_child(box)
 	var head := Label.new(); head.add_theme_font_size_override("font_size", 15)
-	if owned:
-		var inst = hh["gear"][slot][vid]
-		head.text = "%s · %s ★%d%s" % [v["name"], RARITY[rar]["name"], inst["lvl"], ("  ✓ НАДЕТО" if equipped else "")]
-		head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
-		box.add_child(head)
-		var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 13); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
-		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); box.add_child(hb)
-		var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 13); eqb.custom_minimum_size = Vector2(190, 38)
-		eqb.text = "НАДЕТО" if equipped else "НАДЕТЬ"; eqb.disabled = equipped
-		eqb.pressed.connect(func(): _equip(slot, vid))
-		hb.add_child(eqb)
-		var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(190, 38)
-		upb.text = "⬆ УРОВЕНЬ (%d/2)" % inst["dupes"]; upb.disabled = inst["dupes"] < 2
-		upb.pressed.connect(func(): impl_selv = vid; _open_confirm())
-		hb.add_child(upb)
-	else:
-		head.text = "%s · не найдено" % v["name"]
-		head.add_theme_color_override("font_color", Color("#5a6080"))
-		box.add_child(head)
-		var st := Label.new(); st.text = "выбей в бою · базовый стат: %s" % STAT_ROLL[v["stat"]]["fmt"].replace("%d", "?"); st.add_theme_font_size_override("font_size", 12); st.add_theme_color_override("font_color", Color("#4a4f66")); box.add_child(st)
+	head.text = "%s · %s ★%d%s" % [v["name"], RARITY[rar]["name"], inst["lvl"], ("  ✓ НАДЕТО" if equipped else "")]
+	head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
+	box.add_child(head)
+	var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 13); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
+	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); box.add_child(hb)
+	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 13); eqb.custom_minimum_size = Vector2(190, 38)
+	eqb.text = "НАДЕТО" if equipped else "НАДЕТЬ"; eqb.disabled = equipped
+	eqb.pressed.connect(func(): _equip(slot, vid))
+	hb.add_child(eqb)
+	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(190, 38)
+	upb.text = "⬆ УРОВЕНЬ (%d/2)" % inst["dupes"]; upb.disabled = inst["dupes"] < 2
+	upb.pressed.connect(func(): impl_selv = vid; _open_confirm())
+	hb.add_child(upb)
 	return card
 
 func _weapon_row(hh: Dictionary) -> Control:
