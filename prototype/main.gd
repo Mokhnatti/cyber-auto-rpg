@@ -59,20 +59,29 @@ var impl_btn: Button
 var impl_panel: Control
 var impl_open := false
 var impl_rows := {}
-# lvl = звёзды (база статов), dupes = дубликаты в запасе (падают с боссов). 2 дубля + золото → +1 звезда
-var impl := {
-	"core":  {"icon": "🫀", "name": "Реактор · тело", "slot": "+HP",        "lvl": 1, "dupes": 0},
-	"arms":  {"icon": "🦾", "name": "Сервоприводы · руки", "slot": "+урон", "lvl": 1, "dupes": 0},
-	"optic": {"icon": "👁", "name": "Оптика · глаза", "slot": "+крит",      "lvl": 1, "dupes": 0},
-	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки","lvl": 1, "dupes": 0},
-	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт","lvl": 1, "dupes": 0},
+# ИМПЛАНТЫ ПЕР-ПЕРСОНАЖ: у каждого бойца свои 5 слотов. IMPL_DEFS — шаблон (иконка/имя/стат).
+# Состояние на героя: hero["impl"][key] = {lvl(звёзды), dupes}. 2 дубля + золото → +1 звезда
+const IMPL_DEFS := {
+	"core":  {"icon": "🫀", "name": "Реактор · тело", "slot": "+HP"},
+	"arms":  {"icon": "🦾", "name": "Сервоприводы · руки", "slot": "+урон"},
+	"optic": {"icon": "👁", "name": "Оптика · глаза", "slot": "+крит"},
+	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки"},
+	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт"},
 }
+var impl_sel := 0          # выбранный боец в имплант-экране
+var impl_hero_btns := []   # кнопки-портреты переключения бойца
 
-func _impl_lv(key: String) -> int:
-	return impl[key]["lvl"] - 1   # вклад импланта (1 звезда = базовый, без бонуса)
+func _new_impl() -> Dictionary:
+	var d := {}
+	for k in IMPL_DEFS:
+		d[k] = {"lvl": 1, "dupes": 0}
+	return d
 
-func _merge_cost(key: String) -> int:
-	return impl[key]["lvl"] * 50   # золото за объединение (растёт со звёздами)
+func _impl_lv(hh: Dictionary, key: String) -> int:
+	return hh["impl"][key]["lvl"] - 1   # вклад импланта ЭТОГО бойца (1 звезда = базовый)
+
+func _merge_cost(hh: Dictionary, key: String) -> int:
+	return hh["impl"][key]["lvl"] * 50   # золото за объединение (растёт со звёздами)
 # пассивные ауры классов (пока боец жив — бафает весь отряд)
 var aura_hp := 1.0
 var aura_dmg := 1.0
@@ -102,8 +111,8 @@ func _recalc_auras() -> void:
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
 	var wbonus: int = (hh["wlvl"] - 1) * int(max(5, hh["data"]["dmg"] * 0.35))   # ОРУЖИЕ = главный урон (база)
-	var base_dmg: int = hh["data"]["dmg"] + wbonus + _impl_lv("arms") * 3   # база = класс + оружие + руки
-	var base_hp: int = hh["data"]["hp"] + _impl_lv("core") * 25     # база = класс + реактор(шмотка)
+	var base_dmg: int = hh["data"]["dmg"] + wbonus + _impl_lv(hh, "arms") * 3   # база = класс + оружие + руки
+	var base_hp: int = hh["data"]["hp"] + _impl_lv(hh, "core") * 25     # база = класс + реактор(шмотка)
 	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"])))   # × множитель уровня
 	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp)
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
@@ -133,9 +142,7 @@ func _reset() -> void:
 	implants_count = 0
 	gold = 0.0
 	gold_ps = 2.0
-	for k in impl:
-		impl[k]["lvl"] = 1
-		impl[k]["dupes"] = 0
+	impl_sel = 0
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
@@ -151,7 +158,7 @@ func _reset() -> void:
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
 			"dmg": h["dmg"], "atk_spd": h["atk"],
 			"level": 1, "lvl_cost": 30,
-			"wlvl": 1, "wdupes": 0,
+			"wlvl": 1, "wdupes": 0, "impl": _new_impl(),
 			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
 		})
 	_recalc_auras()
@@ -230,7 +237,7 @@ func _process(delta: float) -> void:
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			var spd := aura_atk * (1.0 + _impl_lv("legs") * 0.04) * (1.4 if atk_buff_t > 0.0 else 1.0)
+			var spd := aura_atk * (1.0 + _impl_lv(hh, "legs") * 0.04) * (1.4 if atk_buff_t > 0.0 else 1.0)
 			hh["t"] = hh["atk_spd"] / spd
 			_hero_hit(hh)
 	for e in enemies:
@@ -257,7 +264,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	if e == null: return
 	hh["atk_anim"] = 0.18
 	var base := int(round(hh["dmg"] * aura_dmg * hack_mult))
-	var crit_ch: float = hh["data"]["crit"] + _impl_lv("optic") * 0.02   # база крит + оптика(шмотка)
+	var crit_ch: float = hh["data"]["crit"] + _impl_lv(hh, "optic") * 0.02   # база крит + оптика(шмотка)
 	var is_crit: bool = randf() < crit_ch
 	if is_crit: base = int(base * hh["data"]["critx"])
 	if hh["data"]["atk_type"] == "aoe":
@@ -752,14 +759,15 @@ func _toggle_impl() -> void:
 	impl_panel.visible = impl_open
 	if impl_open: _refresh_impl()
 
-func _merge_impl(key: String) -> void:
-	var im = impl[key]
-	var cost := _merge_cost(key)
-	if im["dupes"] >= 2 and gold >= cost:
-		im["dupes"] -= 2
-		im["lvl"] += 1      # +1 звезда → база статов выросла
+func _merge_impl(idx: int, key: String) -> void:
+	var hh = heroes[idx]
+	var sl = hh["impl"][key]
+	var cost := _merge_cost(hh, key)
+	if sl["dupes"] >= 2 and gold >= cost:
+		sl["dupes"] -= 2
+		sl["lvl"] += 1      # +1 звезда → база статов ЭТОГО бойца выросла
 		gold -= cost
-		for hh in heroes: _recalc_hero(hh)
+		_recalc_hero(hh)
 		_refresh_impl()
 
 func _build_implants() -> void:
@@ -774,41 +782,50 @@ func _build_implants() -> void:
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_impl())
 	impl_panel.add_child(bg)
 	var title := Label.new()
-	title.text = "🦾 ИМПЛАНТЫ — база статов"
+	title.text = "🦾 ИМПЛАНТЫ — на каждого бойца"
 	title.add_theme_color_override("font_color", Color("#00f0ff"))
 	title.add_theme_font_size_override("font_size", 22)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.position = Vector2(0, 28); title.size = Vector2(W, 30)
+	title.position = Vector2(0, 26); title.size = Vector2(W, 30)
 	impl_panel.add_child(title)
-	var sil := AnimatedSprite2D.new()
-	sil.sprite_frames = _frames("hero3")
-	sil.animation = "idle"; sil.play("idle")
-	sil.scale = Vector2(2.0, 2.0)
-	sil.position = Vector2(108, 330)
-	sil.modulate = Color(0.5, 0.7, 1.0, 0.85)
-	impl_panel.add_child(sil)
+	# селектор бойца (4 портрета): переключает чьи импланты смотрим
+	var sel := HBoxContainer.new()
+	sel.add_theme_constant_override("separation", 6)
+	sel.position = Vector2(W * 0.5 - 288, 70); sel.size = Vector2(576, 0)
+	impl_panel.add_child(sel)
+	impl_hero_btns.clear()
+	for i in HEROES.size():
+		var pb := Button.new()
+		pb.text = HEROES[i]["icon"] + "\n" + HEROES[i]["name"]
+		pb.custom_minimum_size = Vector2(138, 50)
+		pb.add_theme_font_size_override("font_size", 13)
+		var idx := i
+		pb.pressed.connect(func(): impl_sel = idx; _refresh_impl())
+		sel.add_child(pb)
+		impl_hero_btns.append(pb)
+	# 5 слотов выбранного бойца
 	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 10)
-	rows.position = Vector2(216, 90); rows.size = Vector2(366, 0)
+	rows.add_theme_constant_override("separation", 9)
+	rows.position = Vector2(W * 0.5 - 250, 150); rows.size = Vector2(500, 0)
 	impl_panel.add_child(rows)
 	impl_rows.clear()
-	for key in impl:
-		var im = impl[key]
+	for key in IMPL_DEFS:
+		var im = IMPL_DEFS[key]
 		var row := PanelContainer.new()
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(0.1, 0.12, 0.2, 0.92)
 		sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
 		sb.border_color = Color("#2a3358"); sb.set_border_width_all(1)
 		row.add_theme_stylebox_override("panel", sb)
-		row.custom_minimum_size = Vector2(356, 0)
+		row.custom_minimum_size = Vector2(496, 0)
 		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); row.add_child(hb)
 		var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var nm := Label.new(); nm.text = im["icon"] + " " + im["name"]; nm.add_theme_font_size_override("font_size", 14); info.add_child(nm)
 		var st := Label.new(); st.add_theme_color_override("font_color", Color("#7a7f99")); st.add_theme_font_size_override("font_size", 12); info.add_child(st)
 		hb.add_child(info)
-		var ab := Button.new(); ab.custom_minimum_size = Vector2(100, 48); ab.add_theme_font_size_override("font_size", 12)
+		var ab := Button.new(); ab.custom_minimum_size = Vector2(108, 48); ab.add_theme_font_size_override("font_size", 12)
 		var k: String = key
-		ab.pressed.connect(func(): _merge_impl(k))
+		ab.pressed.connect(func(): _merge_impl(impl_sel, k))
 		hb.add_child(ab)
 		rows.add_child(row)
 		impl_rows[key] = {"stat": st, "btn": ab}
@@ -819,33 +836,37 @@ func _build_implants() -> void:
 	impl_panel.add_child(close)
 
 func _refresh_impl() -> void:
-	for key in impl:
-		var im = impl[key]
+	var hh = heroes[impl_sel]
+	for i in impl_hero_btns.size():
+		impl_hero_btns[i].modulate = Color(1, 1, 1) if i == impl_sel else Color(0.5, 0.5, 0.56)
+	for key in IMPL_DEFS:
+		var im = IMPL_DEFS[key]
+		var sl = hh["impl"][key]
 		var r = impl_rows[key]
-		r["stat"].text = "★%d · %s · дублей: %d" % [im["lvl"], im["slot"], im["dupes"]]
-		var cost := _merge_cost(key)
+		r["stat"].text = "★%d · %s · дублей: %d" % [sl["lvl"], im["slot"], sl["dupes"]]
+		var cost := _merge_cost(hh, key)
 		r["btn"].text = "⚙ ОБЪЕДИНИТЬ\n2 дубля + %d 💰" % cost
-		r["btn"].disabled = im["dupes"] < 2 or gold < cost
+		r["btn"].disabled = sl["dupes"] < 2 or gold < cost
 
 # дроп дубликата после волны (босс гарант 2, обычная волна шанс) → копишь → мерджишь.
-# 40% оружие (под случайного бойца), 60% имплант-шмотка (отрядная)
+# 40% оружие / 60% имплант — всё ПОД КОНКРЕТНОГО бойца (случайного)
 func _drop_implant() -> void:
 	var was_boss := (wave % 5 == 0)
 	if not was_boss and randf() > 0.5:
 		return
 	var amount := 2 if was_boss else 1
 	implants_count += 1
+	var i := randi() % heroes.size()
+	var hh = heroes[i]
 	if randf() < 0.4:
-		var i := randi() % heroes.size()
-		heroes[i]["wdupes"] += amount
-		var hh = heroes[i]
-		_popup_center("🔫 ОРУЖИЕ: %s %s\n+%d дубль (★%d, дублей %d)" % [hh["data"]["wicon"], hh["data"]["wname"], amount, hh["wlvl"], hh["wdupes"]], Color("#ffb02e"))
+		hh["wdupes"] += amount
+		_popup_center("🔫 ОРУЖИЕ: %s · %s %s\n+%d дубль" % [hh["data"]["name"], hh["data"]["wicon"], hh["data"]["wname"], amount], Color("#ffb02e"))
 	else:
-		var keys := impl.keys()
+		var keys := IMPL_DEFS.keys()
 		var key: String = keys[randi() % keys.size()]
-		impl[key]["dupes"] += amount
-		var im = impl[key]
-		_popup_center("📦 ШМОТКА: %s %s\n+%d дубль (★%d, дублей %d)" % [im["icon"], im["name"], amount, im["lvl"], im["dupes"]], Color("#00f0ff"))
+		hh["impl"][key]["dupes"] += amount
+		var im = IMPL_DEFS[key]
+		_popup_center("📦 ИМПЛАНТ: %s · %s %s\n+%d дубль" % [hh["data"]["name"], im["icon"], im["name"], amount], Color("#00f0ff"))
 
 func _merge_weapon(i: int) -> void:
 	var hh = heroes[i]
