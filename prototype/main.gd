@@ -26,7 +26,11 @@ const FORMATION := [
 var heroes := []
 var enemies := []
 var phase := "march"      # march | fight | dead
-var wave := 0
+var wave := 0             # эффективный индекс сложности = (stage-1)*5 + (5 если босс, иначе sub)
+var stage := 1            # СТАДИЯ (прогресс): 4 норм-волны + босс-ворота; шмот только с босса
+var sub := 1             # позиция в стадии: 1..4 норм-волны (фарм-круг)
+var in_boss := false      # сейчас бой с боссом
+var boss_btn: Button      # кнопка «⚔ К БОССУ»
 var march_t := 0.0
 var hack_mult := 1.0
 var hack_t := 0.0
@@ -291,6 +295,9 @@ func _reset() -> void:
 	gold_ps = 2.0
 	impl_sel = 0
 	dry_streak = 0
+	stage = 1
+	sub = 1
+	in_boss = false
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
@@ -339,9 +346,9 @@ func _front_hero() -> Variant:
 	return null
 
 func _spawn_wave() -> void:
-	wave += 1
-	var boss := (wave % 5 == 0)
-	var count := (1 if boss else (1 + (wave % 3)))
+	var boss := in_boss
+	wave = (stage - 1) * 5 + (5 if boss else sub)   # сложность по стадии/позиции (фарм НЕ инфлейтит)
+	var count := (1 if boss else (1 + (sub % 3)))
 	var hpmul := pow(1.12, wave)   # мягко-экспоненциальный рост HP (LOOT-RULES §10) → стена→гринд
 	for j in count:
 		var glow := Color("#ff5050") if not boss else Color("#ff2d95")
@@ -403,12 +410,22 @@ func _process(delta: float) -> void:
 
 	if _all_dead(enemies):
 		enemies.clear()
-		if _all_dead(heroes):
-			return
-		_drop_implant()
+		if in_boss:
+			# 🏆 БОСС ПРОЙДЕН → шмот (только тут!) + следующая стадия
+			_drop_implant()
+			stage += 1
+			sub = 1
+			in_boss = false
+			_popup_center("🏆 СТАДИЯ %d ПРОЙДЕНА" % (stage - 1), Color("#ffd24a"))
+		else:
+			sub = sub + 1 if sub < 4 else 1   # фарм-круг норм-волн стадии (золото, без шмота)
 		_start_march()
 	elif _all_dead(heroes):
-		_die()
+		# ☠ ВАЙП → НЕ рестарт: откат на фарм стадии (отряд воскреснет в _start_march), шмот цел
+		_popup_center("☠ Босс не пройден — фарми и возвращайся" if in_boss else "☠ Отряд пал — перегруппировка", Color("#ff5050"))
+		in_boss = false
+		sub = 1
+		_start_march()
 	_refresh_hud()
 
 func _hero_hit(hh: Dictionary) -> void:
@@ -512,6 +529,16 @@ func _auto_cast() -> void:
 				_sniper_fire(hh, tgt)
 		else:
 			_use_ult(i)
+	_refresh_hud()
+
+func _go_boss() -> void:
+	if in_boss or phase == "dead":
+		return
+	in_boss = true
+	for e in enemies:
+		if e["node"]: e["node"].queue_free()
+	enemies.clear()
+	_start_march()   # следующий спавн = босс (in_boss=true)
 	_refresh_hud()
 
 func _toggle_auto() -> void:
@@ -664,7 +691,9 @@ func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
 
 # --- HUD ---
 func _refresh_hud() -> void:
-	wave_label.text = "ВОЛНА  %d   📦 %d" % [max(wave, 0), implants_count] + ("   ⚔" if phase == "fight" else ("   ▶" if phase == "march" else ""))
+	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/4" % [stage, sub]) + ("   ⚔" if phase == "fight" else "   ▶")
+	if boss_btn:
+		boss_btn.visible = not in_boss   # «К боссу» — только в фарм-режиме
 	# полоса босса
 	var bz = null
 	for e in enemies:
@@ -699,19 +728,12 @@ func _refresh_hud() -> void:
 		# hp на портрете
 		hero_hp[i].size.x = 118.0 * (float(hh["hp"]) / float(hh["max"]))
 		hero_hp[i].visible = hh["alive"]
-	# прогресс этапа (флажки, 5-я волна = босс)
-	if wave > 0:
-		var win: int = ((wave - 1) % 5) + 1
-		var st: int = ((wave - 1) / 5) + 1
-		var flags := ""
-		for k in range(1, 6):
-			if k <= win:
-				flags += "⚑" if k == 5 else "▪"
-			else:
-				flags += "▫"
-		stage_label.text = "ЭТАП %d   %s" % [st, flags]
-	else:
-		stage_label.text = ""
+	# прогресс стадии: 4 норм-волны + ворота-босс
+	var flags := ""
+	for k in range(1, 5):
+		flags += "▪" if k <= sub else "▫"
+	flags += "  👹" if in_boss else "  ▷"
+	stage_label.text = flags
 	# золото + прокачка урона
 	gold_label.text = "💰 %d   +%d/с" % [int(gold), int(gold_ps)]
 	if inv_open: _refresh_inv()
@@ -770,6 +792,19 @@ func _build() -> void:
 	auto_btn.position = Vector2(W - 204, 14)
 	auto_btn.pressed.connect(_toggle_auto)
 	hud.add_child(auto_btn)
+	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
+	boss_btn = Button.new()
+	boss_btn.text = "👹 К БОССУ"
+	boss_btn.add_theme_font_size_override("font_size", 17)
+	boss_btn.custom_minimum_size = Vector2(190, 42)
+	boss_btn.position = Vector2(W * 0.5 - 95, 60)
+	var bsb := StyleBoxFlat.new()
+	bsb.bg_color = Color(0.32, 0.05, 0.14, 0.96); bsb.set_corner_radius_all(10)
+	bsb.border_color = Color("#ff2d95"); bsb.set_border_width_all(2)
+	for st in ["normal", "hover", "pressed", "focus"]:
+		boss_btn.add_theme_stylebox_override(st, bsb)
+	boss_btn.pressed.connect(_go_boss)
+	hud.add_child(boss_btn)
 	# прогресс этапа (флажки до босса)
 	stage_label = Label.new()
 	stage_label.add_theme_color_override("font_color", Color("#7a7f99"))
@@ -1359,10 +1394,7 @@ func _do_merge_selected() -> void:
 # дроп дубликата после волны (босс гарант 2, обычная волна шанс) → копишь → мерджишь.
 # 40% оружие / 60% имплант — всё ПОД КОНКРЕТНОГО бойца (случайного)
 func _drop_implant() -> void:
-	var was_boss := (wave % 5 == 0)
-	if not was_boss and randf() > 0.5:
-		return
-	var amount := 2 if was_boss else 1
+	var amount := 2   # награда ТОЛЬКО за босса (обычные волны шмот не дают)
 	implants_count += 1
 	var i := randi() % heroes.size()
 	var hh = heroes[i]
