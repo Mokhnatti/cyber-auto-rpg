@@ -6,10 +6,10 @@ extends Control
 
 const HEROES := [
 	# atk_type: snipe/single/aoe/tank · hpg/dmgg = рост HP/урона за уровень (профиль класса)
-	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "ult": "burst",  "ult_cd": 9.0},
-	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "ult": "barrage","ult_cd": 8.0},
-	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "ult": "shield", "ult_cd": 11.0},
-	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "ult": "hack",   "ult_cd": 10.0},
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "crit": 0.30, "critx": 2.2, "ult": "burst",  "ult_cd": 9.0},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "crit": 0.10, "critx": 1.6, "ult": "barrage","ult_cd": 8.0},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0},
 ]
 const W := 600.0
 const H := 960.0
@@ -229,17 +229,21 @@ func _hero_hit(hh: Dictionary) -> void:
 	if e == null: return
 	hh["atk_anim"] = 0.18
 	var base := int(round(hh["dmg"] * aura_dmg * hack_mult))
+	var is_crit: bool = randf() < hh["data"]["crit"]
+	if is_crit: base = int(base * hh["data"]["critx"])
 	if hh["data"]["atk_type"] == "aoe":
 		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
 		for en in enemies:
 			if en["alive"]:
-				_deal(hh, en, max(1, int(base * 0.55)))
+				_deal(hh, en, max(1, int(base * 0.55)), is_crit)
 	else:
-		_deal(hh, e, base)   # снайпер/штурм/танк — одна цель (первый живой)
+		_deal(hh, e, base, is_crit)   # снайпер/штурм/танк — одна цель
 
-func _deal(hh: Dictionary, e: Dictionary, d: int) -> void:
+func _deal(hh: Dictionary, e: Dictionary, d: int, is_crit := false) -> void:
 	e["hp"] = max(0, e["hp"] - d)
-	_popup(str(d), hh["data"]["color"], e["node"].position + Vector2(randf_range(-10, 10), -86))
+	var col: Color = Color("#ffe14d") if is_crit else hh["data"]["color"]
+	var sz := 38 if is_crit else 26
+	_popup(str(d) + ("!" if is_crit else ""), col, e["node"].position + Vector2(randf_range(-10, 10), -86), sz)
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
 		gold += (40.0 if e.get("boss", false) else 5.0) * (1.0 + wave * 0.15)
