@@ -447,6 +447,10 @@ func _reboot() -> void:
 	for hh in heroes:
 		hh["level"] = 1; hh["lvl_cost"] = 30
 		hh["alive"] = true
+		if hh.get("fall_tw") != null and hh["fall_tw"].is_valid():
+			hh["fall_tw"].kill()
+		hh["node"].rotation = 0.0
+		hh["node"].modulate = Color(1, 1, 1, 1)
 	_apply_augments()
 	_recalc_auras()
 	for hh in heroes:
@@ -810,6 +814,8 @@ func _start_march() -> void:
 	for hh in heroes:
 		if not hh["alive"]:
 			hh["alive"] = true
+			if hh.get("fall_tw") != null and hh["fall_tw"].is_valid():
+				hh["fall_tw"].kill()   # убить твин падения, иначе перетрёт сброс → «застрял мёртвым»
 			var n = hh["node"]
 			n.rotation = 0.0
 			n.modulate = Color(1, 1, 1, 1)
@@ -996,7 +1002,7 @@ func _enemy_hit(e: Dictionary) -> void:
 	_popup("-" + str(dmg), Color("#ff4d4d"), hh["node"].position + Vector2(0, -86))
 	if hh["hp"] <= 0 and hh["alive"]:
 		hh["alive"] = false
-		_fall(hh["node"])
+		hh["fall_tw"] = _fall(hh["node"])
 		_recalc_auras()   # пал боец → пропала его аура
 
 func _use_ult(i: int) -> void:
@@ -1168,7 +1174,7 @@ func _qte_resolve(boss) -> void:
 			fh["hp"] = max(0, fh["hp"] - dmg)
 			_popup(str(dmg), Color("#ff3030"), fh["node"].position + Vector2(0, -90), 34)
 			if fh["hp"] <= 0:
-				fh["alive"] = false; _recalc_auras()
+				fh["alive"] = false; fh["fall_tw"] = _fall(fh["node"]); _recalc_auras()
 	else:
 		_popup_center("КОНТЕР %d/%d" % [qte_hits, qte_total], Color("#ffd24a"))
 
@@ -1242,11 +1248,12 @@ func _all_dead(arr: Array) -> bool:
 		if x["alive"]: return false
 	return true
 
-func _fall(node: Node2D) -> void:   # герои: только падают/блёкнут (их воскрешают)
+func _fall(node: Node2D) -> Tween:   # герои: падают/блёкнут (воскрешаются; твин убивается при воскрешении)
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(node, "rotation", 1.4, 0.3)
 	tw.tween_property(node, "modulate:a", 0.25, 0.3)
+	return tw
 
 func _fall_enemy(node: Node2D) -> void:   # враги: падают и ИСЧЕЗАЮТ (труп убирается)
 	var tw := create_tween()
@@ -1330,7 +1337,12 @@ func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
 
 # --- HUD ---
 func _refresh_hud() -> void:
-	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/4" % [stage, sub]) + ("   ⚔" if phase == "fight" else "   ▶")
+	var etypes := {}
+	for e in enemies:
+		if e["alive"] and not e.get("boss", false):
+			etypes[ENEMY_TYPES.get(e.get("type", "grunt"), ENEMY_TYPES["grunt"])["name"]] = true
+	var etxt: String = ("  ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
+	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/4" % [stage, sub]) + ("   ⚔" if phase == "fight" else "   ▶") + etxt
 	if boss_btn:
 		boss_btn.visible = boss_retry and not in_boss   # кнопка только для ретрая (свежий заход = авто)
 	# полоса босса
@@ -1805,7 +1817,7 @@ func _build_implants() -> void:
 		_arrow(Vector2(466, y + 25), anchors[key])
 		_add_slot(key, Vector2(470, y), 50, short[key])
 	var hint := Label.new()
-	hint.text = "Тапни пушку или слот импланта"
+	hint.text = "Слоты = части тела. Тап по слоту → выбор/прокачка импланта (даёт статы). Шмот падает с боссов"
 	hint.add_theme_color_override("font_color", Color("#5a6080"))
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
