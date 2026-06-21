@@ -528,7 +528,7 @@ func _build() -> void:
 	gold_label.position = Vector2(20, 104)
 	hud.add_child(gold_label)
 	inv_btn = Button.new()
-	inv_btn.text = "🦾 ИМПЛАНТЫ"
+	inv_btn.text = "📊 ПРОКАЧКА"
 	inv_btn.add_theme_font_size_override("font_size", 14)
 	inv_btn.custom_minimum_size = Vector2(152, 40)
 	inv_btn.position = Vector2(W - 168, 100)
