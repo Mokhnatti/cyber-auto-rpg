@@ -161,6 +161,8 @@ var scrap := 0             # ♻ ЛОМ: валюта с разбора шмот
 var cores := 0            # 🧬 ЯДРА — валюта престижа (трата на аугменты)
 var best_stage := 1       # лучшая достигнутая стадия (для Memory-Bonus старта)
 var aug_lvl := {}         # id аугмента → уровень (persist через перезагрузку)
+var equipped_augs := []   # id аугментов в активных слотах (только они действуют)
+var slots_bought := 0     # докуплено слотов за ядра
 var reboot_panel: Control
 var reboot_list: VBoxContainer
 var reboot_info: Label
@@ -308,9 +310,38 @@ func _al(id: String) -> int:
 func _augsum(stat: String) -> float:
 	var s := 0.0
 	for a in AUGMENTS:
-		if a["stat"] == stat:
+		if a["stat"] == stat and a["id"] in equipped_augs:   # действуют ТОЛЬКО в слотах
 			s += _al(a["id"]) * a["per"]
 	return s
+
+# всего слотов: база 3 + докупленные + бесплатные за рубежи стадий
+func _slot_total() -> int:
+	var milestones := 0
+	for t in [20, 60, 120, 220]:
+		if best_stage >= t: milestones += 1
+	return min(10, 3 + slots_bought + milestones)
+
+func _slot_cost() -> int:
+	return int(150 * pow(2, slots_bought))   # дорого, ×2 за каждый купленный
+
+func _buy_slot() -> void:
+	if _slot_total() >= 10:
+		return
+	var c := _slot_cost()
+	if cores < c:
+		return
+	cores -= c
+	slots_bought += 1
+	_refresh_reboot(); _refresh_hud()
+
+func _equip_aug(id: String) -> void:
+	if id in equipped_augs:
+		equipped_augs.erase(id)
+	elif _al(id) > 0 and equipped_augs.size() < _slot_total():
+		equipped_augs.append(id)
+	_apply_augments()
+	_recalc_auras()
+	_refresh_reboot(); _refresh_hud()
 
 func _apply_augments() -> void:
 	aug_dmg = 1.0 + _augsum("dmg")
@@ -425,27 +456,61 @@ func _build_reboot() -> void:
 	reboot_panel.add_child(close)
 
 func _refresh_reboot() -> void:
-	reboot_info.text = "🧬 ЯДЕР: %d    при перезагрузке: +%d    старт со стадии %d" % [cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5)))]
+	reboot_info.text = "🧬 ЯДЕР: %d   +%d за перезагрузку   старт стадия %d   🎒 слоты %d/%d" % [cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5))), equipped_augs.size(), _slot_total()]
 	for c in reboot_list.get_children():
 		c.queue_free()
+	# карточка докупки слота
+	var scard := PanelContainer.new()
+	var ssb := StyleBoxFlat.new()
+	ssb.bg_color = Color(0.10, 0.08, 0.16, 0.95); ssb.set_corner_radius_all(10); ssb.set_content_margin_all(10)
+	ssb.border_color = Color("#7a5aa8"); ssb.set_border_width_all(1)
+	scard.add_theme_stylebox_override("panel", ssb)
+	scard.custom_minimum_size = Vector2(516, 0)
+	var shb := HBoxContainer.new(); shb.add_theme_constant_override("separation", 8); scard.add_child(shb)
+	var sinfo := VBoxContainer.new(); sinfo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var snm := Label.new(); snm.text = "🎒 Слоты лоадаута: %d / %d" % [equipped_augs.size(), _slot_total()]; snm.add_theme_font_size_override("font_size", 15); snm.add_theme_color_override("font_color", Color("#d9c7ff")); sinfo.add_child(snm)
+	var sds := Label.new(); sds.text = "активных аугментов одновременно (рубежи 20/60/120/220 дают +1)"; sds.add_theme_font_size_override("font_size", 11); sds.add_theme_color_override("font_color", Color("#9a8fb5")); sinfo.add_child(sds)
+	shb.add_child(sinfo)
+	var sbtn := Button.new(); sbtn.custom_minimum_size = Vector2(150, 48); sbtn.add_theme_font_size_override("font_size", 13)
+	if _slot_total() >= 10:
+		sbtn.text = "МАКС"; sbtn.disabled = true
+	else:
+		sbtn.text = "➕ СЛОТ\n%d 🧬" % _slot_cost(); sbtn.disabled = cores < _slot_cost()
+	sbtn.pressed.connect(_buy_slot)
+	shb.add_child(sbtn)
+	reboot_list.add_child(scard)
+	# карточки аугментов
 	for a in AUGMENTS:
 		var id: String = a["id"]
+		var lvl := _al(id)
+		var eq: bool = id in equipped_augs
 		var cost := _aug_cost(id)
 		var card := PanelContainer.new()
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(0.12, 0.10, 0.18, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
-		sb.border_color = Color("#5a4a78"); sb.set_border_width_all(1)
+		sb.border_color = Color("#b46bff") if eq else Color("#5a4a78"); sb.set_border_width_all(2 if eq else 1)
 		card.add_theme_stylebox_override("panel", sb)
 		card.custom_minimum_size = Vector2(516, 0)
-		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); card.add_child(hb)
+		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); card.add_child(hb)
 		var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var nm := Label.new(); nm.text = "%s %s  ур.%d" % [a["icon"], a["name"], _al(id)]; nm.add_theme_font_size_override("font_size", 15); nm.add_theme_color_override("font_color", Color("#d9c7ff")); info.add_child(nm)
-		var ds := Label.new(); ds.text = a["desc"]; ds.add_theme_font_size_override("font_size", 12); ds.add_theme_color_override("font_color", Color("#9a8fb5")); info.add_child(ds)
+		var nm := Label.new(); nm.text = "%s %s  ур.%d%s" % [a["icon"], a["name"], lvl, ("  ✓" if eq else "")]; nm.add_theme_font_size_override("font_size", 14); nm.add_theme_color_override("font_color", Color("#d9c7ff")); info.add_child(nm)
+		var ds := Label.new(); ds.text = a["desc"]; ds.add_theme_font_size_override("font_size", 11); ds.add_theme_color_override("font_color", Color("#9a8fb5")); info.add_child(ds)
 		hb.add_child(info)
-		var bb := Button.new(); bb.custom_minimum_size = Vector2(150, 48); bb.add_theme_font_size_override("font_size", 13)
-		bb.text = "%s\n%d 🧬" % ["ОТКРЫТЬ" if _al(id) == 0 else "УЛУЧШИТЬ", cost]
-		bb.disabled = cores < cost
 		var aid: String = id
+		var ebtn := Button.new(); ebtn.custom_minimum_size = Vector2(118, 48); ebtn.add_theme_font_size_override("font_size", 12)
+		if eq:
+			ebtn.text = "СНЯТЬ"
+		elif lvl == 0:
+			ebtn.text = "—"; ebtn.disabled = true
+		elif equipped_augs.size() >= _slot_total():
+			ebtn.text = "нет слота"; ebtn.disabled = true
+		else:
+			ebtn.text = "🎒 ЭКИП"
+		ebtn.pressed.connect(func(): _equip_aug(aid))
+		hb.add_child(ebtn)
+		var bb := Button.new(); bb.custom_minimum_size = Vector2(118, 48); bb.add_theme_font_size_override("font_size", 12)
+		bb.text = "%s\n%d 🧬" % ["ОТКРЫТЬ" if lvl == 0 else "УЛУЧШ", cost]
+		bb.disabled = cores < cost
 		bb.pressed.connect(func(): _buy_aug(aid))
 		hb.add_child(bb)
 		reboot_list.add_child(card)
@@ -481,6 +546,8 @@ func _reset() -> void:
 	cores = 0
 	best_stage = 1
 	aug_lvl.clear()
+	equipped_augs.clear()
+	slots_bought = 0
 	_apply_augments()
 	stage = 1
 	sub = 1
