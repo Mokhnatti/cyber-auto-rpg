@@ -22,18 +22,20 @@ with sync_playwright() as p:
         pg.mouse.click(x, y); time.sleep(pause)
 
     shot("0_start")
-    click(545, 32);  shot("1_speed")          # кнопка скорости x1/x2/x3
-    click(508, 120); shot("2_inv_open")        # ПРОКАЧКА (открыть)
+    click(545, 32);  shot("1_speed")          # скорость x1/x2/x3 (верх-право)
+    click(448, 32)                             # 🤖 АВТО вкл (верх-право)
+    click(448, 32); shot("1b_auto")            # 🤖 АВТО выкл
+    click(174, 932); shot("2_inv_open")        # 📊 ПРОКАЧКА (нижний бар)
     for yy in (162, 264, 366, 468):            # 4 кнопки уровня
         click(360, yy)
     shot("3_levelups")
-    click(300, 810); shot("4_after_close")     # ЗАКРЫТЬ (должен вернуть в бой)
-    click(86, 880);  shot("5_ult_snipe")       # ульта снайпера → режим прицела
+    click(300, 810); shot("4_after_close")     # ЗАКРЫТЬ (вернуть в бой)
+    click(86, 800);  shot("5_ult_snipe")       # ульта снайпера → режим прицела (бар поднят)
     click(480, 560); shot("6_snipe_shot")      # тап врага → выстрел
-    click(228, 880)                            # ульта штурма
-    click(370, 880)                            # ульта танка
-    click(512, 880); shot("7_ults")            # ульта хакера
-    click(300, 940); shot("8_restart")         # РЕСТАРТ
+    click(228, 800)                            # ульта штурма
+    click(370, 800)                            # ульта танка
+    click(512, 800); shot("7_ults")            # ульта хакера
+    click(33, 30);   shot("8_restart")         # ↻ РЕСТАРТ (лев-верх угол)
     b.close()
 
 print("=== СМОК-ТЕСТ ===")

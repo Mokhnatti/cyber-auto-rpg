@@ -603,7 +603,7 @@ func _build() -> void:
 	wave_label = Label.new()
 	wave_label.add_theme_color_override("font_color", Color("#ffb02e"))
 	wave_label.add_theme_font_size_override("font_size", 22)
-	wave_label.position = Vector2(20, 16)
+	wave_label.position = Vector2(66, 16)
 	hud.add_child(wave_label)
 
 	# полоса HP босса вверху (появляется в босс-волне)
@@ -652,22 +652,6 @@ func _build() -> void:
 	gold_label.add_theme_font_size_override("font_size", 18)
 	gold_label.position = Vector2(20, 104)
 	hud.add_child(gold_label)
-	inv_btn = Button.new()
-	inv_btn.text = "📊 ПРОКАЧКА"
-	inv_btn.add_theme_font_size_override("font_size", 14)
-	inv_btn.custom_minimum_size = Vector2(152, 40)
-	inv_btn.position = Vector2(W - 168, 100)
-	inv_btn.pressed.connect(_toggle_inv)
-	hud.add_child(inv_btn)
-	_build_inventory()
-	impl_btn = Button.new()
-	impl_btn.text = "🦾 ЭКИПИРОВКА"
-	impl_btn.add_theme_font_size_override("font_size", 14)
-	impl_btn.custom_minimum_size = Vector2(152, 40)
-	impl_btn.position = Vector2(W - 168, 146)
-	impl_btn.pressed.connect(_toggle_impl)
-	hud.add_child(impl_btn)
-	_build_implants()
 
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 24)
@@ -682,7 +666,7 @@ func _build() -> void:
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 8)
 	bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	bar.position = Vector2(0, H - 118)
+	bar.position = Vector2(0, H - 150)
 	bar.size = Vector2(W, 84)
 	hud.add_child(bar)
 	hero_ults.clear(); hero_hp.clear(); hero_charge.clear()
@@ -712,10 +696,39 @@ func _build() -> void:
 		bar.add_child(b)
 		hero_ults.append(b); hero_hp.append(hpf); hero_charge.append(ch)
 
+	# === НИЖНИЙ БАР МЕНЮ: Прокачка / Экипировка / Настройки ===
+	var menubar := HBoxContainer.new()
+	menubar.add_theme_constant_override("separation", 8)
+	menubar.alignment = BoxContainer.ALIGNMENT_CENTER
+	menubar.position = Vector2(0, H - 50); menubar.size = Vector2(W, 42)
+	hud.add_child(menubar)
+	inv_btn = Button.new()
+	inv_btn.text = "📊 ПРОКАЧКА"
+	inv_btn.add_theme_font_size_override("font_size", 14)
+	inv_btn.custom_minimum_size = Vector2(168, 42)
+	inv_btn.pressed.connect(_toggle_inv)
+	menubar.add_child(inv_btn)
+	impl_btn = Button.new()
+	impl_btn.text = "🦾 ЭКИПИРОВКА"
+	impl_btn.add_theme_font_size_override("font_size", 14)
+	impl_btn.custom_minimum_size = Vector2(176, 42)
+	impl_btn.pressed.connect(_toggle_impl)
+	menubar.add_child(impl_btn)
+	var settings_btn := Button.new()
+	settings_btn.text = "⚙"
+	settings_btn.add_theme_font_size_override("font_size", 18)
+	settings_btn.custom_minimum_size = Vector2(60, 42)
+	settings_btn.pressed.connect(func(): _popup_center("⚙ Настройки — скоро", Color("#7a7f99")))
+	menubar.add_child(settings_btn)
+	_build_inventory()
+	_build_implants()
+
+	# === РЕСТАРТ — в левом верхнем углу (слева от «ВОЛНА»), чтоб не задеть случайно ===
 	var restart := Button.new()
-	restart.text = "↻ РЕСТАРТ"
-	restart.custom_minimum_size = Vector2(160, 36)
-	restart.position = Vector2(W * 0.5 - 80, H - 38)
+	restart.text = "↻"
+	restart.add_theme_font_size_override("font_size", 18)
+	restart.custom_minimum_size = Vector2(46, 32)
+	restart.position = Vector2(10, 14)
 	restart.pressed.connect(_reset)
 	hud.add_child(restart)
 
