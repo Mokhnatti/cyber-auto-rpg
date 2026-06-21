@@ -48,17 +48,51 @@ var speed_idx := 0
 var implants_count := 0
 # --- idle-экономика (пассивная модель §4А) ---
 var gold := 0.0
-var gold_ps := 2.0          # пассивный доход в секунду
-var dmg_mult := 1.0         # глобальный множитель урона (прокачка за золото)
-var upg_cost := 50          # цена след. апгрейда урона
+var gold_ps := 2.0          # пассивный доход в секунду (база, растит нейрочип)
+var dmg_mult := 1.0         # производные от уровней имплантов (_apply_implants)
+var atk_mult := 1.0
+var hp_mult := 1.0
+var ult_mult := 1.0
 var gold_label: Label
-var upg_btn: Button
-var boss_timer := 0.0       # таймер DPS-гейта на боссе
+var inv_btn: Button
+var inv_panel: Control
+var inv_open := false
+var inv_rows := {}          # ключ слота → {lvl: Label, btn: Button, stat: Label}
+# ИМПЛАНТЫ по слотам тела (псевдо-скелет): уровень апается за золото
+var implants := {
+	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "stat": "доход", "lvl": 0, "cost": 60,  "c0": 60},
+	"optic": {"icon": "👁", "name": "Оптика · глаза", "stat": "урон", "lvl": 0, "cost": 40,  "c0": 40},
+	"arms":  {"icon": "🦾", "name": "Сервоприводы · руки", "stat": "скор. атаки", "lvl": 0, "cost": 45, "c0": 45},
+	"core":  {"icon": "🫀", "name": "Реактор · тело", "stat": "HP отряда", "lvl": 0, "cost": 55, "c0": 55},
+	"ult":   {"icon": "⚡", "name": "Ядро · ульта", "stat": "мощь ульт", "lvl": 0, "cost": 80, "c0": 80},
+}
+
+func _apply_implants() -> void:
+	dmg_mult = 1.0 + implants["optic"]["lvl"] * 0.25
+	atk_mult = 1.0 + implants["arms"]["lvl"] * 0.08
+	hp_mult = 1.0 + implants["core"]["lvl"] * 0.20
+	gold_ps = 2.0 + implants["neuro"]["lvl"] * 1.5
+	ult_mult = 1.0 + implants["ult"]["lvl"] * 0.30
+	for hh in heroes:
+		var base_hp: int = hh["data"]["hp"]
+		hh["max"] = int(base_hp * hp_mult)
+		if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _ready() -> void:
 	randomize()
+	_setup_font()
 	_build()
 	_reset()
+
+func _setup_font() -> void:
+	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
+	var base: FontFile = load("res://DejaVuSans.ttf")
+	var emoji: FontFile = load("res://NotoColorEmoji.ttf")
+	if base and emoji:
+		base.fallbacks = [emoji]
+		var th := Theme.new()
+		th.default_font = base
+		theme = th
 
 func _reset() -> void:
 	for c in world.get_children():
@@ -68,8 +102,10 @@ func _reset() -> void:
 	wave = 0
 	implants_count = 0
 	gold = 0.0
-	dmg_mult = 1.0
-	upg_cost = 50
+	for k in implants:
+		implants[k]["lvl"] = 0
+		implants[k]["cost"] = implants[k]["c0"]
+	_apply_implants()
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
@@ -157,7 +193,7 @@ func _process(delta: float) -> void:
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			hh["t"] = hh["atk_spd"]
+			hh["t"] = hh["atk_spd"] / atk_mult
 			_hero_hit(hh)
 	for e in enemies:
 		if not e["alive"]: continue
@@ -222,7 +258,7 @@ func _use_ult(i: int) -> void:
 			var e = _first_alive(enemies)
 			if e:
 				var mul := 6 if hh["data"]["ult"] == "burst" else 8
-				var d := int(hh["dmg"] * mul * dmg_mult * hack_mult)
+				var d := int(hh["dmg"] * mul * dmg_mult * ult_mult * hack_mult)
 				e["hp"] = max(0, e["hp"] - d)
 				_popup("УЛЬТА " + str(d), hh["data"]["color"], e["node"].position + Vector2(0, -100), 40)
 				if e["hp"] <= 0 and e["alive"]:
@@ -414,8 +450,7 @@ func _refresh_hud() -> void:
 		stage_label.text = ""
 	# золото + прокачка урона
 	gold_label.text = "💰 %d   +%d/с" % [int(gold), int(gold_ps)]
-	upg_btn.text = "⬆ УРОН ×%.1f\n%d 💰" % [dmg_mult + 0.5, upg_cost]
-	upg_btn.disabled = gold < upg_cost
+	if inv_open: _refresh_inv()
 
 func _build() -> void:
 	# фон
@@ -474,12 +509,14 @@ func _build() -> void:
 	gold_label.add_theme_font_size_override("font_size", 18)
 	gold_label.position = Vector2(20, 104)
 	hud.add_child(gold_label)
-	upg_btn = Button.new()
-	upg_btn.add_theme_font_size_override("font_size", 13)
-	upg_btn.custom_minimum_size = Vector2(152, 38)
-	upg_btn.position = Vector2(W - 168, 100)
-	upg_btn.pressed.connect(_buy_upgrade)
-	hud.add_child(upg_btn)
+	inv_btn = Button.new()
+	inv_btn.text = "🦾 ИМПЛАНТЫ"
+	inv_btn.add_theme_font_size_override("font_size", 14)
+	inv_btn.custom_minimum_size = Vector2(152, 40)
+	inv_btn.position = Vector2(W - 168, 100)
+	inv_btn.pressed.connect(_toggle_inv)
+	hud.add_child(inv_btn)
+	_build_inventory()
 
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 24)
@@ -537,11 +574,109 @@ func _cycle_speed() -> void:
 	Engine.time_scale = v
 	speed_btn.text = "⏩ x%d" % int(v)
 
-func _buy_upgrade() -> void:
-	if gold >= upg_cost:
-		gold -= upg_cost
-		dmg_mult += 0.5
-		upg_cost = int(upg_cost * 1.6)
+func _toggle_inv() -> void:
+	inv_open = not inv_open
+	inv_panel.visible = inv_open
+	if inv_open: _refresh_inv()
+
+func _upgrade_implant(key: String) -> void:
+	var imp = implants[key]
+	if gold >= imp["cost"]:
+		gold -= imp["cost"]
+		imp["lvl"] += 1
+		imp["cost"] = int(imp["cost"] * 1.55)
+		_apply_implants()
+		_refresh_inv()
+
+func _build_inventory() -> void:
+	inv_panel = Control.new()
+	inv_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	inv_panel.visible = false
+	inv_panel.z_index = 2000   # поверх боевых спрайтов (у них z = позиция ~700)
+	hud.add_child(inv_panel)
+	var bg := ColorRect.new()
+	bg.color = Color(0.03, 0.03, 0.07, 0.96)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	inv_panel.add_child(bg)
+
+	var title := Label.new()
+	title.text = "🦾 ИМПЛАНТЫ ОТРЯДА"
+	title.add_theme_color_override("font_color", Color("#ffb02e"))
+	title.add_theme_font_size_override("font_size", 24)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.position = Vector2(0, 30); title.size = Vector2(W, 30)
+	inv_panel.add_child(title)
+
+	# силуэт-скелет (спрайт танка) слева
+	var sil := AnimatedSprite2D.new()
+	sil.sprite_frames = _frames("hero3")
+	sil.animation = "idle"; sil.play("idle")
+	sil.scale = Vector2(2.2, 2.2)
+	sil.position = Vector2(118, 360)
+	sil.modulate = Color(0.6, 0.75, 1.0, 0.9)
+	inv_panel.add_child(sil)
+	# подпись слотов на силуэте
+	var marks := {"neuro": -150, "optic": -110, "arms": -50, "core": 10, "ult": 70}
+	for key in marks:
+		var ml := Label.new()
+		ml.text = implants[key]["icon"]
+		ml.add_theme_font_size_override("font_size", 24)
+		ml.position = Vector2(92, 360 + marks[key])
+		inv_panel.add_child(ml)
+
+	# слоты-строки справа
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 12)
+	rows.position = Vector2(232, 120); rows.size = Vector2(348, 0)
+	inv_panel.add_child(rows)
+	inv_rows.clear()
+	for key in implants:
+		var imp = implants[key]
+		var row := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.1, 0.11, 0.18, 0.9)
+		sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
+		sb.border_color = Color("#2a3358"); sb.set_border_width_all(1)
+		row.add_theme_stylebox_override("panel", sb)
+		row.custom_minimum_size = Vector2(340, 0)
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 8)
+		row.add_child(hb)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var nm := Label.new()
+		nm.text = imp["icon"] + " " + imp["name"]
+		nm.add_theme_font_size_override("font_size", 14)
+		info.add_child(nm)
+		var st := Label.new()
+		st.add_theme_color_override("font_color", Color("#7a7f99"))
+		st.add_theme_font_size_override("font_size", 12)
+		info.add_child(st)
+		hb.add_child(info)
+		var ab := Button.new()
+		ab.custom_minimum_size = Vector2(96, 44)
+		ab.add_theme_font_size_override("font_size", 12)
+		var k: String = key
+		ab.pressed.connect(func(): _upgrade_implant(k))
+		hb.add_child(ab)
+		rows.add_child(row)
+		inv_rows[key] = {"stat": st, "btn": ab}
+
+	var close := Button.new()
+	close.text = "✕ ЗАКРЫТЬ"
+	close.add_theme_font_size_override("font_size", 16)
+	close.custom_minimum_size = Vector2(180, 44)
+	close.position = Vector2(W * 0.5 - 90, H - 70)
+	close.pressed.connect(_toggle_inv)
+	inv_panel.add_child(close)
+
+func _refresh_inv() -> void:
+	for key in implants:
+		var imp = implants[key]
+		var r = inv_rows[key]
+		r["stat"].text = "ур.%d · %s   ➜ +%s" % [imp["lvl"], imp["stat"], imp["stat"]]
+		r["btn"].text = "↑ ур.%d\n%d 💰" % [imp["lvl"] + 1, imp["cost"]]
+		r["btn"].disabled = gold < imp["cost"]
 
 # дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
 func _drop_implant() -> void:

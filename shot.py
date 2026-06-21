@@ -14,6 +14,11 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": 600, "height": 960}, device_scale_factor=1)
     page.goto(URL, wait_until="load", timeout=60000)
     time.sleep(WAIT)  # Godot wasm + coi reload + дать бою пойти
+    # опц. клик по canvas-координатам: 3-й арг "click:X,Y"
+    if len(sys.argv) > 3 and sys.argv[3].startswith("click:"):
+        x, y = sys.argv[3][6:].split(",")
+        page.mouse.click(float(x), float(y))
+        time.sleep(1.5)
     page.screenshot(path="/tmp/game_shot.png")
     browser.close()
     print("OK saved /tmp/game_shot.png")
