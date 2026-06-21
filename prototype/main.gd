@@ -31,6 +31,9 @@ var stage := 1            # СТАДИЯ (прогресс): 4 норм-волн
 var sub := 1             # позиция в стадии: 1..4 норм-волны (фарм-круг)
 var in_boss := false      # сейчас бой с боссом
 var boss_btn: Button      # кнопка «⚔ К БОССУ»
+var qte_t := 0.0          # до следующего QTE-замаха босса
+var qte_win := 0.0        # окно реакции на активный QTE (>0 = активен)
+var qte_btn: Button       # кнопка «⚡ КОНТЕР!»
 var march_t := 0.0
 var hack_mult := 1.0
 var hack_t := 0.0
@@ -362,7 +365,7 @@ func _spawn_wave() -> void:
 		var ehp := int(45.0 * hpmul * (3.0 if boss else 1.0))   # босс = скачок ×3 (стена-пик)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": int((10 if boss else 7) * (1.0 + wave * 0.12)),
+			"dmg": int((10 if boss else 7) * pow(1.075, wave)),   # урон тоже растёт → живучесть = отдельная стена
 			"atk": 1.5 if boss else 1.1, "t": 1.5, "alive": true, "boss": boss,
 			"home": Vector2(px, ey), "atk_anim": 0.0
 		})
@@ -407,6 +410,8 @@ func _process(delta: float) -> void:
 			_enemy_hit(e)
 	for hh in heroes:
 		if hh["shield"] > 0.0: hh["shield"] = max(0.0, hh["shield"] - delta)
+	if in_boss:
+		_qte_tick(delta)
 
 	if _all_dead(enemies):
 		enemies.clear()
@@ -535,11 +540,69 @@ func _go_boss() -> void:
 	if in_boss or phase == "dead":
 		return
 	in_boss = true
+	qte_t = 4.0; qte_win = 0.0
+	if qte_btn: qte_btn.visible = false
 	for e in enemies:
 		if e["node"]: e["node"].queue_free()
 	enemies.clear()
 	_start_march()   # следующий спавн = босс (in_boss=true)
 	_refresh_hud()
+
+# QTE на боссе: периодически замах → окно реакции → контр-бёрст или тяжёлый удар по отряду
+func _qte_tick(delta: float) -> void:
+	var boss = null
+	for e in enemies:
+		if e.get("boss", false) and e["alive"]:
+			boss = e; break
+	if boss == null:
+		if qte_btn: qte_btn.visible = false
+		return
+	if qte_win > 0.0:                       # окно активно
+		qte_win -= delta
+		if qte_win <= 0.0:                   # прозевал → босс бьёт тяжело
+			_qte_miss(boss)
+	else:
+		qte_t -= delta
+		if qte_t <= 0.0:                     # замах → показать кнопку
+			qte_win = 1.3
+			qte_btn.visible = true
+			_popup_center("⚠ ЗАМАХ БОССА — КОНТЕР!", Color("#ffd24a"))
+
+func _qte_hit() -> void:
+	if qte_win <= 0.0 or not in_boss:
+		return
+	qte_win = 0.0
+	qte_btn.visible = false
+	var boss = null
+	for e in enemies:
+		if e.get("boss", false) and e["alive"]:
+			boss = e; break
+	if boss == null:
+		return
+	# контр-бёрст: % от HP босса + залп урона отряда
+	var sq := 0
+	for hh in heroes:
+		if hh["alive"]: sq += int(hh["dmg"])
+	var d: int = int(boss["max"] * 0.07) + sq * 3
+	var att = _first_alive(heroes)
+	if att != null:
+		_deal(att, boss, d, true)
+	else:
+		boss["hp"] = max(0, boss["hp"] - d)
+	_popup_center("⚡ КОНТЕР! −%d" % d, Color("#00f0ff"))
+	qte_t = 4.5                              # до следующего замаха
+
+func _qte_miss(boss) -> void:
+	qte_btn.visible = false
+	var fh = _front_hero()
+	if fh != null:
+		var dmg: int = int(boss["dmg"] * 2.5)
+		fh["hp"] -= dmg
+		_popup(str(dmg), Color("#ff3030"), fh["node"].position + Vector2(0, -90), 34)
+		if fh["hp"] <= 0:
+			fh["hp"] = 0; fh["alive"] = false
+			_recalc_auras()
+	qte_t = 4.5
 
 func _toggle_auto() -> void:
 	auto_battle = not auto_battle
@@ -805,6 +868,22 @@ func _build() -> void:
 		boss_btn.add_theme_stylebox_override(st, bsb)
 	boss_btn.pressed.connect(_go_boss)
 	hud.add_child(boss_btn)
+	# QTE-кнопка «КОНТЕР!» (скилл-клапан на боссе) — видна только в активном окне
+	qte_btn = Button.new()
+	qte_btn.text = "⚡ КОНТЕР!"
+	qte_btn.add_theme_font_size_override("font_size", 26)
+	qte_btn.custom_minimum_size = Vector2(260, 84)
+	qte_btn.position = Vector2(W * 0.5 - 130, 470)
+	qte_btn.z_index = 50
+	var qsb := StyleBoxFlat.new()
+	qsb.bg_color = Color(0.95, 0.78, 0.1, 0.96); qsb.set_corner_radius_all(14)
+	qsb.border_color = Color("#fff7c0"); qsb.set_border_width_all(3)
+	for st in ["normal", "hover", "pressed", "focus"]:
+		qte_btn.add_theme_stylebox_override(st, qsb)
+	qte_btn.add_theme_color_override("font_color", Color(0.1, 0.05, 0.0))
+	qte_btn.pressed.connect(_qte_hit)
+	qte_btn.visible = false
+	hud.add_child(qte_btn)
 	# прогресс этапа (флажки до босса)
 	stage_label = Label.new()
 	stage_label.add_theme_color_override("font_color", Color("#7a7f99"))
