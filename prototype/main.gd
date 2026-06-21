@@ -54,6 +54,21 @@ var inv_btn: Button
 var inv_panel: Control
 var inv_open := false
 var hero_rows := []   # строки прокачки по героям: {lvl_btn}
+# ИМПЛАНТЫ-СКЕЛЕТ (шмотки) — дают БАЗОВЫЕ статы отряду; уровень потом множит (HP/урон)
+var impl_btn: Button
+var impl_panel: Control
+var impl_open := false
+var impl_rows := {}
+var impl := {
+	"core":  {"icon": "🫀", "name": "Реактор · тело", "slot": "+HP",        "lvl": 1, "cost": 50, "c0": 50},
+	"arms":  {"icon": "🦾", "name": "Сервоприводы · руки", "slot": "+урон", "lvl": 1, "cost": 45, "c0": 45},
+	"optic": {"icon": "👁", "name": "Оптика · глаза", "slot": "+крит",      "lvl": 1, "cost": 55, "c0": 55},
+	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки","lvl": 1, "cost": 50, "c0": 50},
+	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт","lvl": 1, "cost": 60, "c0": 60},
+}
+
+func _impl_lv(key: String) -> int:
+	return impl[key]["lvl"] - 1   # вклад импланта (lvl 1 = базовый, без бонуса)
 # пассивные ауры классов (пока боец жив — бафает весь отряд)
 var aura_hp := 1.0
 var aura_dmg := 1.0
@@ -82,8 +97,10 @@ func _recalc_auras() -> void:
 # пер-героя прокачка: УРОВЕНЬ (все статы) + ПУШКА (урон). Просто и понятно.
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
-	hh["dmg"] = int(round(hh["data"]["dmg"] * (1.0 + (lv - 1) * hh["data"]["dmgg"])))
-	hh["max"] = int(hh["data"]["hp"] * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp)
+	var base_dmg: int = hh["data"]["dmg"] + _impl_lv("arms") * 3    # база = класс + руки(шмотка)
+	var base_hp: int = hh["data"]["hp"] + _impl_lv("core") * 25     # база = класс + реактор(шмотка)
+	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"])))   # × множитель уровня
+	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp)
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _ready() -> void:
@@ -111,6 +128,9 @@ func _reset() -> void:
 	implants_count = 0
 	gold = 0.0
 	gold_ps = 2.0
+	for k in impl:
+		impl[k]["lvl"] = 1
+		impl[k]["cost"] = impl[k]["c0"]
 	hack_mult = 1.0
 	hack_t = 0.0
 	status_label.text = ""
@@ -204,7 +224,7 @@ func _process(delta: float) -> void:
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			var spd := aura_atk * (1.4 if atk_buff_t > 0.0 else 1.0)
+			var spd := aura_atk * (1.0 + _impl_lv("legs") * 0.04) * (1.4 if atk_buff_t > 0.0 else 1.0)
 			hh["t"] = hh["atk_spd"] / spd
 			_hero_hit(hh)
 	for e in enemies:
@@ -231,7 +251,8 @@ func _hero_hit(hh: Dictionary) -> void:
 	if e == null: return
 	hh["atk_anim"] = 0.18
 	var base := int(round(hh["dmg"] * aura_dmg * hack_mult))
-	var is_crit: bool = randf() < hh["data"]["crit"]
+	var crit_ch: float = hh["data"]["crit"] + _impl_lv("optic") * 0.02   # база крит + оптика(шмотка)
+	var is_crit: bool = randf() < crit_ch
 	if is_crit: base = int(base * hh["data"]["critx"])
 	if hh["data"]["atk_type"] == "aoe":
 		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
@@ -496,6 +517,7 @@ func _refresh_hud() -> void:
 	# золото + прокачка урона
 	gold_label.text = "💰 %d   +%d/с" % [int(gold), int(gold_ps)]
 	if inv_open: _refresh_inv()
+	if impl_open: _refresh_impl()
 
 func _build() -> void:
 	# фон
@@ -562,6 +584,14 @@ func _build() -> void:
 	inv_btn.pressed.connect(_toggle_inv)
 	hud.add_child(inv_btn)
 	_build_inventory()
+	impl_btn = Button.new()
+	impl_btn.text = "🦾 ИМПЛАНТЫ"
+	impl_btn.add_theme_font_size_override("font_size", 14)
+	impl_btn.custom_minimum_size = Vector2(152, 40)
+	impl_btn.position = Vector2(W - 168, 146)
+	impl_btn.pressed.connect(_toggle_impl)
+	hud.add_child(impl_btn)
+	_build_implants()
 
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 24)
@@ -701,6 +731,85 @@ func _refresh_inv() -> void:
 		var prio := "🛡 HP" if hh["data"]["hpg"] > hh["data"]["dmgg"] else "⚔ урон"
 		r["lvl_btn"].text = "⬆ УРОВЕНЬ %d   %d 💰\n+HP +урон · приоритет %s" % [hh["level"], hh["lvl_cost"], prio]
 		r["lvl_btn"].disabled = gold < hh["lvl_cost"]
+
+# --- ИМПЛАНТ-ИНВЕНТАРЬ (шмотки → база статов; уровень множит) ---
+func _toggle_impl() -> void:
+	impl_open = not impl_open
+	impl_panel.visible = impl_open
+	if impl_open: _refresh_impl()
+
+func _upgrade_impl(key: String) -> void:
+	var im = impl[key]
+	if gold >= im["cost"]:
+		gold -= im["cost"]
+		im["lvl"] += 1
+		im["cost"] = int(im["cost"] * 1.6)
+		for hh in heroes: _recalc_hero(hh)
+		_refresh_impl()
+
+func _build_implants() -> void:
+	impl_panel = Control.new()
+	impl_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	impl_panel.visible = false
+	impl_panel.z_index = 2000
+	hud.add_child(impl_panel)
+	var bg := ColorRect.new()
+	bg.color = Color(0.04, 0.05, 0.09, 0.99)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_impl())
+	impl_panel.add_child(bg)
+	var title := Label.new()
+	title.text = "🦾 ИМПЛАНТЫ — база статов"
+	title.add_theme_color_override("font_color", Color("#00f0ff"))
+	title.add_theme_font_size_override("font_size", 22)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.position = Vector2(0, 28); title.size = Vector2(W, 30)
+	impl_panel.add_child(title)
+	var sil := AnimatedSprite2D.new()
+	sil.sprite_frames = _frames("hero3")
+	sil.animation = "idle"; sil.play("idle")
+	sil.scale = Vector2(2.0, 2.0)
+	sil.position = Vector2(108, 330)
+	sil.modulate = Color(0.5, 0.7, 1.0, 0.85)
+	impl_panel.add_child(sil)
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 10)
+	rows.position = Vector2(216, 90); rows.size = Vector2(366, 0)
+	impl_panel.add_child(rows)
+	impl_rows.clear()
+	for key in impl:
+		var im = impl[key]
+		var row := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.1, 0.12, 0.2, 0.92)
+		sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
+		sb.border_color = Color("#2a3358"); sb.set_border_width_all(1)
+		row.add_theme_stylebox_override("panel", sb)
+		row.custom_minimum_size = Vector2(356, 0)
+		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); row.add_child(hb)
+		var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var nm := Label.new(); nm.text = im["icon"] + " " + im["name"]; nm.add_theme_font_size_override("font_size", 14); info.add_child(nm)
+		var st := Label.new(); st.add_theme_color_override("font_color", Color("#7a7f99")); st.add_theme_font_size_override("font_size", 12); info.add_child(st)
+		hb.add_child(info)
+		var ab := Button.new(); ab.custom_minimum_size = Vector2(100, 48); ab.add_theme_font_size_override("font_size", 12)
+		var k: String = key
+		ab.pressed.connect(func(): _upgrade_impl(k))
+		hb.add_child(ab)
+		rows.add_child(row)
+		impl_rows[key] = {"stat": st, "btn": ab}
+	var close := Button.new()
+	close.text = "✕ ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16)
+	close.custom_minimum_size = Vector2(200, 50); close.position = Vector2(W * 0.5 - 100, H - 150)
+	close.pressed.connect(_toggle_impl)
+	impl_panel.add_child(close)
+
+func _refresh_impl() -> void:
+	for key in impl:
+		var im = impl[key]
+		var r = impl_rows[key]
+		r["stat"].text = "★%d · %s (база)" % [im["lvl"], im["slot"]]
+		r["btn"].text = "↑ ★%d\n%d 💰" % [im["lvl"] + 1, im["cost"]]
+		r["btn"].disabled = gold < im["cost"]
 
 # дроп импланта после волны → бафф живому герою (ядро-петля: бой → лут → сильнее)
 func _drop_implant() -> void:
