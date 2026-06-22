@@ -1722,7 +1722,7 @@ func _upgrade_level(i: int) -> void:
 	while bought < n and gold >= hh["lvl_cost"]:
 		gold -= hh["lvl_cost"]
 		hh["level"] += 1
-		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.12) + 2   # мягкая кривая → быстрые лвлапы
+		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.09) + 2   # = росту дохода pow(1.09) → нет ножниц/софтвола, leveling доходит до гейта престижа
 		bought += 1
 	if bought > 0:
 		_recalc_hero(hh)
@@ -1826,7 +1826,7 @@ func _affordable_levels(hh: Dictionary) -> int:
 	var n := 0
 	while g >= cost and n < 100000:
 		g -= cost
-		cost = int(cost * 1.12) + 2
+		cost = int(cost * 1.09) + 2
 		n += 1
 	return n
 
