@@ -51,6 +51,8 @@ var restart_confirm: Control
 var _offline_gold := 0
 var _offline_secs := 0
 var show_dmg := true        # цифры урона над врагами (настройка)
+var show_cd := true         # цифры КД ульт (настройка)
+var set_cd_btn: Button
 var settings_panel: Control
 var set_dmg_btn: Button
 var nick_show: Label
@@ -538,6 +540,12 @@ func _build_nick_prompt() -> void:
 		nick_panel.visible = false
 		_save()
 		_send_telemetry("start"))
+	var upd := Button.new(); upd.text = "🔄 обновить версию"; upd.add_theme_font_size_override("font_size", 13); upd.custom_minimum_size = Vector2(0, 40); v.add_child(upd)
+	upd.pressed.connect(_clear_cache)
+
+func _clear_cache() -> void:   # очистка service worker + кэша → загрузка свежей версии (фикс «вижу старое»)
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("(async()=>{try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs){await r.unregister();}}if(self.caches){const ks=await caches.keys();for(const k of ks){await caches.delete(k);}}}catch(e){}location.reload(true);})();", true)
 
 func _prompt_nick() -> void:   # нативный ввод браузера — надёжно на мобиле (LineEdit в вебе клаву не цепляет)
 	if OS.has_feature("web"):
@@ -812,6 +820,8 @@ func _toggle_settings() -> void:
 func _refresh_settings() -> void:
 	if set_dmg_btn:
 		set_dmg_btn.text = "Цифры урона над врагами: %s" % ("ВКЛ ✅" if show_dmg else "ВЫКЛ ⬜")
+	if set_cd_btn:
+		set_cd_btn.text = "Цифры КД ульт: %s" % ("ВКЛ ✅" if show_cd else "ВЫКЛ ⬜")
 	if set_nick_input and nick != "" and nick != "гость":
 		set_nick_input.text = nick
 
@@ -833,6 +843,12 @@ func _build_settings() -> void:
 	set_dmg_btn = Button.new(); set_dmg_btn.add_theme_font_size_override("font_size", 16); set_dmg_btn.custom_minimum_size = Vector2(0, 52)
 	set_dmg_btn.pressed.connect(func(): show_dmg = not show_dmg; _save(); _refresh_settings())
 	v.add_child(set_dmg_btn)
+	set_cd_btn = Button.new(); set_cd_btn.add_theme_font_size_override("font_size", 16); set_cd_btn.custom_minimum_size = Vector2(0, 52)
+	set_cd_btn.pressed.connect(func(): show_cd = not show_cd; _save(); _refresh_settings())
+	v.add_child(set_cd_btn)
+	var cache_btn := Button.new(); cache_btn.text = "🔄 ОБНОВИТЬ ИГРУ (свежая версия)"; cache_btn.add_theme_font_size_override("font_size", 15); cache_btn.custom_minimum_size = Vector2(0, 50)
+	cache_btn.pressed.connect(_clear_cache)
+	v.add_child(cache_btn)
 	# смена ника (нативный браузерный ввод)
 	var nl := Label.new(); nl.text = "Твой ник (для теста):"; nl.add_theme_font_size_override("font_size", 14); nl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nl)
 	var save_nick := Button.new(); save_nick.text = "✏ Сменить ник"; save_nick.add_theme_font_size_override("font_size", 15); save_nick.custom_minimum_size = Vector2(0, 46)
@@ -910,7 +926,7 @@ func _save() -> void:
 	for hh in heroes:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "wlvl": hh["wlvl"], "wdupes": hh["wdupes"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
-		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
+		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "new_gear": new_gear, "heroes": hs,
 	}
@@ -930,6 +946,7 @@ func _load() -> void:
 		return
 	nick = str(d.get("nick", ""))
 	show_dmg = bool(d.get("show_dmg", true))
+	show_cd = bool(d.get("show_cd", true))
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0))
@@ -1545,7 +1562,8 @@ func _refresh_hud() -> void:
 		var hh = heroes[i]
 		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
 		hero_ults[i].disabled = not ready_ult
-		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh["data"]["name"], ("⚡ ГОТОВО" if ready_ult else "⏱ %.0fс" % hh["ult_t"])]
+		var cdtxt := ("⚡ ГОТОВО" if ready_ult else "⏱ %.0fс" % hh["ult_t"]) if show_cd else ("⚡" if ready_ult else "")
+		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh["data"]["name"], cdtxt]
 		# свечение когда ульта готова (border ignite à la AFK Arena)
 		if not hh["alive"]:
 			hero_ults[i].modulate = Color(0.4, 0.4, 0.4, 1)
