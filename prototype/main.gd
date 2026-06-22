@@ -1992,6 +1992,7 @@ func _build_implants() -> void:
 		var hsb := StyleBoxFlat.new(); hsb.bg_color = Color(0.07, 0.10, 0.18, 0.92); hsb.set_corner_radius_all(10); hsb.border_color = Color(HEROES[i]["color"]); hsb.set_border_width_all(2)
 		var hp := Panel.new(); hp.add_theme_stylebox_override("panel", hsb); hp.position = Vector2(16, ry); hp.size = Vector2(168, 134)
 		impl_panel.add_child(hp)
+		cell["hsb"] = hsb; cell["hcol"] = Color(HEROES[i]["color"])
 		var hic := _lbl(HEROES[i]["icon"], 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); hic.position = Vector2(16, ry + 8); hic.size = Vector2(168, 46); impl_panel.add_child(hic)
 		var hnm := _lbl(HEROES[i]["name"], 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); hnm.position = Vector2(16, ry + 56); hnm.size = Vector2(168, 20); impl_panel.add_child(hnm)
 		var hlv := _lbl("", 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); hlv.position = Vector2(20, ry + 80); hlv.size = Vector2(160, 48); impl_panel.add_child(hlv)
@@ -2032,6 +2033,9 @@ func _refresh_impl() -> void:
 		var hh = heroes[i]
 		var cell = impl_grid[i]
 		cell["hlv"].text = "ур. %d" % hh["level"]
+		var hnew: bool = _hero_has_new(i)   # боец с новым лутом → золотая рамка строки
+		cell["hsb"].border_color = Color("#ffd24a") if hnew else cell["hcol"]
+		cell["hsb"].set_border_width_all(4 if hnew else 2)
 		# --- оружие ---
 		var wnew: bool = new_gear.has("%d:weapon" % i)
 		cell["wlbl"].text = "%s\n%s\nур. %d" % [hh["data"]["wicon"], hh["data"]["wname"], hh["wlvl"]]
@@ -2231,10 +2235,14 @@ func _drop_implant() -> void:
 	implants_count += 1
 	var i := randi() % heroes.size()
 	var hh = heroes[i]
+	var ilvl: int = max(1, stage)   # УРОВЕНЬ ШМОТКИ ОТ СТАДИИ: глубже фарм = выше уровень = жирнее статы
 	if randf() < 0.35:
-		hh["wdupes"] += 1   # оружие (уровни ломом — потом)
-		new_gear["%d:weapon" % i] = true
-		_popup_center("🔫 %s: оружие %s" % [hh["data"]["name"], hh["data"]["wname"]], Color("#ffb02e"), 2.5)
+		if ilvl > hh["wlvl"]:
+			hh["wlvl"] = ilvl   # оружие тянется к уровню стадии
+			new_gear["%d:weapon" % i] = true
+			_popup_center("🔫 %s: оружие %s ур.%d" % [hh["data"]["name"], hh["data"]["wname"], ilvl], Color("#ffb02e"), 2.5)
+		else:
+			_popup_center("📦 %s: оружие (не выше)" % hh["data"]["name"], Color("#ffb02e"), 1.8)
 	else:
 		var cls: int = hh["cls"]
 		var variants = HERO_MODULE[cls]["variants"]
@@ -2244,12 +2252,13 @@ func _drop_implant() -> void:
 		var key := _ik(vid, rar)
 		var g = hh["gear"]["module"]
 		var it := _make_item(cls, vid, rar)
+		it["lvl"] = ilvl   # уровень от стадии
 		if not g.has(key) or _item_power(it) > _item_power(g[key]):
-			g[key] = it   # держим ЛУЧШИЙ ролл этой модели@редкости
+			g[key] = it   # лучшее (выше ур./ролл) — заменяет
 			new_gear["%d:module" % i] = true
-			_popup_center("✨ %s: %s %s\n%s" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], _rolls_text(it)], Color(RARITY[rar]["col"]), 2.5)
+			_popup_center("✨ %s: %s %s ур.%d\n%s" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], ilvl, _rolls_text(it)], Color(RARITY[rar]["col"]), 2.5)
 		else:
-			_popup_center("📦 %s: %s %s (ролл хуже)" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]), 2.0)
+			_popup_center("📦 %s: %s %s (не лучше)" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]), 2.0)
 	_recalc_hero(hh)
 
 func _merge_weapon(i: int) -> void:
