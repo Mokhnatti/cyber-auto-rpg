@@ -107,6 +107,26 @@ const IMPL_DEFS := {
 	"legs":  {"icon": "🦵", "name": "Приводы · ноги", "slot": "+скор.атаки"},
 	"neuro": {"icon": "🧠", "name": "Нейрочип · мозг", "slot": "+заряд ульт"},
 }
+# РЕДИЗАЙН (22.06): спецмодуль на КЛАСС (вместо 5 анатомических слотов). Ключ = индекс героя 0-3.
+# Каждый: иконка/имя слота + 3 варианта-модели (primary-стат может отличаться → билды).
+const HERO_MODULE := {
+	0: {"icon": "👁", "name": "Глаза", "variants": [
+		{"id": "eye1", "name": "Оптика-MK1", "stat": "crit"},
+		{"id": "eye2", "name": "Орлиный глаз", "stat": "crit"},
+		{"id": "eye3", "name": "Тепловизор", "stat": "dmg"}]},
+	1: {"icon": "🦾", "name": "Сервоприводы", "variants": [
+		{"id": "arm1", "name": "Серво-MK1", "stat": "dmg"},
+		{"id": "arm2", "name": "Гидро-усилитель", "stat": "dmg"},
+		{"id": "arm3", "name": "Турбо-сервы", "stat": "atk"}]},
+	2: {"icon": "🫀", "name": "Реактор", "variants": [
+		{"id": "core1", "name": "Реактор-MK1", "stat": "hp"},
+		{"id": "core2", "name": "Броненосец", "stat": "hp"},
+		{"id": "core3", "name": "Ядро-перегрев", "stat": "dmg"}]},
+	3: {"icon": "🧠", "name": "Нейрочип", "variants": [
+		{"id": "chip1", "name": "Нейро-MK1", "stat": "ult"},
+		{"id": "chip2", "name": "Овердрайв", "stat": "ult"},
+		{"id": "chip3", "name": "Тихий-протокол", "stat": "crit"}]},
+}
 # === ЛУТ-СИСТЕМА (CONCEPT §14) ===
 # до 3 моделей на слот (пока 2); у каждой основной стат (может отличаться от дефолта слота → билды)
 const ITEM_VARIANTS := {
@@ -211,7 +231,8 @@ const AUGMENTS := [
 	{"id": "reflex", "icon": "⚡", "name": "Рефлекс-усилитель", "stat": "qte", "per": 0.06, "desc": "+0.06с/ур окно QTE"},
 	{"id": "sweep", "icon": "👾", "name": "Эксплойт зачистки", "stat": "density", "per": 0.04, "desc": "−4%/ур HP врагов"},
 ]
-var impl_sel := 0          # выбранный боец в экране экипировки
+var impl_sel := 0          # выбранный боец (для окна сравнения)
+var impl_grid := []        # ячейки сетки 4×3: на бойца {hpl, wbtn,wlbl,wsb, mbtn,mlbl,msb}
 var new_gear := {}         # "героIdx:slot" → true: непросмотренная новая шмотка (подсветка NEW)
 var impl_hero_btns := []   # кнопки-портреты переключения бойца
 # СКЕЛЕТ-РАСКЛАДКА: слоты имплантов+оружие на неон-силуэте тела (по анатомии)
@@ -259,15 +280,12 @@ var conf_btn: Button
 func _ik(vid: String, rarity: int) -> String:
 	return vid + "@" + str(rarity)
 
-func _new_gear() -> Dictionary:
-	var gear := {}
-	var equip := {}
-	for slot in ITEM_VARIANTS:
-		gear[slot] = {}
-		var first = ITEM_VARIANTS[slot][0]
-		var key := _ik(first["id"], 1)
-		gear[slot][key] = {"vid": first["id"], "rarity": 1, "lvl": 1, "dupes": 0, "rolls": [_roll_stat(first["stat"])]}
-		equip[slot] = key
+func _new_gear(cls: int) -> Dictionary:
+	# РЕДИЗАЙН: один слот «module» на класс (стартовая MK1-модель, серый, lvl1)
+	var first = HERO_MODULE[cls]["variants"][0]
+	var key := _ik(first["id"], 1)
+	var gear := {"module": {key: {"vid": first["id"], "rarity": 1, "lvl": 1, "rolls": [_roll_stat(first["stat"])]}}}
+	var equip := {"module": key}
 	return {"gear": gear, "equip": equip}
 
 func _roll_stat(stat: String) -> Dictionary:
@@ -275,22 +293,22 @@ func _roll_stat(stat: String) -> Dictionary:
 	var val: int = max(1, int(round(STAT_ROLL[stat]["max"] * tier)))
 	return {"stat": stat, "val": val}
 
-func _variant(slot: String, vid: String) -> Dictionary:
-	for v in ITEM_VARIANTS[slot]:
+func _module_variant(cls: int, vid: String) -> Dictionary:
+	for v in HERO_MODULE[cls]["variants"]:
 		if v["id"] == vid:
 			return v
-	return ITEM_VARIANTS[slot][0]
+	return HERO_MODULE[cls]["variants"][0]
 
-# создать предмет: primary-стат модели + (rarity-1) случайных доп-статов
-func _make_item(slot: String, vid: String, rarity: int) -> Dictionary:
-	var v := _variant(slot, vid)
+# создать модуль: primary-стат модели + (rarity-1) случайных доп-статов
+func _make_item(cls: int, vid: String, rarity: int) -> Dictionary:
+	var v := _module_variant(cls, vid)
 	var rolls := [_roll_stat(v["stat"])]
 	var others := STAT_KEYS.duplicate()
 	others.erase(v["stat"])
 	others.shuffle()
 	for i in range(min(rarity - 1, others.size())):
 		rolls.append(_roll_stat(others[i]))
-	return {"vid": vid, "rarity": rarity, "lvl": 1, "dupes": 0, "rolls": rolls}
+	return {"vid": vid, "rarity": rarity, "lvl": 1, "rolls": rolls}
 
 func _item_power(it: Dictionary) -> int:   # грубая сила для сравнения «перефармить?»
 	var s := 0
@@ -695,9 +713,9 @@ func _reset() -> void:
 		d.position = Vector2(fp["x"], GROUND_Y + fp["y"])
 		d.z_index = int(d.position.y)   # ближние (танк) поверх дальних (снайпер)
 		world.add_child(d)
-		var g: Dictionary = _new_gear()
+		var g: Dictionary = _new_gear(i)
 		heroes.append({
-			"data": h, "node": d, "hp": h["hp"], "max": h["hp"],
+			"data": h, "node": d, "hp": h["hp"], "max": h["hp"], "cls": i,
 			"dmg": h["dmg"], "atk_spd": h["atk"],
 			"level": 1, "lvl_cost": 30,
 			"wlvl": 1, "wdupes": 0, "gear": g["gear"], "equip": g["equip"],
@@ -921,6 +939,10 @@ func _load() -> void:
 		heroes[i]["wlvl"] = int(s.get("wlvl", 1)); heroes[i]["wdupes"] = int(s.get("wdupes", 0))
 		if s.has("gear"): heroes[i]["gear"] = _coerce_gear(s["gear"])
 		if s.has("equip"): heroes[i]["equip"] = s["equip"]
+		# миграция со старой экип-системы (5 слотов) → новый «module»: пересоздать
+		if not heroes[i]["gear"].has("module") or not heroes[i]["equip"].has("module"):
+			var ng := _new_gear(i)
+			heroes[i]["gear"] = ng["gear"]; heroes[i]["equip"] = ng["equip"]
 	_apply_augments()
 	_recalc_auras()
 	for hh in heroes:
@@ -943,7 +965,7 @@ func _coerce_gear(gear: Dictionary) -> Dictionary:
 	for slot in gear:
 		for key in gear[slot]:
 			var it = gear[slot][key]
-			it["rarity"] = int(it["rarity"]); it["lvl"] = int(it["lvl"]); it["dupes"] = int(it["dupes"])
+			it["rarity"] = int(it["rarity"]); it["lvl"] = int(it["lvl"])
 			for r in it["rolls"]:
 				r["val"] = int(r["val"])
 	return gear
@@ -1916,96 +1938,45 @@ func _build_implants() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 26); title.size = Vector2(W, 30)
 	impl_panel.add_child(title)
-	# селектор бойца (4 портрета): переключает чьи импланты смотрим
-	var sel := HBoxContainer.new()
-	sel.add_theme_constant_override("separation", 6)
-	sel.position = Vector2(W * 0.5 - 288, 70); sel.size = Vector2(576, 0)
-	impl_panel.add_child(sel)
-	impl_hero_btns.clear()
-	for i in HEROES.size():
-		var pb := Button.new()
-		pb.text = HEROES[i]["icon"] + "\n" + HEROES[i]["name"]
-		pb.custom_minimum_size = Vector2(138, 50)
-		pb.add_theme_font_size_override("font_size", 13)
-		var idx := i
-		pb.pressed.connect(func(): impl_sel = idx; _refresh_impl())
-		sel.add_child(pb)
-		impl_hero_btns.append(pb)
-	impl_slots.clear()
-	# === СЛЕВА СВЕРХУ: ПОРТРЕТ БОЙЦА (сменный через селектор сверху) ===
-	var pb := Panel.new()
-	var psb := StyleBoxFlat.new()
-	psb.bg_color = Color(0.07, 0.10, 0.18, 0.92); psb.set_corner_radius_all(10)
-	psb.border_color = Color("#00f0ff"); psb.set_border_width_all(1)
-	pb.add_theme_stylebox_override("panel", psb)
-	pb.position = Vector2(16, 138); pb.size = Vector2(168, 92)
-	impl_panel.add_child(pb)
-	eq_portrait_ic = _lbl("", 40, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
-	eq_portrait_ic.position = Vector2(16, 144); eq_portrait_ic.size = Vector2(168, 48)
-	impl_panel.add_child(eq_portrait_ic)
-	eq_portrait_nm = _lbl("", 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER)
-	eq_portrait_nm.position = Vector2(16, 198); eq_portrait_nm.size = Vector2(168, 22)
-	impl_panel.add_child(eq_portrait_nm)
-	# === СЛЕВА НИЖЕ: ПУШКА (прямоугольник + статы), отдельный предмет ===
-	var wpos := Vector2(16, 246); var wsz := Vector2(168, 200)
-	var wsb := StyleBoxFlat.new()
-	wsb.bg_color = Color(0.13, 0.10, 0.03, 0.96); wsb.set_corner_radius_all(10)
-	wsb.border_color = Color("#ffb02e"); wsb.set_border_width_all(2)
-	var wbtn := Button.new()
-	wbtn.position = wpos; wbtn.custom_minimum_size = wsz; wbtn.size = wsz; wbtn.text = ""
-	for st in ["normal", "hover", "pressed", "focus"]:
-		wbtn.add_theme_stylebox_override(st, wsb)
-	wbtn.pressed.connect(func(): _select_slot("weapon"))
-	impl_panel.add_child(wbtn)
-	var wic := _lbl("", 46, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
-	wic.position = Vector2(wpos.x, wpos.y + 10); wic.size = Vector2(wsz.x, 52)
-	impl_panel.add_child(wic)
-	var wstar := _lbl("", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER)
-	wstar.position = Vector2(wpos.x, wpos.y + 64); wstar.size = Vector2(wsz.x, 18)
-	impl_panel.add_child(wstar)
-	eq_wpn_stats = _lbl("", 13, Color("#e0d4b0"), HORIZONTAL_ALIGNMENT_CENTER)
-	eq_wpn_stats.position = Vector2(wpos.x + 6, wpos.y + 88); eq_wpn_stats.size = Vector2(wsz.x - 12, 104)
-	impl_panel.add_child(eq_wpn_stats)
-	impl_slots["weapon"] = {"btn": wbtn, "sb": wsb, "star": wstar, "ic": wic}
-	# === ЦЕНТР: ТЕЛО (силуэт) ===
-	var bcx := 322.0
-	var body := Polygon2D.new()
-	body.polygon = _body_outline(bcx); body.color = Color(0.0, 0.94, 1.0, 0.10)
-	impl_panel.add_child(body)
-	var bout := Line2D.new()
-	bout.points = _body_outline(bcx); bout.closed = true
-	bout.width = 2.5; bout.default_color = Color(0.0, 0.94, 1.0, 0.5)
-	bout.joint_mode = Line2D.LINE_JOINT_ROUND
-	impl_panel.add_child(bout)
-	var head := Polygon2D.new()
-	head.polygon = _circle_pts(Vector2(bcx, 150), 30); head.color = Color(0.0, 0.94, 1.0, 0.12)
-	impl_panel.add_child(head)
-	_skel_line(_circle_pts(Vector2(bcx, 150), 30))
-	# === СПРАВА: ИМПЛАНТЫ + СТРЕЛКИ к частям тела ===
-	var short := {"neuro": "Мозг", "optic": "Глаза", "core": "Тело", "arms": "Руки", "legs": "Ноги"}
-	var anchors := {
-		"neuro": Vector2(bcx, 150), "optic": Vector2(bcx, 186),
-		"core": Vector2(bcx, 300), "arms": Vector2(bcx + 46, 300), "legs": Vector2(bcx, 478),
-	}
-	var ytop := {"neuro": 125, "optic": 178, "core": 278, "arms": 340, "legs": 452}
-	for key in ["neuro", "optic", "core", "arms", "legs"]:
-		var y: int = ytop[key]
-		_arrow(Vector2(466, y + 25), anchors[key])
-		_add_slot(key, Vector2(470, y), 50, short[key])
-	var hint := Label.new()
-	hint.text = "Слоты = части тела. Тап по слоту → выбор/прокачка импланта (даёт статы). Шмот падает с боссов"
-	hint.add_theme_color_override("font_color", Color("#5a6080"))
-	hint.add_theme_font_size_override("font_size", 13)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.position = Vector2(0, 636); hint.size = Vector2(W, 20)
-	impl_panel.add_child(hint)
+	var hdr := _lbl("боец              оружие            спецмодуль", 12, Color("#5a6080"), HORIZONTAL_ALIGNMENT_CENTER)
+	hdr.position = Vector2(0, 58); hdr.size = Vector2(W, 18)
+	impl_panel.add_child(hdr)
+	# СЕТКА 4×3: строка-боец [персонаж | пушка | спецмодуль]
+	impl_grid.clear()
+	for i in HEROES.size():   # героев ещё нет при сборке UI → статику берём из константы HEROES
+		var ry := 84 + i * 150
+		var cell := {}
+		var hsb := StyleBoxFlat.new(); hsb.bg_color = Color(0.07, 0.10, 0.18, 0.92); hsb.set_corner_radius_all(10); hsb.border_color = Color(HEROES[i]["color"]); hsb.set_border_width_all(2)
+		var hp := Panel.new(); hp.add_theme_stylebox_override("panel", hsb); hp.position = Vector2(16, ry); hp.size = Vector2(168, 134)
+		impl_panel.add_child(hp)
+		var hic := _lbl(HEROES[i]["icon"], 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); hic.position = Vector2(16, ry + 8); hic.size = Vector2(168, 46); impl_panel.add_child(hic)
+		var hnm := _lbl(HEROES[i]["name"], 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); hnm.position = Vector2(16, ry + 56); hnm.size = Vector2(168, 20); impl_panel.add_child(hnm)
+		var hlv := _lbl("", 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); hlv.position = Vector2(20, ry + 80); hlv.size = Vector2(160, 48); impl_panel.add_child(hlv)
+		cell["hlv"] = hlv
+		var wi := i
+		var wsb := StyleBoxFlat.new(); wsb.bg_color = Color(0.13, 0.10, 0.03, 0.96); wsb.set_corner_radius_all(10); wsb.border_color = Color("#ffb02e"); wsb.set_border_width_all(2)
+		var wb := Button.new(); wb.position = Vector2(192, ry); wb.size = Vector2(168, 134); wb.custom_minimum_size = Vector2(168, 134); wb.text = ""
+		for st in ["normal", "hover", "pressed", "focus", "disabled"]: wb.add_theme_stylebox_override(st, wsb)
+		wb.pressed.connect(func(): _open_compare(wi, "weapon"))
+		impl_panel.add_child(wb)
+		var wlbl := _lbl("", 12, Color("#e0d4b0"), HORIZONTAL_ALIGNMENT_CENTER); wlbl.position = Vector2(196, ry + 8); wlbl.size = Vector2(160, 120); wlbl.autowrap_mode = TextServer.AUTOWRAP_WORD; impl_panel.add_child(wlbl)
+		cell["wb"] = wb; cell["wsb"] = wsb; cell["wlbl"] = wlbl
+		var msb := StyleBoxFlat.new(); msb.bg_color = Color(0.10, 0.07, 0.16, 0.96); msb.set_corner_radius_all(10); msb.set_border_width_all(2)
+		var mb := Button.new(); mb.position = Vector2(368, ry); mb.size = Vector2(168, 134); mb.custom_minimum_size = Vector2(168, 134); mb.text = ""
+		for st in ["normal", "hover", "pressed", "focus", "disabled"]: mb.add_theme_stylebox_override(st, msb)
+		mb.pressed.connect(func(): _open_compare(wi, "module"))
+		impl_panel.add_child(mb)
+		var mlbl := _lbl("", 12, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); mlbl.position = Vector2(372, ry + 8); mlbl.size = Vector2(160, 120); mlbl.autowrap_mode = TextServer.AUTOWRAP_WORD; impl_panel.add_child(mlbl)
+		cell["mb"] = mb; cell["msb"] = msb; cell["mlbl"] = mlbl
+		impl_grid.append(cell)
+	var hint := _lbl("Тап по пушке/спецмодулю → сравнить и надеть. Лут падает с боссов.", 12, Color("#5a6080"), HORIZONTAL_ALIGNMENT_CENTER)
+	hint.position = Vector2(0, 84 + 4 * 150 + 8); hint.size = Vector2(W, 18); impl_panel.add_child(hint)
 	var close := Button.new()
 	close.text = "✕ ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16)
-	close.custom_minimum_size = Vector2(200, 50); close.position = Vector2(W * 0.5 - 100, H - 150)
+	close.custom_minimum_size = Vector2(200, 50); close.position = Vector2(W * 0.5 - 100, H - 110)
 	close.pressed.connect(_toggle_impl)
 	impl_panel.add_child(close)
 	_build_impl_detail()
-	_build_impl_confirm()
 
 func _hero_has_new(i: int) -> bool:
 	for k in new_gear:
@@ -2014,37 +1985,24 @@ func _hero_has_new(i: int) -> bool:
 	return false
 
 func _refresh_impl() -> void:
-	var hh = heroes[impl_sel]
-	for i in impl_hero_btns.size():
-		if _hero_has_new(i):
-			impl_hero_btns[i].modulate = Color(1.6, 1.3, 0.25)   # NEW → золотое свечение
-		else:
-			impl_hero_btns[i].modulate = Color(1, 1, 1) if i == impl_sel else Color(0.5, 0.5, 0.56)
-	# портрет бойца слева
-	eq_portrait_ic.text = hh["data"]["icon"]
-	eq_portrait_nm.text = hh["data"]["name"]
-	# статы пушки (база; % от шмоток наложатся позже — система статов пушки в CONCEPT)
-	var rof: float = 1.0 / float(hh["data"]["atk"])
-	eq_wpn_stats.text = "%s\n⚔ урон %d\n⏱ скоростр %.1f/с\n✷ крит %d%%" % [
-		hh["data"]["wname"], int(hh["data"]["dmg"]), rof, int(hh["data"]["crit"] * 100)]
-	# слоты: ★ надетой модели, цвет рамки = редкость надетого; ● = есть дубли для прокачки
-	for key in impl_slots:
-		var s = impl_slots[key]
-		var lvl: int; var dupes: int; var rar := 1
-		if key == "weapon":
-			lvl = hh["wlvl"]; dupes = hh["wdupes"]
-			s["ic"].text = hh["data"]["wicon"]
-			s["sb"].border_color = Color("#ffb02e"); s["sb"].set_border_width_all(2)
-		else:
-			var vid: String = hh["equip"][key]
-			var inst = hh["gear"][key][vid]
-			lvl = inst["lvl"]; dupes = inst["dupes"]; rar = inst["rarity"]
-			s["sb"].border_color = Color(RARITY[rar]["col"]); s["sb"].set_border_width_all(2)
-		var is_new: bool = new_gear.has("%d:%s" % [impl_sel, key])
-		if is_new:
-			s["sb"].border_color = Color("#ffd24a"); s["sb"].set_border_width_all(4)   # золотая обводка NEW
-		s["star"].text = ("NEW " if is_new else "") + "★%d" % lvl + ("  %d●" % dupes if dupes > 0 else "")
-		s["star"].add_theme_color_override("font_color", Color("#ffd24a") if (dupes >= 2 or is_new) else Color("#7a7f99"))
+	for i in impl_grid.size():
+		var hh = heroes[i]
+		var cell = impl_grid[i]
+		cell["hlv"].text = "ур. %d" % hh["level"]
+		# --- оружие ---
+		var wnew: bool = new_gear.has("%d:weapon" % i)
+		cell["wlbl"].text = "%s\n%s\nур. %d" % [hh["data"]["wicon"], hh["data"]["wname"], hh["wlvl"]]
+		cell["wsb"].border_color = Color("#ffd24a") if wnew else Color("#ffb02e")
+		cell["wsb"].set_border_width_all(4 if wnew else 2)
+		# --- спецмодуль ---
+		var mkey: String = hh["equip"]["module"]
+		var inst = hh["gear"]["module"][mkey]
+		var rar: int = inst["rarity"]
+		var mdef = HERO_MODULE[hh["cls"]]
+		var mnew: bool = new_gear.has("%d:module" % i)
+		cell["mlbl"].text = "%s %s\n%s %s\n%s" % [mdef["icon"], ("NEW" if mnew else mdef["name"]), RARITY[rar]["name"], _module_variant(hh["cls"], inst["vid"])["name"], _rolls_text(inst)]
+		cell["msb"].border_color = Color("#ffd24a") if mnew else Color(RARITY[rar]["col"])
+		cell["msb"].set_border_width_all(4 if mnew else 2)
 
 func _circle_pts(c: Vector2, r: float, n: int = 26) -> PackedVector2Array:
 	var p := PackedVector2Array()
@@ -2127,13 +2085,18 @@ func _add_slot(key: String, pos: Vector2, sz: float, label: String) -> void:
 	impl_panel.add_child(star)
 	impl_slots[key] = {"btn": btn, "sb": sb, "star": star}
 
-func _select_slot(key: String) -> void:
-	impl_seln = key
-	new_gear.erase("%d:%s" % [impl_sel, key])   # посмотрел слот → NEW гаснет
+func _open_compare(i: int, slot: String) -> void:
+	impl_sel = i
+	impl_seln = slot
+	new_gear.erase("%d:%s" % [i, slot])   # посмотрел → NEW гаснет
 	_refresh_impl()
 	_refresh_hud()
-	impl_confirm.visible = false
 	impl_detail.visible = true
+	_refresh_detail()
+
+func _select_slot(key: String) -> void:   # перерисовать открытое окно сравнения (после надевания)
+	impl_seln = key
+	_refresh_impl()
 	_refresh_detail()
 
 # === ПАНЕЛЬ A: список МОДЕЛЕЙ слота (открывается тапом по слоту) ===
@@ -2168,19 +2131,20 @@ func _refresh_detail() -> void:
 		det_title.text = "%s %s · ОРУЖИЕ" % [hh["data"]["wicon"], hh["data"]["wname"]]
 		det_list.add_child(_weapon_row(hh))
 		return
-	det_title.text = "%s %s — что наденем" % [IMPL_DEFS[slot]["icon"], IMPL_DEFS[slot]["name"]]
-	# все ПРЕДМЕТЫ (модель+редкость) этого слота; надетый — первым, дальше по редкости
-	var keys: Array = hh["gear"][slot].keys()
+	var mdef = HERO_MODULE[hh["cls"]]
+	det_title.text = "%s %s — сравни и надень" % [mdef["icon"], mdef["name"]]
+	# все модули (модель+редкость); надетый — первым, дальше по редкости (окно сравнения)
+	var keys: Array = hh["gear"]["module"].keys()
 	keys.sort_custom(func(a, b):
-		if hh["equip"][slot] == a: return true
-		if hh["equip"][slot] == b: return false
-		return hh["gear"][slot][a]["rarity"] > hh["gear"][slot][b]["rarity"])
+		if hh["equip"]["module"] == a: return true
+		if hh["equip"]["module"] == b: return false
+		return hh["gear"]["module"][a]["rarity"] > hh["gear"]["module"][b]["rarity"])
 	for key in keys:
-		det_list.add_child(_variant_row(hh, slot, key))
+		det_list.add_child(_variant_row(hh, "module", key))
 
 func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	var inst = hh["gear"][slot][key]
-	var v := _variant(slot, inst["vid"])
+	var v := _module_variant(hh["cls"], inst["vid"])
 	var rar: int = inst["rarity"]
 	var equipped: bool = hh["equip"][slot] == key
 	var card := PanelContainer.new()
@@ -2190,30 +2154,14 @@ func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	card.add_theme_stylebox_override("panel", sb)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); card.add_child(box)
 	var head := Label.new(); head.add_theme_font_size_override("font_size", 15)
-	head.text = "%s · %s ★%d%s" % [v["name"], RARITY[rar]["name"], inst["lvl"], ("  ✓ НАДЕТО" if equipped else "")]
+	head.text = "%s · %s · ур.%d%s" % [v["name"], RARITY[rar]["name"], inst["lvl"], ("  ✓ НАДЕТО" if equipped else "")]
 	head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
 	box.add_child(head)
-	var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 13); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
-	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); box.add_child(hb)
-	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 13); eqb.custom_minimum_size = Vector2(190, 38)
-	eqb.text = "НАДЕТО" if equipped else "НАДЕТЬ"; eqb.disabled = equipped
+	var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 14); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
+	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 14); eqb.custom_minimum_size = Vector2(0, 40)
+	eqb.text = "✓ НАДЕТО" if equipped else "НАДЕТЬ"; eqb.disabled = equipped
 	eqb.pressed.connect(func(): _equip(slot, key))
-	hb.add_child(eqb)
-	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(190, 38)
-	upb.text = "⬆ УРОВЕНЬ (%d/2)" % inst["dupes"]; upb.disabled = inst["dupes"] < 2
-	upb.pressed.connect(func(): impl_selv = key; _open_confirm())
-	hb.add_child(upb)
-	# вторая строка: реролл статов за лом / разбор в лом
-	var hb2 := HBoxContainer.new(); hb2.add_theme_constant_override("separation", 6); box.add_child(hb2)
-	var rrcost := _reroll_cost(inst)
-	var rrb := Button.new(); rrb.add_theme_font_size_override("font_size", 12); rrb.custom_minimum_size = Vector2(190, 34)
-	rrb.text = "🎲 РЕРОЛЛ (%d♻)" % rrcost; rrb.disabled = scrap < rrcost
-	rrb.pressed.connect(func(): _reroll(slot, key))
-	hb2.add_child(rrb)
-	var dsb := Button.new(); dsb.add_theme_font_size_override("font_size", 12); dsb.custom_minimum_size = Vector2(190, 34)
-	dsb.text = ("НАДЕТО — не разобрать" if equipped else "♻ РАЗОБРАТЬ +%d" % _scrap_value(inst)); dsb.disabled = equipped
-	dsb.pressed.connect(func(): _disassemble(slot, key))
-	hb2.add_child(dsb)
+	box.add_child(eqb)
 	return card
 
 func _weapon_row(hh: Dictionary) -> Control:
@@ -2224,111 +2172,41 @@ func _weapon_row(hh: Dictionary) -> Control:
 	card.add_theme_stylebox_override("panel", sb)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); card.add_child(box)
 	var head := Label.new(); head.add_theme_font_size_override("font_size", 15); head.add_theme_color_override("font_color", Color("#ffb02e"))
-	head.text = "%s ★%d · главный урон" % [hh["data"]["wname"], hh["wlvl"]]; box.add_child(head)
-	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(0, 38)
-	upb.text = "⬆ УРОВЕНЬ (%d/2)" % hh["wdupes"]; upb.disabled = hh["wdupes"] < 2
-	upb.pressed.connect(func(): _open_confirm())
-	box.add_child(upb)
+	head.text = "%s · ур.%d" % [hh["data"]["wname"], hh["wlvl"]]; box.add_child(head)
+	var st := Label.new(); st.add_theme_font_size_override("font_size", 13); st.add_theme_color_override("font_color", Color("#e0d4b0"))
+	st.text = "Главное оружие класса. Уровень растит урон.\n(прокачка уровней ломом — скоро)"; box.add_child(st)
 	return card
 
 func _close_detail() -> void:
-	impl_confirm.visible = false
+	if impl_confirm: impl_confirm.visible = false
 	impl_detail.visible = false
 
 # === ПАНЕЛЬ B: подтверждение прокачки (кнопка «поднять уровень») ===
-func _build_impl_confirm() -> void:
-	impl_confirm = Control.new()
-	impl_confirm.set_anchors_preset(Control.PRESET_FULL_RECT)
-	impl_confirm.visible = false
-	impl_confirm.z_index = 2200
-	impl_panel.add_child(impl_confirm)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _close_confirm())
-	impl_confirm.add_child(dim)
-	var card := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.10, 0.08, 0.04, 0.99); sb.set_corner_radius_all(14)
-	sb.border_color = Color("#ffb02e"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
-	card.add_theme_stylebox_override("panel", sb)
-	card.position = Vector2(W * 0.5 - 190, 340); card.custom_minimum_size = Vector2(380, 0)
-	impl_confirm.add_child(card)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	var t := Label.new(); t.text = "Выбери вещь для прокачки"; t.add_theme_font_size_override("font_size", 17); t.add_theme_color_override("font_color", Color("#ffb02e")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
-	conf_item = Label.new(); conf_item.add_theme_font_size_override("font_size", 15); conf_item.add_theme_color_override("font_color", Color("#e8e0c8")); conf_item.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(conf_item)
-	conf_cost = Label.new(); conf_cost.add_theme_font_size_override("font_size", 14); conf_cost.add_theme_color_override("font_color", Color("#cdb27a")); conf_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(conf_cost)
-	conf_btn = Button.new(); conf_btn.add_theme_font_size_override("font_size", 16); conf_btn.custom_minimum_size = Vector2(0, 50); conf_btn.pressed.connect(_do_merge_selected); v.add_child(conf_btn)
-	var back := Button.new(); back.text = "НАЗАД"; back.add_theme_font_size_override("font_size", 14); back.custom_minimum_size = Vector2(0, 40); back.pressed.connect(_close_confirm); v.add_child(back)
-
-func _open_confirm() -> void:
-	impl_confirm.visible = true
-	_refresh_confirm()
-
-func _refresh_confirm() -> void:
-	var hh = heroes[impl_sel]
-	var nm: String; var dupes: int; var cost: int
-	if impl_seln == "weapon":
-		nm = "%s %s" % [hh["data"]["wicon"], hh["data"]["wname"]]
-		dupes = hh["wdupes"]; cost = hh["wlvl"] * 50
-	else:
-		var inst = hh["gear"][impl_seln][impl_selv]
-		var v := _variant(impl_seln, inst["vid"])
-		nm = "%s %s · %s" % [IMPL_DEFS[impl_seln]["icon"], v["name"], RARITY[inst["rarity"]]["name"]]
-		dupes = inst["dupes"]; cost = _merge_cost(hh, impl_seln, impl_selv)
-	conf_item.text = "%s   (дублей: %d / 2)" % [nm, dupes]
-	conf_cost.text = "Сумма прокачки: %d 💰" % cost
-	var ready := dupes >= 2 and gold >= cost
-	conf_btn.text = "ОБЪЕДИНИТЬ ★+1" if ready else ("НУЖНО 2 ДУБЛЯ (%d)" % dupes if dupes < 2 else "НЕ ХВАТАЕТ ЗОЛОТА")
-	conf_btn.disabled = not ready
-
-func _close_confirm() -> void:
-	impl_confirm.visible = false
-
-func _do_merge_selected() -> void:
-	if impl_seln == "weapon":
-		_merge_weapon(impl_sel)
-	else:
-		_merge_gear(impl_sel, impl_seln, impl_selv)
-	_refresh_impl()
-	_refresh_detail()
-	_refresh_confirm()
-
 # дроп дубликата после волны (босс гарант 2, обычная волна шанс) → копишь → мерджишь.
 # 40% оружие / 60% имплант — всё ПОД КОНКРЕТНОГО бойца (случайного)
 func _drop_implant() -> void:
-	var amount := 2   # награда ТОЛЬКО за босса (обычные волны шмот не дают)
 	implants_count += 1
 	var i := randi() % heroes.size()
 	var hh = heroes[i]
-	if randf() < 0.4:
-		hh["wdupes"] += amount
+	if randf() < 0.35:
+		hh["wdupes"] += 1   # оружие (уровни ломом — потом)
 		new_gear["%d:weapon" % i] = true
-		_popup_center("🔫 ОРУЖИЕ: %s · %s %s\n+%d дубль" % [hh["data"]["name"], hh["data"]["wicon"], hh["data"]["wname"], amount], Color("#ffb02e"))
+		_popup_center("🔫 %s: оружие %s" % [hh["data"]["name"], hh["data"]["wname"]], Color("#ffb02e"), 2.5)
 	else:
-		# случайный слот+модель; редкость по прогрессу; предмет = модель@редкость
-		var slot: String = IMPL_DEFS.keys()[randi() % IMPL_DEFS.size()]
-		var variants = ITEM_VARIANTS[slot]
+		var cls: int = hh["cls"]
+		var variants = HERO_MODULE[cls]["variants"]
 		var v = variants[randi() % variants.size()]
 		var vid: String = v["id"]
 		var rar := _roll_rarity()
 		var key := _ik(vid, rar)
-		new_gear["%d:%s" % [i, slot]] = true   # пометить слот как NEW (подсветка)
-		var g = hh["gear"][slot]
-		if g.has(key):
-			# дубль ТОЙ ЖЕ модели И редкости → для ★-апа; роллы держим лучшие (перефарм внутри редкости)
-			g[key]["dupes"] += amount
-			var fresh := _make_item(slot, vid, rar)
-			if _item_power(fresh) > _item_power(g[key]):
-				fresh["dupes"] = g[key]["dupes"]; fresh["lvl"] = g[key]["lvl"]
-				g[key] = fresh
-				_popup_center("📦 %s · %s %s\nЛУЧШИЙ РОЛЛ!" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]))
-			else:
-				_popup_center("📦 %s · %s %s\n+%d дубль" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], amount], Color(RARITY[rar]["col"]))
+		var g = hh["gear"]["module"]
+		var it := _make_item(cls, vid, rar)
+		if not g.has(key) or _item_power(it) > _item_power(g[key]):
+			g[key] = it   # держим ЛУЧШИЙ ролл этой модели@редкости
+			new_gear["%d:module" % i] = true
+			_popup_center("✨ %s: %s %s\n%s" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], _rolls_text(it)], Color(RARITY[rar]["col"]), 2.5)
 		else:
-			var it := _make_item(slot, vid, rar)
-			it["dupes"] = amount - 1
-			g[key] = it
-			_popup_center("✨ НОВАЯ: %s · %s %s\n%s" % [hh["data"]["name"], RARITY[rar]["name"], v["name"], _rolls_text(it)], Color(RARITY[rar]["col"]))
+			_popup_center("📦 %s: %s %s (ролл хуже)" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]), 2.0)
 	_recalc_hero(hh)
 
 func _merge_weapon(i: int) -> void:
