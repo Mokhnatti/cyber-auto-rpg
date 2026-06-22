@@ -53,7 +53,7 @@ var _offline_secs := 0
 var show_dmg := true        # цифры урона над врагами (настройка)
 var settings_panel: Control
 var set_dmg_btn: Button
-var nick_input: LineEdit
+var nick_show: Label
 var set_nick_input: LineEdit
 # БОТ-ПЛЕЙТЕСТЕР (godot --headless -- --bot): сам играет, логирует TTSTATE
 var bot := false
@@ -527,14 +527,25 @@ func _build_nick_prompt() -> void:
 	nick_panel.add_child(v)
 	var t := Label.new(); t.text = "ВВЕДИ НИК"; t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
 	var sub2 := Label.new(); sub2.text = "для теста (прогресс сохраняется по нику)"; sub2.add_theme_font_size_override("font_size", 13); sub2.add_theme_color_override("font_color", Color("#7a7f99")); sub2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(sub2)
-	nick_input = LineEdit.new(); nick_input.placeholder_text = "ник"; nick_input.custom_minimum_size = Vector2(0, 50); nick_input.add_theme_font_size_override("font_size", 20); nick_input.virtual_keyboard_enabled = true; v.add_child(nick_input)
+	nick_show = Label.new(); nick_show.text = "ник не задан"; nick_show.add_theme_font_size_override("font_size", 20); nick_show.add_theme_color_override("font_color", Color("#ffd24a")); nick_show.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; nick_show.custom_minimum_size = Vector2(0, 40); v.add_child(nick_show)
+	var enter := Button.new(); enter.text = "✏ ВВЕСТИ НИК"; enter.add_theme_font_size_override("font_size", 18); enter.custom_minimum_size = Vector2(0, 50); v.add_child(enter)
+	enter.pressed.connect(func():
+		_prompt_nick()
+		nick_show.text = nick if nick != "" else "ник не задан")
 	var b := Button.new(); b.text = "▶ ИГРАТЬ"; b.add_theme_font_size_override("font_size", 20); b.custom_minimum_size = Vector2(0, 54); v.add_child(b)
 	b.pressed.connect(func():
-		nick = nick_input.text.strip_edges()
 		if nick == "": nick = "гость"
 		nick_panel.visible = false
 		_save()
 		_send_telemetry("start"))
+
+func _prompt_nick() -> void:   # нативный ввод браузера — надёжно на мобиле (LineEdit в вебе клаву не цепляет)
+	if OS.has_feature("web"):
+		var r = JavaScriptBridge.eval("(window.prompt('Введи ник для теста:', '') || '').slice(0,20)", true)
+		if typeof(r) == TYPE_STRING and r.strip_edges() != "":
+			nick = r.strip_edges()
+	else:
+		nick = "игрок"   # не-веб (бот/десктоп-тест) — заглушка
 
 func _build_reboot() -> void:
 	reboot_panel = Control.new()
@@ -666,8 +677,7 @@ func _ready() -> void:
 		Engine.time_scale = 8.0   # ускоренный плейтест (бот; игроку 1X/2X отдельно)
 		print("TTBOT enabled tactic=%s slot=%s time_scale=8" % [bot_tactic, save_slot])
 	elif nick == "":
-		nick_panel.visible = true   # первый вход → спросить ник
-		nick_input.grab_focus()     # сразу фокус → всплывает клавиатура (фикс пустых ников)
+		nick_panel.visible = true   # первый вход → спросить ник (ввод через нативный браузерный prompt)
 	elif _offline_gold > 0:
 		_show_offline()
 
@@ -823,14 +833,12 @@ func _build_settings() -> void:
 	set_dmg_btn = Button.new(); set_dmg_btn.add_theme_font_size_override("font_size", 16); set_dmg_btn.custom_minimum_size = Vector2(0, 52)
 	set_dmg_btn.pressed.connect(func(): show_dmg = not show_dmg; _save(); _refresh_settings())
 	v.add_child(set_dmg_btn)
-	# смена ника (фолбэк, если первый ввод не сработал)
+	# смена ника (нативный браузерный ввод)
 	var nl := Label.new(); nl.text = "Твой ник (для теста):"; nl.add_theme_font_size_override("font_size", 14); nl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nl)
-	set_nick_input = LineEdit.new(); set_nick_input.placeholder_text = "ник"; set_nick_input.custom_minimum_size = Vector2(0, 48); set_nick_input.add_theme_font_size_override("font_size", 18); set_nick_input.virtual_keyboard_enabled = true; v.add_child(set_nick_input)
-	var save_nick := Button.new(); save_nick.text = "💾 Сохранить ник"; save_nick.add_theme_font_size_override("font_size", 15); save_nick.custom_minimum_size = Vector2(0, 46)
+	var save_nick := Button.new(); save_nick.text = "✏ Сменить ник"; save_nick.add_theme_font_size_override("font_size", 15); save_nick.custom_minimum_size = Vector2(0, 46)
 	save_nick.pressed.connect(func():
-		var n := set_nick_input.text.strip_edges()
-		if n != "":
-			nick = n; _save(); _send_telemetry("nickset"); _popup_center("Ник: " + nick, Color("#00f0ff")))
+		_prompt_nick()
+		_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center("Ник: " + nick, Color("#00f0ff")))
 	v.add_child(save_nick)
 	var close := Button.new(); close.text = "× ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16); close.custom_minimum_size = Vector2(0, 50)
 	close.pressed.connect(func(): settings_panel.visible = false)
