@@ -426,7 +426,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	var base_dmg: int = hh["data"]["dmg"] + wbonus + int(_gear_bonus(hh, "dmg"))
 	var base_hp: int = hh["data"]["hp"] + int(_gear_bonus(hh, "hp"))
 	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"]) * aug_dmg))
-	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp * aug_hp)
+	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp * aug_hp * 2.0)   # ×2 выживаемость (сквиши ложились за сек, не успеть ульту)
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] + aug_critx
@@ -1004,7 +1004,7 @@ func _spawn_wave() -> void:
 		var ehp := int(45.0 * hpmul * (2.5 if boss else et["hp"]) * aug_density)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": int((10 if boss else 7) * pow(1.065, wave) * (1.0 if boss else et["dmg"])),
+			"dmg": int((9 if boss else 5) * pow(1.06, wave) * (1.0 if boss else et["dmg"])),
 			"atk": (1.5 if boss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": boss,
 			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
