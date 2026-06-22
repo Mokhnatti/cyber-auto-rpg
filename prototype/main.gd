@@ -95,6 +95,7 @@ var buy_btns := []         # кнопки выбора множителя
 var hero_rows := []   # строки прокачки по героям: {lvl_btn}
 # ИМПЛАНТЫ-СКЕЛЕТ (шмотки) — дают БАЗОВЫЕ статы отряду; уровень потом множит (HP/урон)
 var impl_btn: Button
+var loot_badge: Label
 var impl_panel: Control
 var impl_open := false
 var impl_rows := {}
@@ -1511,7 +1512,15 @@ func _refresh_hud() -> void:
 	if impl_btn:
 		var nc := new_gear.size()
 		impl_btn.text = "🦾 ЭКИПИРОВКА" + ("  ●%d" % nc if nc > 0 else "")
-		impl_btn.modulate = Color(1.5, 1.3, 0.3) if nc > 0 else Color(1, 1, 1)   # горит при новом луте
+		if nc > 0:
+			var ph: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 180.0)   # пульс золотом
+			impl_btn.modulate = Color(1.0, 1.0, 1.0).lerp(Color(1.7, 1.4, 0.2), ph)
+		else:
+			impl_btn.modulate = Color(1, 1, 1)
+	if loot_badge:
+		loot_badge.visible = new_gear.size() > 0 and not impl_open
+		if loot_badge.visible:
+			loot_badge.modulate.a = 0.55 + 0.45 * sin(Time.get_ticks_msec() / 180.0)
 	# полоса босса
 	var bz = null
 	for e in enemies:
@@ -1632,6 +1641,14 @@ func _build() -> void:
 	stage_label.add_theme_font_size_override("font_size", 15)
 	stage_label.position = Vector2(20, 80)
 	hud.add_child(stage_label)
+	loot_badge = Label.new()
+	loot_badge.text = "🎁 НОВЫЙ ЛУТ ↓"
+	loot_badge.add_theme_color_override("font_color", Color("#ffd24a"))
+	loot_badge.add_theme_font_size_override("font_size", 16)
+	loot_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	loot_badge.position = Vector2(W - 230, 78); loot_badge.size = Vector2(220, 22)
+	loot_badge.visible = false
+	hud.add_child(loot_badge)
 
 	gold_label = Label.new()
 	gold_label.add_theme_color_override("font_color", Color("#ffe14d"))
