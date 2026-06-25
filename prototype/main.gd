@@ -64,6 +64,9 @@ var save_slot := ""       # суффикс файла сейва (для нес�
 var bot_boss_t := 0.0
 var bot_stall_t := 0.0
 var bot_last_stage := 1
+var bot_logf: FileAccess = null   # файловая телеметрия (flush) → /tmp/botstate<slot>.jsonl
+var bot_cfg := {}                 # внешний конфиг тактик (hot-reload) → /tmp/bot_tactics.json
+var bot_cfg_t := 0.0              # таймер перечитки конфига
 var hack_mult := 1.0
 var hack_t := 0.0
 
@@ -101,8 +104,10 @@ var fav := {}              # "i:slot:key" → true : избранное (НЕ р
 var ic_sel := {}           # "i:slot:key" → true : текущее выделение (transient)
 var ic_fslot := "all"      # фильтр слота: all/weapon/module
 var ic_frar := 0           # фильтр редкости: 0=все, 1..4
+var ic_fhero := -1         # фильтр героя: -1=все, 0..3 (оружие у классов разное → Диана)
 var ic_fslot_btn: Button
 var ic_frar_btn: Button
+var ic_fhero_btn: Button
 var ic_confirm: Control     # подтверждение разбора
 var ic_conf_lbl: Label
 var buy_mult := 1          # сколько уровней за тап: 1/10/100/0=MAX
@@ -835,9 +840,63 @@ func _reset() -> void:
 	_start_march()
 	_refresh_hud()
 
+# === БОТ-ТЕЛЕМЕТРИЯ: подробная строка в файл с flush (надёжно, без буферизации stdout) ===
+func _bot_telemetry() -> void:
+	if bot_logf == null:
+		bot_logf = FileAccess.open("/tmp/botstate%s.jsonl" % save_slot, FileAccess.WRITE)
+	if bot_logf == null:
+		return
+	var lvls := []
+	var wlvls := []     # уровень надетого оружия по бойцам (видно прогресс шмота)
+	for hh in heroes:
+		lvls.append(hh["level"])
+		var wk: String = hh["equip"].get("weapon", "")
+		wlvls.append(int(hh["gear"]["weapon"][wk]["lvl"]) if hh["gear"]["weapon"].has(wk) else 0)
+	var row := {
+		"t": int(Time.get_ticks_msec() / 1000), "tactic": bot_tactic,
+		"stage": stage, "best": best_stage, "sub": sub, "boss": (1 if in_boss else 0),
+		"lvls": lvls, "maxlvl": _max_hero_level(), "totlvl": _total_levels(), "wlvls": wlvls,
+		"gold": int(gold), "scrap": scrap, "cores": cores, "prestiges": rec_prestiges,
+		"augs": equipped_augs.size(), "slots": _slot_total(), "auglvls": aug_lvl.size(),
+		"dmg": int(stats_run["dmg"]), "mobs": stats_run["mobs"], "bosses": stats_run["bosses"],
+		"ppwr": _party_power(),
+	}
+	bot_logf.store_line(JSON.stringify(row))
+	bot_logf.flush()
+
+# грубая «боевая мощь» отряда (сумма урона живых) — для кривой прогресса и показателя силы
+func _party_power() -> int:
+	var p := 0
+	for hh in heroes:
+		p += int(hh["dmg"]) * int(round(hh["atk_spd"] if hh.has("atk_spd") else 1))
+	return p
+
+# внешний конфиг тактик (hot-reload каждые ~10с): можно крутить стратегию БЕЗ перезапуска
+func _bot_load_cfg() -> void:
+	if not FileAccess.file_exists("/tmp/bot_tactics.json"):
+		return
+	var f := FileAccess.open("/tmp/bot_tactics.json", FileAccess.READ)
+	if f == null:
+		return
+	var d = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(d) == TYPE_DICTIONARY:
+		bot_cfg = d
+
+func _cfg(key: String, default):
+	var t = bot_cfg.get(bot_tactic, {})
+	if typeof(t) == TYPE_DICTIONARY and t.has(key):
+		return t[key]
+	return default
+
 # === СОХРАНЕНИЕ (user://save.json → в web это IndexedDB, переживает перезапуск) ===
 # БОТ: сам качает уровни/аугменты, штурмует боссов, престижит при застое
 func _bot_tick(delta: float) -> void:
+	# hot-reload внешнего конфига тактик (раз в ~10с)
+	bot_cfg_t -= delta
+	if bot_cfg_t <= 0.0:
+		bot_cfg_t = 10.0
+		_bot_load_cfg()
 	# QTE: бот «жмёт» маркеры (идеальный контр)
 	if not qte_markers.is_empty():
 		for m in qte_markers.duplicate():
@@ -855,7 +914,7 @@ func _bot_tick(delta: float) -> void:
 		bot_boss_t = 5.0
 		_go_boss()
 	# застой → престиж (только если престиж ОТКРЫТ; пороги выше → дольше грайндят)
-	var stall_lim: float = {"balanced": 90.0, "rush": 40.0, "hoard": 240.0, "skill": 90.0}.get(bot_tactic, 90.0)
+	var stall_lim: float = float(_cfg("stall", {"balanced": 90.0, "rush": 40.0, "hoard": 240.0, "skill": 90.0}.get(bot_tactic, 90.0)))
 	if stage > bot_last_stage:
 		bot_last_stage = stage; bot_stall_t = 0.0
 	else:
@@ -866,12 +925,12 @@ func _bot_tick(delta: float) -> void:
 
 func _bot_augments() -> void:
 	# приоритет тактики: какие семейства держим в слотах
-	var pri: Array = {
+	var pri: Array = _cfg("augs", {
 		"rush": ["neuro", "coproc", "blade", "reactor"],
 		"hoard": ["neuro", "qcore", "reactor", "armor"],
 		"skill": ["exploit", "reflex", "scope", "neuro"],
 		"balanced": ["neuro", "coproc", "reactor", "scope"],
-	}.get(bot_tactic, ["neuro", "coproc", "reactor", "scope"])
+	}.get(bot_tactic, ["neuro", "coproc", "reactor", "scope"]))
 	# 1) заполняем слоты приоритетными (открыв при необходимости)
 	for id in pri:
 		if equipped_augs.size() >= _slot_total():
@@ -966,6 +1025,19 @@ func _fmt_n(n) -> String:
 	if v >= 1000000.0: return "%.1fM" % (v / 1000000.0)
 	if v >= 1000.0: return "%.1fk" % (v / 1000.0)
 	return str(int(round(v)))
+
+# разделитель тысяч точкой (Диана): 500000 → 500.000
+func _gsep(n) -> String:
+	var s := str(int(round(float(n))))
+	var neg := s.begins_with("-")
+	if neg: s = s.substr(1)
+	var out := ""
+	var c := 0
+	for i in range(s.length() - 1, -1, -1):
+		out = s[i] + out
+		c += 1
+		if c % 3 == 0 and i > 0: out = "." + out
+	return ("-" if neg else "") + out
 
 func _toggle_stats() -> void:
 	if stats_panel == null: _build_stats()
@@ -1243,6 +1315,7 @@ func _process(delta: float) -> void:
 		save_t = 10.0
 		_save()
 		print("TTSTATE t=%d stage=%d sub=%d boss=%d best=%d cores=%d scrap=%d gold=%d maxlvl=%d slots=%d/%d augs=%d" % [int(Time.get_ticks_msec() / 1000), stage, sub, (1 if in_boss else 0), best_stage, cores, scrap, int(gold), _max_hero_level(), equipped_augs.size(), _slot_total(), aug_lvl.size()])
+		if bot: _bot_telemetry()
 	if bot:
 		_bot_tick(delta)
 	else:
@@ -1789,9 +1862,9 @@ func _refresh_hud() -> void:
 	var etxt: String = ("   ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
 	stage_label.text = flags + etxt   # типы врагов — на строке флажков (не налезают на кнопки)
 	# золото + прокачка урона
-	gold_label.text = "💰 %d  +%d/с   ♻ %d   🧬 %d" % [int(gold), int(_passive_rate()), scrap, cores]
+	gold_label.text = "💰 %s  +%s/с   ♻ %s   🧬 %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(scrap), _gsep(cores)]
 	if inv_open and inv_gold:
-		inv_gold.text = "💰 %d   +%d/с" % [int(gold), int(_passive_rate())]
+		inv_gold.text = "💰 %s   +%s/с" % [_gsep(gold), _gsep(_passive_rate())]
 	if inv_open: _refresh_inv()
 	if impl_open: _refresh_impl()
 
@@ -2086,7 +2159,7 @@ func _build_inventory() -> void:
 
 func _refresh_inv() -> void:
 	if inv_gold:
-		inv_gold.text = "💰 %d   +%d/с" % [int(gold), int(_passive_rate())]
+		inv_gold.text = "💰 %s   +%s/с" % [_gsep(gold), _gsep(_passive_rate())]
 	for pair in buy_btns:   # подсветка выбранного множителя
 		pair[1].modulate = Color(1.4, 1.4, 0.6) if pair[0] == buy_mult else Color(0.7, 0.7, 0.7)
 	for i in heroes.size():
@@ -2181,6 +2254,7 @@ func _all_items() -> Array:
 func _ic_passes(it: Dictionary) -> bool:
 	if ic_fslot != "all" and it["slot"] != ic_fslot: return false
 	if ic_frar != 0 and int(it["inst"]["rarity"]) != ic_frar: return false
+	if ic_fhero != -1 and int(it["i"]) != ic_fhero: return false
 	return true
 
 func _toggle_invcol() -> void:
@@ -2210,6 +2284,8 @@ func _build_invcol() -> void:
 	ic_fslot_btn.pressed.connect(_ic_cycle_slot); fbar.add_child(ic_fslot_btn)
 	ic_frar_btn = Button.new(); ic_frar_btn.add_theme_font_size_override("font_size", 13); ic_frar_btn.custom_minimum_size = Vector2(150, 32)
 	ic_frar_btn.pressed.connect(_ic_cycle_rar); fbar.add_child(ic_frar_btn)
+	ic_fhero_btn = Button.new(); ic_fhero_btn.add_theme_font_size_override("font_size", 13); ic_fhero_btn.custom_minimum_size = Vector2(150, 32)
+	ic_fhero_btn.pressed.connect(_ic_cycle_hero); fbar.add_child(ic_fhero_btn)
 	# действия
 	var abar := HBoxContainer.new(); abar.add_theme_constant_override("separation", 6); abar.alignment = BoxContainer.ALIGNMENT_CENTER
 	abar.position = Vector2(0, 118); abar.size = Vector2(W, 34); ic_panel.add_child(abar)
@@ -2237,18 +2313,24 @@ func _ic_cycle_rar() -> void:
 	ic_frar = (ic_frar + 1) % (RARITY.size())   # 0..4
 	_refresh_invcol()
 
+func _ic_cycle_hero() -> void:
+	ic_fhero = ic_fhero + 1
+	if ic_fhero >= HEROES.size(): ic_fhero = -1
+	_refresh_invcol()
+
 func _refresh_invcol() -> void:
 	for c in ic_list.get_children(): c.queue_free()
 	var slot_name := {"all": "слот: все", "weapon": "слот: 🔫 оружие", "module": "слот: ✨ модули"}
 	ic_fslot_btn.text = slot_name[ic_fslot]
 	ic_frar_btn.text = "редкость: все" if ic_frar == 0 else "редкость: " + RARITY[ic_frar]["name"]
+	ic_fhero_btn.text = "боец: все" if ic_fhero == -1 else "боец: %s %s" % [HEROES[ic_fhero]["icon"], HEROES[ic_fhero]["name"]]
 	var items := _all_items()
 	var shown := 0
 	for it in items:
 		if not _ic_passes(it): continue
 		shown += 1
 		ic_list.add_child(_ic_card(it))
-	ic_info.text = "вещей: %d   выбрано: %d   ♻ лом: %d" % [shown, ic_sel.size(), scrap]
+	ic_info.text = "вещей: %d   выбрано: %d   ♻ лом: %s" % [shown, ic_sel.size(), _gsep(scrap)]
 
 func _ic_card(it: Dictionary) -> Control:
 	var i: int = it["i"]; var slot: String = it["slot"]; var key: String = it["key"]
@@ -2262,9 +2344,20 @@ func _ic_card(it: Dictionary) -> Control:
 	card.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var sicon: String = "🔫" if slot == "weapon" else "✨"
 	var mark := ""
-	if it["equipped"]: mark += " ✓носит"
 	if it["fav"]: mark += " ★"
 	card.text = "%s %s  %s %s · ур.%d%s\n   %s" % [HEROES[i]["icon"], sicon, RARITY[rar]["name"], _variant(slot, hh["cls"], inst["vid"])["name"], inst["lvl"], mark, _rolls_text(inst)]
+	# «НАДЕТО» — отдельный бейдж справа, выделен (Диана: не сливать с уровнем/статами)
+	if it["equipped"]:
+		var badge := Label.new()
+		badge.text = "✓ НАДЕТО"
+		badge.add_theme_font_size_override("font_size", 15)
+		badge.add_theme_color_override("font_color", Color("#3ad97a"))
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		badge.anchor_left = 1.0; badge.anchor_right = 1.0; badge.anchor_top = 0.0; badge.anchor_bottom = 1.0
+		badge.offset_left = -150; badge.offset_right = -14; badge.offset_top = 0; badge.offset_bottom = 0
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(badge)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.20, 0.18, 0.05, 0.95) if selected else Color(0.10, 0.12, 0.18, 0.92)
 	sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
