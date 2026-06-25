@@ -227,13 +227,14 @@ const ENEMY_HP_BASE := 140.0       # базовое HP врага (рычаг В
 const ENEMY_HP_PER_STAGE := 1.28   # HP врага за стадию. Пас4b: 1.15(слишком полого, улетали на 130+)→1.28 → стена приезжает раньше, затухание с начала
 const ENEMY_DMG_PER_STAGE := 1.13  # урон врага растёт чуть медленнее HP
 const GOLD_PER_STAGE := 1.20       # золото за стадию — чуть ниже HP (фундирует прокачку, но боец постепенно отстаёт → затухание)
-const LVL_COST_GROWTH := 1.075     # цена уровня ×1.075 (диапазон 1.07–1.08 индустрии)
+const LVL_COST_GROWTH := 1.12      # цена уровня. Пас4f: →1.12 — ещё медленнее прокачка → ~60 мин до 1-го престижа. Главный рычаг времени.
 const DPS_MILESTONE := 25          # ×2 к силе бойца каждые N уровней = регулярный рывок (изломы Clicker Heroes)
 const BOSS_HP_CYCLE := [3.0, 4.0, 5.0, 6.0, 10.0]   # множитель HP босса по циклу (stage-1)%5 → каждый 5-й = ×10 (milestone-стена)
 const STAT_CAP := 1.0e15           # потолок урона/HP — предохранитель от int64-переполнения (большие числа → научная запись)
+const INNATE_WDMG := 16            # вшитый базовый урон «стартового оружия» (слоты на старте ПУСТЫЕ — Диана; боец не слабее)
 const STAGE_WAVES := 5         # норм-волн на стадии (потом босс). Кратно 5.
-const PRESTIGE_TOTAL_LVL := 200   # престиж: совместный уровень отряда (нельзя читерить 1 бойцом)
-const PRESTIGE_STAGE := 15        # ИЛИ достижение этой стадии
+const PRESTIGE_TOTAL_LVL := 350   # престиж: совместный уровень отряда (Пас4f: 200→350 — нельзя рашить престиж голой прокачкой)
+const PRESTIGE_STAGE := 20        # ИЛИ достижение этой стадии (Пас4e: 15→20 — нельзя престижить совсем рано)
 
 func _max_hero_level() -> int:
 	var m := 1
@@ -337,18 +338,10 @@ var conf_btn: Button
 func _ik(vid: String, rarity: int) -> String:
 	return vid + "@" + str(rarity)
 
-func _new_gear(cls: int) -> Dictionary:
-	# стартовый комплект: по одной MK1-модели в каждом слоте (module + weapon), серый, lvl1, надето
-	var mfirst = HERO_MODULE[cls]["variants"][0]
-	var mkey := _ik(mfirst["id"], 1)
-	var wfirst = WEAPON_DEFS[cls]["variants"][0]
-	var wkey := _ik(wfirst["id"], 1)
-	var gear := {
-		"module": {mkey: {"vid": mfirst["id"], "rarity": 1, "lvl": 1, "rolls": [_roll_stat(mfirst["stat"])]}},
-		"weapon": {wkey: {"vid": wfirst["id"], "rarity": 1, "lvl": 1, "rolls": [_primary_roll("weapon", wfirst["stat"])]}},
-	}
-	var equip := {"module": mkey, "weapon": wkey}
-	return {"gear": gear, "equip": equip}
+func _new_gear(_cls: int) -> Dictionary:
+	# ПУСТЫЕ слоты на старте (Диана): первый дроп = явный момент «есть что надеть».
+	# Базовый урон стартового оружия вшит в бойца (INNATE_WDMG в _recalc_hero) — боец не слабее.
+	return {"gear": {"module": {}, "weapon": {}}, "equip": {"module": "", "weapon": ""}}
 
 func _roll_stat(stat: String) -> Dictionary:
 	var tier: float = ROLL_TIERS[randi() % ROLL_TIERS.size()]
@@ -400,10 +393,11 @@ func _item_power(it: Dictionary) -> int:   # грубая сила для сра
 # гейт редкости по прогрессу (CONCEPT §14, LOOT-RULES): лестница ДЛИННАЯ — топ это chase на недели,
 # не на 20 волн. Серое носишь долго; цвет открывается редко и далеко.
 func _max_rarity() -> int:
-	if wave >= 220: return 4   # Фиолет — очень поздно
-	if wave >= 100: return 3   # Синий
-	if wave >= 35: return 2    # Зелёный
-	return 1                   # старт: только Серый (≈первые 35 волн)
+	# Пас4f (Диана: зелёного слишком много на старте) — гейты отодвинуты, цвет стал событием
+	if wave >= 320: return 4   # Эпический — очень поздно
+	if wave >= 160: return 3   # Редкий
+	if wave >= 80: return 2    # Необычный (зелёный) — заметно позже (было 35)
+	return 1                   # старт: только Обычный (серый) надолго
 
 func _min_rarity() -> int:
 	# пол поднимается ОЧЕНЬ поздно, чтобы серое/зелёное оставалось актуально долго
@@ -521,8 +515,8 @@ func _apply_augments() -> void:
 # пер-героя: УРОВЕНЬ × БАЗА (класс+пушка+шмот) × АУГМЕНТЫ (престиж)
 func _recalc_hero(hh: Dictionary) -> void:
 	var lv: int = hh["level"]
-	var wbonus: int = int(_gear_bonus(hh, "wdmg"))   # ОРУЖИЕ = главный урон (роллы предмета ×уровень)
-	var base_dmg: int = hh["data"]["dmg"] + wbonus + int(_gear_bonus(hh, "dmg"))
+	var wbonus: int = int(_gear_bonus(hh, "wdmg"))   # ОРУЖИЕ = главный урон (роллы предмета ×уровень); надетое добавляется СВЕРХУ вшитой базы
+	var base_dmg: int = hh["data"]["dmg"] + INNATE_WDMG + wbonus + int(_gear_bonus(hh, "dmg"))
 	var base_hp: int = hh["data"]["hp"] + int(_gear_bonus(hh, "hp"))
 	# ЛИНЕЙНЫЙ рост ×уровень + ×2-излом каждые DPS_MILESTONE уровней (модель Clicker Heroes).
 	# Темп %/уровень убывает (L→L+1: +1/L) = плавное затухание; ×2 на рубежах = power-spike «волна». min()=кламп от переполнения.
@@ -2673,22 +2667,30 @@ func _refresh_impl() -> void:
 		var hnew: bool = _hero_has_new(i)   # боец с новым лутом → золотая рамка строки
 		cell["hsb"].border_color = Color("#ffd24a") if hnew else cell["hcol"]
 		cell["hsb"].set_border_width_all(4 if hnew else 2)
-		# --- оружие (теперь предмет: редкость/статы/уровень) ---
+		# --- оружие (предмет; слот может быть ПУСТ на старте) ---
 		var wnew: bool = new_gear.has("%d:weapon" % i)
 		var wkey: String = hh["equip"]["weapon"]
-		var winst = hh["gear"]["weapon"][wkey]
-		var wrar: int = winst["rarity"]
-		cell["wlbl"].text = "%s %s\n%s %s · ур.%d\n%s" % [hh["data"]["wicon"], ("NEW" if wnew else "оружие"), RARITY[wrar]["name"], _variant("weapon", hh["cls"], winst["vid"])["name"], winst["lvl"], _rolls_text(winst)]
-		cell["wsb"].border_color = Color("#ffd24a") if wnew else Color(RARITY[wrar]["col"])
+		if wkey != "" and hh["gear"]["weapon"].has(wkey):
+			var winst = hh["gear"]["weapon"][wkey]
+			var wrar: int = winst["rarity"]
+			cell["wlbl"].text = "%s %s\n%s %s · ур.%d\n%s" % [hh["data"]["wicon"], ("NEW" if wnew else "оружие"), RARITY[wrar]["name"], _variant("weapon", hh["cls"], winst["vid"])["name"], winst["lvl"], _rolls_text(winst)]
+			cell["wsb"].border_color = Color("#ffd24a") if wnew else Color(RARITY[wrar]["col"])
+		else:
+			cell["wlbl"].text = "%s оружие\n— пусто —\nнадень лут" % hh["data"]["wicon"]
+			cell["wsb"].border_color = Color("#ffd24a") if wnew else Color("#3a3f55")
 		cell["wsb"].set_border_width_all(4 if wnew else 2)
-		# --- спецмодуль ---
+		# --- спецмодуль (слот может быть ПУСТ) ---
 		var mkey: String = hh["equip"]["module"]
-		var inst = hh["gear"]["module"][mkey]
-		var rar: int = inst["rarity"]
 		var mdef = HERO_MODULE[hh["cls"]]
 		var mnew: bool = new_gear.has("%d:module" % i)
-		cell["mlbl"].text = "%s %s\n%s %s\n%s" % [mdef["icon"], ("NEW" if mnew else mdef["name"]), RARITY[rar]["name"], _module_variant(hh["cls"], inst["vid"])["name"], _rolls_text(inst)]
-		cell["msb"].border_color = Color("#ffd24a") if mnew else Color(RARITY[rar]["col"])
+		if mkey != "" and hh["gear"]["module"].has(mkey):
+			var inst = hh["gear"]["module"][mkey]
+			var rar: int = inst["rarity"]
+			cell["mlbl"].text = "%s %s\n%s %s\n%s" % [mdef["icon"], ("NEW" if mnew else mdef["name"]), RARITY[rar]["name"], _module_variant(hh["cls"], inst["vid"])["name"], _rolls_text(inst)]
+			cell["msb"].border_color = Color("#ffd24a") if mnew else Color(RARITY[rar]["col"])
+		else:
+			cell["mlbl"].text = "%s %s\n— пусто —\nнадень лут" % [mdef["icon"], mdef["name"]]
+			cell["msb"].border_color = Color("#ffd24a") if mnew else Color("#3a3f55")
 		cell["msb"].set_border_width_all(4 if mnew else 2)
 
 func _circle_pts(c: Vector2, r: float, n: int = 26) -> PackedVector2Array:
@@ -2879,6 +2881,9 @@ func _drop_into(hh: Dictionary, i: int, slot: String) -> Dictionary:
 	if not g.has(key) or _item_power(it) > _item_power(g[key]):
 		g[key] = it
 		new_gear["%d:%s" % [i, slot]] = true
+		# первый лут в ПУСТОЙ слот — авто-надеваем (Диана: пустой старт → первый дроп сразу работает)
+		if hh["equip"][slot] == "" or not g.has(hh["equip"][slot]):
+			hh["equip"][slot] = key
 		_popup_center("%s %s: %s %s ур.%d\n%s" % [ic, hh["data"]["name"], RARITY[rar]["name"], v["name"], ilvl, _rolls_text(it)], Color(RARITY[rar]["col"]), 2.5)
 	else:
 		_popup_center("📦 %s: %s %s (не лучше)" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]), 2.0)
