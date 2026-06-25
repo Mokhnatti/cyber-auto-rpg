@@ -196,10 +196,10 @@ const ITEM_VARIANTS := {
 # редкость = число стат-строк (1..4); индекс 0 не используется
 const RARITY := [
 	{"name": "—", "col": "#666"},
-	{"name": "Серый", "col": "#9aa0a6"},
-	{"name": "Зелёный", "col": "#3ad97a"},
-	{"name": "Синий", "col": "#3a8bd9"},
-	{"name": "Фиолет", "col": "#b46bff"},
+	{"name": "Обычный", "col": "#9aa0a6"},
+	{"name": "Необычный", "col": "#3ad97a"},
+	{"name": "Редкий", "col": "#3a8bd9"},
+	{"name": "Эпический", "col": "#b46bff"},
 ]
 # роллы значений: каждый стат роллится из 4 ступеней (100/90/80/70% от макс по 25%) — Genshin-модель
 const STAT_ROLL := {
@@ -757,14 +757,20 @@ func _refresh_reboot() -> void:
 		var sbtn := Button.new(); sbtn.custom_minimum_size = Vector2(516, 38); sbtn.add_theme_font_size_override("font_size", 12)
 		sbtn.text = "➕ Купить слот (%d 🧬)" % _slot_cost(); sbtn.disabled = cores < _slot_cost()
 		sbtn.pressed.connect(_buy_slot); reboot_list.add_child(sbtn)
-	# === СПИСОК ВЛАДЕЕМЫХ: сначала НАДЕТЫЕ, потом в наличии (Диана) ===
-	var owned := []
+	# === СПИСОК ВЛАДЕЕМЫХ: два понятных раздела — Активные и В запасе (Диана) ===
+	var active := []
+	var spare := []
 	for a in AUGMENTS:
-		if _al(a["id"]) > 0: owned.append(a["id"])
-	owned.sort_custom(func(x, y): return (x in equipped_augs) and not (y in equipped_augs))
-	if owned.size() > 0:
-		reboot_list.add_child(_lbl("— ТВОИ УСИЛЕНИЯ (надетые сверху) —", 12, Color("#9a8fb5")))
-		for id in owned:
+		if _al(a["id"]) > 0:
+			if a["id"] in equipped_augs: active.append(a["id"])
+			else: spare.append(a["id"])
+	if active.size() > 0:
+		reboot_list.add_child(_lbl("● АКТИВНЫЕ (работают сейчас):", 12, Color("#b46bff")))
+		for id in active:
+			reboot_list.add_child(_owned_aug_row(id))
+	if spare.size() > 0:
+		reboot_list.add_child(_lbl("○ В ЗАПАСЕ (надень в свободный слот):", 12, Color("#9a8fb5")))
+		for id in spare:
 			reboot_list.add_child(_owned_aug_row(id))
 
 # понятный эффект усиления с единицами (Диана: «+100%» — а чего?)
@@ -828,7 +834,7 @@ func _owned_aug_row(id: String) -> Control:
 	var aid: String = id
 	var eqb := Button.new(); eqb.custom_minimum_size = Vector2(96, 46); eqb.add_theme_font_size_override("font_size", 12)
 	if eq: eqb.text = "СНЯТЬ"
-	elif equipped_augs.size() >= _slot_total(): eqb.text = "нет\nслота"; eqb.disabled = true
+	elif equipped_augs.size() >= _slot_total(): eqb.text = "слоты\nзаняты"; eqb.disabled = true
 	else: eqb.text = "НАДЕТЬ"
 	eqb.pressed.connect(func(): _equip_aug(aid))
 	hb.add_child(eqb)
