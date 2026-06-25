@@ -203,12 +203,12 @@ const RARITY := [
 ]
 # роллы значений: каждый стат роллится из 4 ступеней (100/90/80/70% от макс по 25%) — Genshin-модель
 const STAT_ROLL := {
-	"hp":   {"max": 40, "fmt": "+%d HP"},
+	"hp":   {"max": 40, "fmt": "+%d здоровья"},
 	"dmg":  {"max": 8, "fmt": "+%d урон"},
 	"wdmg": {"max": 16, "fmt": "+%d урон"},
 	"crit": {"max": 8, "fmt": "+%d%% крит"},
-	"atk":  {"max": 8, "fmt": "+%d%% скор"},
-	"ult":  {"max": 10, "fmt": "+%d%% заряд"},
+	"atk":  {"max": 8, "fmt": "+%d%% скор.атаки"},
+	"ult":  {"max": 10, "fmt": "+%d%% заряд ульты"},
 }
 const ROLL_TIERS := [1.0, 0.9, 0.8, 0.7]   # по 25% каждая
 const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
@@ -234,7 +234,7 @@ const STAT_CAP := 1.0e15           # потолок урона/HP — предо
 const INNATE_WDMG := 16            # вшитый базовый урон «стартового оружия» (слоты на старте ПУСТЫЕ — Диана; боец не слабее)
 const STAGE_WAVES := 5         # норм-волн на стадии (потом босс). Кратно 5.
 const PRESTIGE_TOTAL_LVL := 350   # престиж: совместный уровень отряда (Пас4f: 200→350 — нельзя рашить престиж голой прокачкой)
-const PRESTIGE_STAGE := 20        # ИЛИ достижение этой стадии (Пас4e: 15→20 — нельзя престижить совсем рано)
+const PRESTIGE_STAGE := 26        # ИЛИ достижение этой стадии (Пас4g: 20→26 — позже первый престиж, ~час; кривая плавная → не застрять)
 
 func _max_hero_level() -> int:
 	var m := 1
@@ -727,13 +727,15 @@ func _refresh_reboot() -> void:
 	if unlocked:
 		rb_main.text = "♻ ПЕРЕЗАГРУЗИТЬСЯ  (+%d 🧬, старт стадия %d)" % [_cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5)))]
 	else:
-		rb_main.text = "🔒 Перезагрузка: нужна стадия %d или ур.отряда %d" % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
+		rb_main.text = "🔒 Престиж: стадия %d или %d ур." % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
 	for c in reboot_list.get_children():
 		c.queue_free()
-	# === TAP TITANS-МОДЕЛЬ: открыть СЛУЧАЙНОЕ усиление за ядра; переролл за премиум (скоро) ===
+	# === TAP TITANS-МОДЕЛЬ: открыть СЛУЧАЙНОЕ усиление за ядра ===
 	var n_unowned := 0
+	var n_owned := 0
 	for a in AUGMENTS:
 		if _al(a["id"]) == 0: n_unowned += 1
+		else: n_owned += 1
 	var disc := Button.new(); disc.custom_minimum_size = Vector2(516, 52); disc.add_theme_font_size_override("font_size", 15)
 	if n_unowned > 0:
 		disc.text = "🎲 ОТКРЫТЬ СЛУЧАЙНОЕ УСИЛЕНИЕ  (%d 🧬)" % _discover_cost()
@@ -742,14 +744,10 @@ func _refresh_reboot() -> void:
 		disc.text = "✓ Все усиления открыты — качай их ниже"; disc.disabled = true
 	disc.pressed.connect(_discover_aug)
 	reboot_list.add_child(disc)
-	var rrb := Button.new(); rrb.custom_minimum_size = Vector2(516, 38); rrb.add_theme_font_size_override("font_size", 12)
-	rrb.text = "💎 Переролл усиления — за премиум (скоро)"; rrb.disabled = true
-	reboot_list.add_child(rrb)
-	# слот-лоадаут
-	var sl := _lbl("🎒 Слотов: %d/%d" % [equipped_augs.size(), _slot_total()], 13, Color("#d9c7ff")); reboot_list.add_child(sl)
-	if _slot_total() < 10:
+	# слот-докупка — только когда есть хотя бы одно усиление (Диана: не грузить новичка)
+	if n_owned > 0 and _slot_total() < 10:
 		var sbtn := Button.new(); sbtn.custom_minimum_size = Vector2(516, 38); sbtn.add_theme_font_size_override("font_size", 12)
-		sbtn.text = "➕ Купить слот (%d 🧬)" % _slot_cost(); sbtn.disabled = cores < _slot_cost()
+		sbtn.text = "➕ Слот лоадаута %d/%d  (%d 🧬)" % [equipped_augs.size(), _slot_total(), _slot_cost()]; sbtn.disabled = cores < _slot_cost()
 		sbtn.pressed.connect(_buy_slot); reboot_list.add_child(sbtn)
 	# === СПИСОК ВЛАДЕЕМЫХ: два понятных раздела — Активные и В запасе (Диана) ===
 	var active := []
@@ -1927,7 +1925,8 @@ func _refresh_hud() -> void:
 	if boss_btn:
 		boss_btn.visible = boss_retry and not in_boss   # кнопка только для ретрая (свежий заход = авто)
 	if impl_btn:
-		var nc := new_gear.size()
+		var nc := 0
+		for k in new_gear: nc += int(new_gear[k])   # сумма новых предметов (не слотов)
 		impl_btn.text = "🦾 ЭКИПИРОВКА" + ("  ●%d" % nc if nc > 0 else "")
 		if nc > 0:
 			var ph: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 180.0)   # пульс золотом
@@ -2635,14 +2634,16 @@ func _build_implants() -> void:
 		wb.pressed.connect(func(): _open_compare(wi, "weapon"))
 		impl_panel.add_child(wb)
 		var wlbl := _lbl("", 12, Color("#e0d4b0"), HORIZONTAL_ALIGNMENT_CENTER); wlbl.position = Vector2(196, ry + 8); wlbl.size = Vector2(160, 120); wlbl.autowrap_mode = TextServer.AUTOWRAP_WORD; impl_panel.add_child(wlbl)
-		cell["wb"] = wb; cell["wsb"] = wsb; cell["wlbl"] = wlbl
+		var wbadge := _new_badge(Vector2(192 + 168 - 32, ry + 6)); impl_panel.add_child(wbadge)
+		cell["wb"] = wb; cell["wsb"] = wsb; cell["wlbl"] = wlbl; cell["wbadge"] = wbadge
 		var msb := StyleBoxFlat.new(); msb.bg_color = Color(0.10, 0.07, 0.16, 0.96); msb.set_corner_radius_all(10); msb.set_border_width_all(2)
 		var mb := Button.new(); mb.position = Vector2(368, ry); mb.size = Vector2(168, 134); mb.custom_minimum_size = Vector2(168, 134); mb.text = ""
 		for st in ["normal", "hover", "pressed", "focus", "disabled"]: mb.add_theme_stylebox_override(st, msb)
 		mb.pressed.connect(func(): _open_compare(wi, "module"))
 		impl_panel.add_child(mb)
 		var mlbl := _lbl("", 12, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); mlbl.position = Vector2(372, ry + 8); mlbl.size = Vector2(160, 120); mlbl.autowrap_mode = TextServer.AUTOWRAP_WORD; impl_panel.add_child(mlbl)
-		cell["mb"] = mb; cell["msb"] = msb; cell["mlbl"] = mlbl
+		var mbadge := _new_badge(Vector2(368 + 168 - 32, ry + 6)); impl_panel.add_child(mbadge)
+		cell["mb"] = mb; cell["msb"] = msb; cell["mlbl"] = mlbl; cell["mbadge"] = mbadge
 		impl_grid.append(cell)
 	var hint := _lbl("Тап по пушке/спецмодулю → сравнить и надеть. Лут падает с боссов.", 12, Color("#5a6080"), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.position = Vector2(0, 84 + 4 * 150 + 8); hint.size = Vector2(W, 18); impl_panel.add_child(hint)
@@ -2668,7 +2669,9 @@ func _refresh_impl() -> void:
 		cell["hsb"].border_color = Color("#ffd24a") if hnew else cell["hcol"]
 		cell["hsb"].set_border_width_all(4 if hnew else 2)
 		# --- оружие (предмет; слот может быть ПУСТ на старте) ---
-		var wnew: bool = new_gear.has("%d:weapon" % i)
+		var wcnt: int = int(new_gear.get("%d:weapon" % i, 0))
+		var wnew: bool = wcnt > 0
+		cell["wbadge"].text = str(wcnt); cell["wbadge"].visible = wnew
 		var wkey: String = hh["equip"]["weapon"]
 		if wkey != "" and hh["gear"]["weapon"].has(wkey):
 			var winst = hh["gear"]["weapon"][wkey]
@@ -2682,7 +2685,9 @@ func _refresh_impl() -> void:
 		# --- спецмодуль (слот может быть ПУСТ) ---
 		var mkey: String = hh["equip"]["module"]
 		var mdef = HERO_MODULE[hh["cls"]]
-		var mnew: bool = new_gear.has("%d:module" % i)
+		var mcnt: int = int(new_gear.get("%d:module" % i, 0))
+		var mnew: bool = mcnt > 0
+		cell["mbadge"].text = str(mcnt); cell["mbadge"].visible = mnew
 		if mkey != "" and hh["gear"]["module"].has(mkey):
 			var inst = hh["gear"]["module"][mkey]
 			var rar: int = inst["rarity"]
@@ -2717,6 +2722,21 @@ func _lbl(txt: String, sz: int, col: Color, align := HORIZONTAL_ALIGNMENT_LEFT) 
 	l.add_theme_color_override("font_color", col)
 	l.horizontal_alignment = align
 	return l
+
+# красный бейдж-счётчик новых вещей в углу слота (Диана) — невидим пока 0
+func _new_badge(pos: Vector2) -> Label:
+	var b := Label.new()
+	b.add_theme_font_size_override("font_size", 16)
+	b.add_theme_color_override("font_color", Color.WHITE)
+	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color("#ff2d3a"); sb.set_corner_radius_all(13)
+	b.add_theme_stylebox_override("normal", sb)
+	b.position = pos; b.size = Vector2(26, 26); b.custom_minimum_size = Vector2(26, 26)
+	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.z_index = 5
+	b.visible = false
+	return b
 
 func _arrow(p_from: Vector2, p_to: Vector2) -> void:
 	_skel_line(PackedVector2Array([p_from, p_to]))
@@ -2880,13 +2900,13 @@ func _drop_into(hh: Dictionary, i: int, slot: String) -> Dictionary:
 	var ic: String = "🔫" if slot == "weapon" else "✨"
 	if not g.has(key) or _item_power(it) > _item_power(g[key]):
 		g[key] = it
-		new_gear["%d:%s" % [i, slot]] = true
-		# НЕ авто-надеваем (Диана: игрок сам выбирает — это и есть момент «есть что надеть»). Боты надевают через _bot_equip_best.
+		new_gear["%d:%s" % [i, slot]] = int(new_gear.get("%d:%s" % [i, slot], 0)) + 1   # счётчик новых (бейдж)
+		# НЕ авто-надеваем (Диана: игрок сам выбирает). Боты надевают через _bot_equip_best.
 		if bot and (hh["equip"][slot] == "" or not g.has(hh["equip"][slot])):
 			hh["equip"][slot] = key
-		_popup_center("%s %s: %s %s ур.%d\n%s" % [ic, hh["data"]["name"], RARITY[rar]["name"], v["name"], ilvl, _rolls_text(it)], Color(RARITY[rar]["col"]), 2.5)
-	else:
-		_popup_center("📦 %s: %s %s (не лучше)" % [hh["data"]["name"], RARITY[rar]["name"], v["name"]], Color(RARITY[rar]["col"]), 2.0)
+		# короткая всплывашка (Диана, вариант Б): редкость + слот, без длинного имени/статов
+		var slotn: String = "оружие" if slot == "weapon" else "модуль"
+		_popup_center("%s %s %s!" % [ic, RARITY[rar]["name"], slotn], Color(RARITY[rar]["col"]), 1.8)
 	_recalc_hero(hh)
 	return it
 
@@ -2914,7 +2934,7 @@ func _grant_skipped_loot(upto_stage: int) -> void:
 		var g = hh["gear"][slot]
 		if not g.has(key) or _item_power(it) > _item_power(g[key]):
 			g[key] = it
-			new_gear["%d:%s" % [i, slot]] = true
+			new_gear["%d:%s" % [i, slot]] = int(new_gear.get("%d:%s" % [i, slot], 0)) + 1
 			kept += 1
 		else:
 			scr += int(_scrap_value(it) * aug_gold)   # дубль/хуже → излишек в лом
