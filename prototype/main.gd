@@ -294,6 +294,7 @@ var stats_open := false
 var stats_box: VBoxContainer
 var aug_lvl := {}         # id аугмента → уровень (persist через перезагрузку)
 var equipped_augs := []   # id аугментов в активных слотах (только они действуют)
+var draft_offers := []    # 3 случайных аугмента-предложения (рандом-ролл из 3, выбираешь 1) — persist
 var slots_bought := 0     # докуплено слотов за ядра
 var reboot_panel: Control
 var reboot_list: VBoxContainer
@@ -551,6 +552,41 @@ func _buy_aug(id: String) -> void:
 	_refresh_reboot()
 	_refresh_hud()
 
+# === РАНДОМ-3 ДРАФТ аугментов (Диана/Рамиль: выбираешь 1 из 3 случайных) ===
+func _aug_def(id: String) -> Dictionary:
+	for a in AUGMENTS:
+		if a["id"] == id:
+			return a
+	return AUGMENTS[0]
+
+func _roll_draft() -> void:
+	var ids := []
+	for a in AUGMENTS:
+		ids.append(a["id"])
+	ids.shuffle()
+	draft_offers = [ids[0], ids[1], ids[2]]
+
+func _take_draft(id: String) -> void:
+	if cores < _aug_cost(id):
+		return
+	_buy_aug(id)        # списывает ядра, +1 уровень, применяет
+	# авто-экип в свободный слот (чтоб эффект сразу действовал, без отдельной возни)
+	if not id in equipped_augs and equipped_augs.size() < _slot_total():
+		equipped_augs.append(id)
+		_apply_augments(); _recalc_auras()
+	_roll_draft()       # взял один → тройка обновляется
+	_save()
+	_refresh_reboot(); _refresh_hud()
+
+func _reroll_draft() -> void:
+	var c := 2          # небольшая цена, чтоб не фишить бесплатно
+	if cores < c:
+		return
+	cores -= c
+	_roll_draft()
+	_save()
+	_refresh_reboot(); _refresh_hud()
+
 func _reboot() -> void:
 	if not _can_prestige():
 		return   # престиж заблокирован до достижения уровня PRESTIGE_LVL
@@ -710,49 +746,69 @@ func _refresh_reboot() -> void:
 	sbtn.pressed.connect(_buy_slot)
 	shb.add_child(sbtn)
 	reboot_list.add_child(scard)
-	# карточки аугментов
-	for a in AUGMENTS:
-		var id: String = a["id"]
-		var lvl := _al(id)
-		var eq: bool = id in equipped_augs
-		var cost := _aug_cost(id)
-		var card := PanelContainer.new()
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.12, 0.10, 0.18, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
-		sb.border_color = Color("#b46bff") if eq else Color("#5a4a78"); sb.set_border_width_all(2 if eq else 1)
-		card.add_theme_stylebox_override("panel", sb)
-		card.custom_minimum_size = Vector2(516, 0)
-		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); card.add_child(hb)
-		var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var nm := Label.new(); nm.text = "%s %s  ур.%d%s" % [a["icon"], a["name"], lvl, ("  ✓" if eq else "")]; nm.add_theme_font_size_override("font_size", 14); nm.add_theme_color_override("font_color", Color("#d9c7ff")); info.add_child(nm)
-		var ds := Label.new(); ds.text = a["desc"]; ds.add_theme_font_size_override("font_size", 11); ds.add_theme_color_override("font_color", Color("#9a8fb5")); info.add_child(ds)
-		# текущий эффект → после апа (видно, что % реально растёт)
-		var per: float = a["per"]
-		var ef := Label.new()
-		if lvl > 0:
-			ef.text = "сейчас +%d%%  →  станет +%d%%" % [int(round(lvl * per * 100.0)), int(round((lvl + 1) * per * 100.0))]
-		else:
-			ef.text = "после открытия: +%d%%" % int(round(per * 100.0))
-		ef.add_theme_font_size_override("font_size", 11); ef.add_theme_color_override("font_color", Color("#7fe0a0")); info.add_child(ef)
-		hb.add_child(info)
-		var aid: String = id
-		var ebtn := Button.new(); ebtn.custom_minimum_size = Vector2(118, 48); ebtn.add_theme_font_size_override("font_size", 12)
-		if eq:
-			ebtn.text = "СНЯТЬ"
-		elif lvl == 0:
-			ebtn.text = "—"; ebtn.disabled = true
-		elif equipped_augs.size() >= _slot_total():
-			ebtn.text = "нет слота"; ebtn.disabled = true
-		else:
-			ebtn.text = "🎒 ЭКИП"
-		ebtn.pressed.connect(func(): _equip_aug(aid))
-		hb.add_child(ebtn)
-		var bb := Button.new(); bb.custom_minimum_size = Vector2(118, 48); bb.add_theme_font_size_override("font_size", 12)
-		bb.text = "%s\n%d 🧬" % ["ОТКРЫТЬ" if lvl == 0 else "УЛУЧШ", cost]
-		bb.disabled = cores < cost
-		bb.pressed.connect(func(): _buy_aug(aid))
-		hb.add_child(bb)
-		reboot_list.add_child(card)
+	# === РАНДОМ-3 ДРАФТ: 3 случайных аугмента, берёшь 1 (рероллит тройку) ===
+	if draft_offers.size() < 3:
+		_roll_draft()
+	var dh := _lbl("🎲 ВЫБЕРИ 1 ИЗ 3 (берёшь — выпадают новые):", 14, Color("#ffd24a"))
+	reboot_list.add_child(dh)
+	for id in draft_offers:
+		reboot_list.add_child(_draft_card(id))
+	var rrb := Button.new(); rrb.custom_minimum_size = Vector2(516, 40); rrb.add_theme_font_size_override("font_size", 13)
+	rrb.text = "🎲 Обновить тройку (2 🧬)"; rrb.disabled = cores < 2
+	rrb.pressed.connect(_reroll_draft)
+	reboot_list.add_child(rrb)
+	# === НАДЕТЫЕ аугменты (компактно) ===
+	if equipped_augs.size() > 0:
+		var eh := _lbl("🎒 Надетые аугменты (тап «СНЯТЬ» освобождает слот):", 13, Color("#d9c7ff"))
+		reboot_list.add_child(eh)
+		for id in equipped_augs:
+			reboot_list.add_child(_equipped_aug_row(id))
+
+func _draft_card(id: String) -> Control:
+	var a := _aug_def(id)
+	var lvl := _al(id)
+	var eq: bool = id in equipped_augs
+	var cost := _aug_cost(id)
+	var per: float = a["per"]
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.14, 0.11, 0.04, 0.96); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
+	sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2)
+	card.add_theme_stylebox_override("panel", sb)
+	card.custom_minimum_size = Vector2(516, 0)
+	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); card.add_child(hb)
+	var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var nm := _lbl("%s %s  ур.%d%s" % [a["icon"], a["name"], lvl, ("  ✓ надет" if eq else "")], 14, Color("#ffe9b0")); info.add_child(nm)
+	var ds := _lbl(a["desc"], 11, Color("#bdb18f")); info.add_child(ds)
+	var ef := _lbl(("сейчас +%d%% → станет +%d%%" % [int(round(lvl * per * 100.0)), int(round((lvl + 1) * per * 100.0))]) if lvl > 0 else ("новый аугмент: +%d%%" % int(round(per * 100.0))), 11, Color("#7fe0a0")); info.add_child(ef)
+	hb.add_child(info)
+	var aid: String = id
+	var bb := Button.new(); bb.custom_minimum_size = Vector2(130, 54); bb.add_theme_font_size_override("font_size", 13)
+	bb.text = "%s\n%d 🧬" % ["ВЗЯТЬ" if lvl == 0 else "+1 УРОВЕНЬ", cost]
+	bb.disabled = cores < cost
+	bb.pressed.connect(func(): _take_draft(aid))
+	hb.add_child(bb)
+	return card
+
+func _equipped_aug_row(id: String) -> Control:
+	var a := _aug_def(id)
+	var lvl := _al(id)
+	var per: float = a["per"]
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.12, 0.10, 0.18, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(8)
+	sb.border_color = Color("#b46bff"); sb.set_border_width_all(2)
+	card.add_theme_stylebox_override("panel", sb)
+	card.custom_minimum_size = Vector2(516, 0)
+	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); card.add_child(hb)
+	var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_child(_lbl("%s %s  ур.%d  (+%d%%)" % [a["icon"], a["name"], lvl, int(round(lvl * per * 100.0))], 13, Color("#d9c7ff")))
+	hb.add_child(info)
+	var aid: String = id
+	var ub := Button.new(); ub.custom_minimum_size = Vector2(110, 40); ub.add_theme_font_size_override("font_size", 12); ub.text = "СНЯТЬ"
+	ub.pressed.connect(func(): _equip_aug(aid))
+	hb.add_child(ub)
+	return card
 
 func _ready() -> void:
 	randomize()
@@ -811,6 +867,7 @@ func _reset() -> void:
 	rec_maxhit = 0; rec_prestiges = 0
 	aug_lvl.clear()
 	equipped_augs.clear()
+	_roll_draft()
 	slots_bought = 0
 	_apply_augments()
 	stage = 1
@@ -1185,7 +1242,7 @@ func _save() -> void:
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak,
-		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
+		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
 	var f := FileAccess.open(_save_path(), FileAccess.WRITE)
@@ -1211,6 +1268,7 @@ func _load() -> void:
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
 	fav = d.get("fav", {})
+	draft_offers = d.get("draft_offers", [])
 	rec_maxhit = int(d.get("rec_maxhit", 0)); rec_prestiges = int(d.get("rec_prestiges", 0))
 	_load_stats(stats_run, d.get("stats_run", {}))
 	_load_stats(stats_all, d.get("stats_all", {}))
