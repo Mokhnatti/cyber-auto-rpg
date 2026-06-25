@@ -223,6 +223,8 @@ const ENEMY_TYPES := {
 }
 
 const ENEMY_HP_EXP := 1.08     # КАЛИБРОВКА баланса: рост HP врагов за волну (главный рычаг «стены»). Меньше = мягче стена, глубже прогресс. Пасс1: 1.10→1.08.
+const LVL_GROWTH := 0.3        # КАЛИБРОВКА: темп ЭКСПОНЕНЦИАЛЬНОГО роста силы бойца от уровня. Чуть НИЖЕ темпа врагов → прогресс плавно ЗАТУХАЕТ (не разгон). Пасс2:0.5(разгон)→пасс3:0.3.
+const STAT_CAP := 1.0e15       # потолок урона/HP — предохранитель от переполнения int64 при глубоком престиже (большие числа показываем научной записью)
 const STAGE_WAVES := 5         # норм-волн на стадии (потом босс). Кратно 5.
 const PRESTIGE_TOTAL_LVL := 200   # престиж: совместный уровень отряда (нельзя читерить 1 бойцом)
 const PRESTIGE_STAGE := 15        # ИЛИ достижение этой стадии
@@ -515,8 +517,9 @@ func _recalc_hero(hh: Dictionary) -> void:
 	var wbonus: int = int(_gear_bonus(hh, "wdmg"))   # ОРУЖИЕ = главный урон (роллы предмета ×уровень)
 	var base_dmg: int = hh["data"]["dmg"] + wbonus + int(_gear_bonus(hh, "dmg"))
 	var base_hp: int = hh["data"]["hp"] + int(_gear_bonus(hh, "hp"))
-	hh["dmg"] = int(round(base_dmg * (1.0 + (lv - 1) * hh["data"]["dmgg"]) * aug_dmg))
-	hh["max"] = int(base_hp * (1.0 + (lv - 1) * hh["data"]["hpg"]) * aura_hp * aug_hp * 2.0)   # ×2 выживаемость (сквиши ложились за сек, не успеть ульту)
+	# ЭКСПОНЕНЦИАЛЬНЫЙ рост от уровня — в темпе с HP врагов → плавная затухающая кривая. min() = предохранитель от int64-переполнения.
+	hh["dmg"] = int(round(min(base_dmg * pow(1.0 + hh["data"]["dmgg"] * LVL_GROWTH, lv - 1) * aug_dmg, STAT_CAP)))
+	hh["max"] = int(min(base_hp * pow(1.0 + hh["data"]["hpg"] * LVL_GROWTH, lv - 1) * aura_hp * aug_hp * 2.0, STAT_CAP))   # ×2 выживаемость
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] + aug_critx
@@ -828,8 +831,9 @@ func _ready() -> void:
 	_load()   # подхватить сейв (по слоту)
 	if bot:
 		auto_battle = true
-		Engine.time_scale = 8.0   # ускоренный плейтест (бот; игроку 1X/2X отдельно)
-		print("TTBOT enabled tactic=%s slot=%s time_scale=8" % [bot_tactic, save_slot])
+		Engine.max_fps = 0          # снять кап fps → CPU свободен, рисует больше кадров → шаг кадра мелкий даже на высоком time_scale (легитимно)
+		Engine.time_scale = 16.0    # ×16: шаг = 16/fps, при ~250fps ≈ 0.06с (мельче прежнего 0.13с) → симуляция точная, вдвое быстрее
+		print("TTBOT enabled tactic=%s slot=%s time_scale=16 maxfps=0" % [bot_tactic, save_slot])
 	elif nick == "":
 		nick_panel.visible = true   # первый вход → спросить ник (ввод через нативный браузерный prompt)
 	elif _offline_gold > 0:
@@ -924,10 +928,10 @@ func _bot_telemetry() -> void:
 
 # грубая «боевая мощь» отряда (сумма урона живых) — для кривой прогресса и показателя силы
 func _party_power() -> int:
-	var p := 0
+	var p := 0.0
 	for hh in heroes:
-		p += int(hh["dmg"]) * int(round(hh["atk_spd"] if hh.has("atk_spd") else 1))
-	return p
+		p += float(hh["dmg"]) * float(hh.get("atk_spd", 1.0)) * float(hh.get("atk_mult", 1.0))
+	return int(min(p, STAT_CAP))   # float-аккумуляция + кламп → без переполнения
 
 # внешний конфиг тактик (hot-reload каждые ~10с): можно крутить стратегию БЕЗ перезапуска
 func _bot_load_cfg() -> void:
@@ -1097,13 +1101,23 @@ func _fmt_time(sec) -> String:
 
 func _fmt_n(n) -> String:
 	var v := float(n)
-	if v >= 1000000.0: return "%.1fM" % (v / 1000000.0)
-	if v >= 1000.0: return "%.1fk" % (v / 1000.0)
-	return str(int(round(v)))
+	var neg := v < 0.0
+	v = abs(v)
+	var s := ""
+	if v >= 1.0e15: s = "%.2e" % v       # научная запись (1.23e+18) — большие числа idle
+	elif v >= 1.0e12: s = "%.2fT" % (v / 1.0e12)
+	elif v >= 1.0e9: s = "%.2fB" % (v / 1.0e9)
+	elif v >= 1.0e6: s = "%.2fM" % (v / 1.0e6)
+	elif v >= 1.0e3: s = "%.1fk" % (v / 1.0e3)
+	else: s = str(int(round(v)))
+	return ("-" if neg else "") + s
 
-# разделитель тысяч точкой (Диана): 500000 → 500.000
+# разделитель тысяч точкой (Диана): 500000 → 500.000. Очень большие → суффикс/научно (читаемо).
 func _gsep(n) -> String:
-	var s := str(int(round(float(n))))
+	var v := float(n)
+	if abs(v) >= 1.0e9:
+		return _fmt_n(v)        # миллиарды+ → 1.50B / 2.30e+15, а не каша из цифр
+	var s := str(int(round(v)))
 	var neg := s.begins_with("-")
 	if neg: s = s.substr(1)
 	var out := ""
