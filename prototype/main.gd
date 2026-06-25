@@ -905,6 +905,8 @@ func _bot_tick(delta: float) -> void:
 	for i in heroes.size():
 		if heroes[i]["alive"] and gold >= heroes[i]["lvl_cost"]:
 			_upgrade_level(i)
+	# авто-экип лучшего лута (иначе шмот/оружие не тестируется) — БОТ-ОНЛИ
+	_bot_equip_best()
 	# аугменты: экип владеемых в свободные слоты + купить дешёвый уровень
 	if cores > 0 or equipped_augs.size() < _slot_total():
 		_bot_augments()
@@ -922,6 +924,21 @@ func _bot_tick(delta: float) -> void:
 	if bot_stall_t > stall_lim and _can_prestige():
 		bot_stall_t = 0.0; bot_last_stage = 1
 		_reboot()
+
+# БОТ: надеть лучший предмет в каждом слоте (по _item_power) у каждого бойца
+func _bot_equip_best() -> void:
+	for hh in heroes:
+		for slot in ["weapon", "module"]:
+			var cur: String = hh["equip"][slot]
+			var best_key: String = cur
+			var best_pow: int = _item_power(hh["gear"][slot][cur]) if hh["gear"][slot].has(cur) else -1
+			for key in hh["gear"][slot]:
+				var p := _item_power(hh["gear"][slot][key])
+				if p > best_pow:
+					best_pow = p; best_key = key
+			if hh["equip"][slot] != best_key:
+				hh["equip"][slot] = best_key
+				_recalc_hero(hh)
 
 func _bot_augments() -> void:
 	# приоритет тактики: какие семейства держим в слотах
