@@ -2676,7 +2676,7 @@ func _refresh_impl() -> void:
 			cell["wlbl"].text = "%s %s\n%s %s · ур.%d\n%s" % [hh["data"]["wicon"], ("NEW" if wnew else "оружие"), RARITY[wrar]["name"], _variant("weapon", hh["cls"], winst["vid"])["name"], winst["lvl"], _rolls_text(winst)]
 			cell["wsb"].border_color = Color("#ffd24a") if wnew else Color(RARITY[wrar]["col"])
 		else:
-			cell["wlbl"].text = "%s оружие\n— пусто —\nнадень лут" % hh["data"]["wicon"]
+			cell["wlbl"].text = "%s оружие\n— пусто —" % hh["data"]["wicon"]
 			cell["wsb"].border_color = Color("#ffd24a") if wnew else Color("#3a3f55")
 		cell["wsb"].set_border_width_all(4 if wnew else 2)
 		# --- спецмодуль (слот может быть ПУСТ) ---
@@ -2689,7 +2689,7 @@ func _refresh_impl() -> void:
 			cell["mlbl"].text = "%s %s\n%s %s\n%s" % [mdef["icon"], ("NEW" if mnew else mdef["name"]), RARITY[rar]["name"], _module_variant(hh["cls"], inst["vid"])["name"], _rolls_text(inst)]
 			cell["msb"].border_color = Color("#ffd24a") if mnew else Color(RARITY[rar]["col"])
 		else:
-			cell["mlbl"].text = "%s %s\n— пусто —\nнадень лут" % [mdef["icon"], mdef["name"]]
+			cell["mlbl"].text = "%s %s\n— пусто —" % [mdef["icon"], mdef["name"]]
 			cell["msb"].border_color = Color("#ffd24a") if mnew else Color("#3a3f55")
 		cell["msb"].set_border_width_all(4 if mnew else 2)
 
@@ -2881,8 +2881,8 @@ func _drop_into(hh: Dictionary, i: int, slot: String) -> Dictionary:
 	if not g.has(key) or _item_power(it) > _item_power(g[key]):
 		g[key] = it
 		new_gear["%d:%s" % [i, slot]] = true
-		# первый лут в ПУСТОЙ слот — авто-надеваем (Диана: пустой старт → первый дроп сразу работает)
-		if hh["equip"][slot] == "" or not g.has(hh["equip"][slot]):
+		# НЕ авто-надеваем (Диана: игрок сам выбирает — это и есть момент «есть что надеть»). Боты надевают через _bot_equip_best.
+		if bot and (hh["equip"][slot] == "" or not g.has(hh["equip"][slot])):
 			hh["equip"][slot] = key
 		_popup_center("%s %s: %s %s ур.%d\n%s" % [ic, hh["data"]["name"], RARITY[rar]["name"], v["name"], ilvl, _rolls_text(it)], Color(RARITY[rar]["col"]), 2.5)
 	else:
