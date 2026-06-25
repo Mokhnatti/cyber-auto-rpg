@@ -222,6 +222,7 @@ const ENEMY_TYPES := {
 	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#ff2d95", "s": 1.0, "heal": true},
 }
 
+const ENEMY_HP_EXP := 1.08     # КАЛИБРОВКА баланса: рост HP врагов за волну (главный рычаг «стены»). Меньше = мягче стена, глубже прогресс. Пасс1: 1.10→1.08.
 const STAGE_WAVES := 5         # норм-волн на стадии (потом босс). Кратно 5.
 const PRESTIGE_TOTAL_LVL := 200   # престиж: совместный уровень отряда (нельзя читерить 1 бойцом)
 const PRESTIGE_STAGE := 15        # ИЛИ достижение этой стадии
@@ -682,9 +683,9 @@ func _build_reboot() -> void:
 func _refresh_reboot() -> void:
 	var unlocked := _can_prestige()
 	if unlocked:
-		reboot_info.text = "🧬 ЯДЕР: %d   +%d за перезагрузку   старт стадия %d   🎒 слоты %d/%d" % [cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5))), equipped_augs.size(), _slot_total()]
+		reboot_info.text = "💪 Мощь отряда: %s   🧬 ЯДЕР: %d   +%d за перезагрузку   старт стадия %d   🎒 слоты %d/%d" % [_gsep(_party_power()), cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5))), equipped_augs.size(), _slot_total()]
 	else:
-		reboot_info.text = "🧬 ЯДЕР: %d  — трать на аугменты в любой момент\n🔒 Перезагрузка: ур. отряда %d/%d ИЛИ стадия %d (сейчас %d)" % [cores, _total_levels(), PRESTIGE_TOTAL_LVL, PRESTIGE_STAGE, max(stage, best_stage)]
+		reboot_info.text = "💪 Мощь отряда: %s   🧬 ЯДЕР: %d  — трать на аугменты\n🔒 Перезагрузка: ур. отряда %d/%d ИЛИ стадия %d (сейчас %d)" % [_gsep(_party_power()), cores, _total_levels(), PRESTIGE_TOTAL_LVL, PRESTIGE_STAGE, max(stage, best_stage)]
 	rb_main.disabled = not unlocked
 	for c in reboot_list.get_children():
 		c.queue_free()
@@ -1097,6 +1098,8 @@ func _stat_3col(name: String, run_v: String, all_v: String, col := Color("#cfe6f
 func _refresh_stats() -> void:
 	for c in stats_box.get_children(): c.queue_free()
 	# --- Рекорды ---
+	_stat_section("💪 СИЛА ОТРЯДА (сейчас)")
+	_stat_3col("⚔ Боевая мощь", "", _gsep(_party_power()), Color("#ff7a3a"))
 	_stat_section("🏆 РЕКОРДЫ (за всё время)")
 	_stat_3col("🌊 Лучшая стадия", "", str(best_stage), Color("#ffd24a"))
 	_stat_3col("⬆ Макс. уровень бойца", "", str(_max_hero_level()), Color("#ffd24a"))
@@ -1299,7 +1302,7 @@ func _spawn_wave() -> void:
 	var base_idx := (stage - 1) * (STAGE_WAVES + 1)
 	wave = base_idx + ((STAGE_WAVES + 1) if boss else 3)
 	var count := (1 if boss else clampi(2 + int(stage / 5), 2, 5))   # стабильно в пределах стадии
-	var hpmul := pow(1.10, wave)
+	var hpmul := pow(ENEMY_HP_EXP, wave)   # КАЛИБРОВКА: рост HP врагов за волну (стена). 1.10→1.08 пасс1
 	var pool := _enemy_pool()
 	for j in count:
 		# ДЕТЕРМИНИРОВАННО по (стадия, под-волна, позиция) — одна стадия = одни и те же враги всегда
