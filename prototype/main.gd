@@ -471,6 +471,15 @@ func _augsum(stat: String) -> float:
 			s += _al(a["id"]) * a["per"]
 	return s
 
+# МУЛЬТИПЛИКАТИВНАЯ сила усилений (Фикс №1): ×(1+per)^уровень — компаундится, растёт ЭКСПОНЕНЦИАЛЬНО.
+# Это пробивает потолок: каждый круг престижа поднимает силу в темпе с экспонентой HP врагов → потолок ползёт вверх.
+func _augmul(stat: String) -> float:
+	var m := 1.0
+	for a in AUGMENTS:
+		if a["stat"] == stat and a["id"] in equipped_augs:
+			m *= pow(1.0 + a["per"], _al(a["id"]))
+	return m
+
 # всего слотов: база 3 + докупленные + бесплатные за рубежи стадий
 func _slot_total() -> int:
 	var milestones := 0
@@ -501,13 +510,13 @@ func _equip_aug(id: String) -> void:
 	_refresh_reboot(); _refresh_hud()
 
 func _apply_augments() -> void:
-	aug_dmg = 1.0 + _augsum("dmg")
-	aug_hp = 1.0 + _augsum("hp")
-	aug_crit = _augsum("crit")
+	aug_dmg = _augmul("dmg")     # Фикс №1: УМНОЖЕНИЕ → экспонента → пробивает потолок (СИЛА)
+	aug_hp = _augmul("hp")
+	aug_crit = _augsum("crit")   # крит-шанс — складываем (нельзя >95%)
 	aug_critx = _augsum("critx")
 	aug_atk = 1.0 + _augsum("atk")
-	aug_gold = 1.0 + _augsum("gold")
-	aug_core = 1.0 + _augsum("core")
+	aug_gold = 1.0 + _augsum("gold")   # СЛОЖЕНИЕ: иначе экономика взрывается (golf→уровни→golf петля)
+	aug_core = 1.0 + _augsum("core")   # СЛОЖЕНИЕ: компаунд ядер = runaway (ядра→ядра, hoard улетел в 1.5e16). Только урон/HP множим.
 	aug_ultcd = max(0.4, 1.0 - _augsum("ultcd"))
 	aug_qte = _augsum("qte")
 	aug_density = max(0.3, 1.0 - _augsum("density"))
@@ -531,7 +540,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _aug_cost(id: String) -> int:
-	return int(floor(8.0 * pow(1.22, _al(id))))   # мягкая кривая, дорожает с уровнем
+	return int(floor(8.0 * pow(1.15, _al(id))))   # Фикс №1: 1.22→1.15 — глубокие уровни усилений доступнее (ядра → сила → пробитие потолка)
 
 func _prestige_score() -> float:
 	# «счёт престижа» из ДВУХ осей: стадия (главный вес, квадратично) + суммарный ур. отряда (добавка)
@@ -765,15 +774,17 @@ func _refresh_reboot() -> void:
 		for id in spare:
 			reboot_list.add_child(_owned_aug_row(id))
 
-# понятный эффект усиления с единицами (Диана: «+100%» — а чего?)
+# понятный эффект усиления. Множительные статы (Фикс №1) показываем как ×N (компаунд), остальные — сложение.
 func _aug_effect(a: Dictionary, lvl: int) -> String:
 	var v: float = lvl * a["per"]
+	var mul: float = pow(1.0 + a["per"], lvl)   # компаунд для множительных
+	var ms: String = ("×%.2f" % mul) if mul < 10.0 else (("×%.0f" % mul) if mul < 1000.0 else "×" + _fmt_n(mul))
 	match a["stat"]:
-		"dmg": return "+%d%% урона" % int(round(v * 100))
-		"hp": return "+%d%% HP" % int(round(v * 100))
-		"atk": return "+%d%% скор.атаки" % int(round(v * 100))
+		"dmg": return "%s урона" % ms
+		"hp": return "%s здоровья" % ms
 		"gold": return "+%d%% золота/лома" % int(round(v * 100))
 		"core": return "+%d%% ядер" % int(round(v * 100))
+		"atk": return "+%d%% скор.атаки" % int(round(v * 100))
 		"crit": return "+%.1f%% шанс крита" % (v * 100)
 		"critx": return "+%.2f× крит-урон" % v
 		"ultcd": return "−%d%% КД ульт" % int(round(v * 100))
