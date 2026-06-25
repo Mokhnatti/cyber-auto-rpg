@@ -2184,16 +2184,16 @@ func _refresh_inv() -> void:
 		var r = hero_rows[i]
 		if buy_mult == 0:
 			var n0 := _affordable_levels(hh)
-			r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (MAX: %d ур)\nза %d 💰" % [hh["level"], n0, _batch_cost(hh, n0)]
+			r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (MAX: %d ур)\nза %s 💰" % [hh["level"], n0, _gsep(_batch_cost(hh, n0))]
 			r["lvl_btn"].disabled = n0 < 1
 		else:
 			var n: int = buy_mult
 			var bc := _batch_cost(hh, n)
 			if gold >= bc:
-				r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (x%d)\nза %d 💰" % [hh["level"], n, bc]
+				r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (x%d)\nза %s 💰" % [hh["level"], n, _gsep(bc)]
 				r["lvl_btn"].disabled = false
 			else:
-				r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (x%d)\nнужно %d 💰 на %d ур" % [hh["level"], n, bc, n]
+				r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (x%d)\nнужно %s 💰 на %d ур" % [hh["level"], n, _gsep(bc), n]
 				r["lvl_btn"].disabled = true   # не хватает на пачку → тусклая
 
 func _affordable_levels(hh: Dictionary) -> int:
