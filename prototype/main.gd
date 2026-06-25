@@ -223,7 +223,7 @@ const ENEMY_TYPES := {
 }
 
 # КАЛИБРОВКА ПАС4 — модель Clicker Heroes (PROGRESSION-RESEARCH.md): per-STAGE экспонента врагов + ЛИНЕЙНАЯ сила бойца с ×2-изломами каждые N уровней. Зазор линейной силы vs экспон.цены = плавное затухание; ×2-изломы = power-spike «волна».
-const ENEMY_HP_BASE := 105.0       # базовое HP врага (рычаг ВРЕМЕНИ: выше = бои дольше = прогресс растягивается, форма кривой та же). Пас4c: 45→105 (~×2.3) для ~1ч до 1-го престижа при x1
+const ENEMY_HP_BASE := 140.0       # базовое HP врага (рычаг ВРЕМЕНИ: выше = бои дольше = прогресс растягивается, форма кривой та же). Пас4d: 105→140 → ~65-70 мин до 1-го престижа при x1 (Рамиль: «больше часа, с x3-донатом всё равно быстрее»)
 const ENEMY_HP_PER_STAGE := 1.28   # HP врага за стадию. Пас4b: 1.15(слишком полого, улетали на 130+)→1.28 → стена приезжает раньше, затухание с начала
 const ENEMY_DMG_PER_STAGE := 1.13  # урон врага растёт чуть медленнее HP
 const GOLD_PER_STAGE := 1.20       # золото за стадию — чуть ниже HP (фундирует прокачку, но боец постепенно отстаёт → затухание)
@@ -384,6 +384,7 @@ func _make_item(cls: int, vid: String, rarity: int, slot: String = "module") -> 
 	var rolls := [_primary_roll(slot, v["stat"])]
 	var others := STAT_KEYS.duplicate()
 	others.erase(v["stat"])
+	if slot == "weapon": others.erase("dmg")   # оружие: доп-стат не дублирует «урон» (у него уже wdmg-урон)
 	others.shuffle()
 	for i in range(min(rarity - 1, others.size())):
 		rolls.append(_roll_stat(others[i]))
@@ -1982,7 +1983,7 @@ func _refresh_hud() -> void:
 	# золото + прокачка урона
 	gold_label.text = "💰 %s  +%s/с   ♻ %s   🧬 %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(scrap), _gsep(cores)]
 	if inv_open and inv_gold:
-		inv_gold.text = "💰 %s   +%s/с" % [_gsep(gold), _gsep(_passive_rate())]
+		inv_gold.text = "💰 %s   +%s/с    💪 Мощь: %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(_party_power())]
 	if inv_open: _refresh_inv()
 	if impl_open: _refresh_impl()
 
@@ -2277,7 +2278,7 @@ func _build_inventory() -> void:
 
 func _refresh_inv() -> void:
 	if inv_gold:
-		inv_gold.text = "💰 %s   +%s/с" % [_gsep(gold), _gsep(_passive_rate())]
+		inv_gold.text = "💰 %s   +%s/с    💪 Мощь: %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(_party_power())]
 	for pair in buy_btns:   # подсветка выбранного множителя
 		pair[1].modulate = Color(1.4, 1.4, 0.6) if pair[0] == buy_mult else Color(0.7, 0.7, 0.7)
 	for i in heroes.size():
@@ -2574,10 +2575,18 @@ func _reroll(slot: String, key: String) -> void:
 
 # строка ролла → текст «+N стат»
 func _rolls_text(it: Dictionary) -> String:
-	var parts := []
+	# группируем по формату → одинаковые стат-строки (напр. урон оружия + доп-урон) сливаются в одну (Диана: «2 раза урон»)
 	var mult: float = 1.0 + (it["lvl"] - 1) * 0.25
+	var by_fmt := {}
+	var order := []
 	for r in it["rolls"]:
-		parts.append(STAT_ROLL[r["stat"]]["fmt"] % int(r["val"] * mult))
+		var f: String = STAT_ROLL[r["stat"]]["fmt"]
+		if not by_fmt.has(f):
+			by_fmt[f] = 0; order.append(f)
+		by_fmt[f] = int(by_fmt[f]) + int(r["val"] * mult)
+	var parts := []
+	for f in order:
+		parts.append(f % by_fmt[f])
 	return ", ".join(parts)
 
 func _build_implants() -> void:
