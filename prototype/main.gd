@@ -222,9 +222,15 @@ const ENEMY_TYPES := {
 	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#ff2d95", "s": 1.0, "heal": true},
 }
 
-const ENEMY_HP_EXP := 1.08     # КАЛИБРОВКА баланса: рост HP врагов за волну (главный рычаг «стены»). Меньше = мягче стена, глубже прогресс. Пасс1: 1.10→1.08.
-const LVL_GROWTH := 0.3        # КАЛИБРОВКА: темп ЭКСПОНЕНЦИАЛЬНОГО роста силы бойца от уровня. Чуть НИЖЕ темпа врагов → прогресс плавно ЗАТУХАЕТ (не разгон). Пасс2:0.5(разгон)→пасс3:0.3.
-const STAT_CAP := 1.0e15       # потолок урона/HP — предохранитель от переполнения int64 при глубоком престиже (большие числа показываем научной записью)
+# КАЛИБРОВКА ПАС4 — модель Clicker Heroes (PROGRESSION-RESEARCH.md): per-STAGE экспонента врагов + ЛИНЕЙНАЯ сила бойца с ×2-изломами каждые N уровней. Зазор линейной силы vs экспон.цены = плавное затухание; ×2-изломы = power-spike «волна».
+const ENEMY_HP_BASE := 105.0       # базовое HP врага (рычаг ВРЕМЕНИ: выше = бои дольше = прогресс растягивается, форма кривой та же). Пас4c: 45→105 (~×2.3) для ~1ч до 1-го престижа при x1
+const ENEMY_HP_PER_STAGE := 1.28   # HP врага за стадию. Пас4b: 1.15(слишком полого, улетали на 130+)→1.28 → стена приезжает раньше, затухание с начала
+const ENEMY_DMG_PER_STAGE := 1.13  # урон врага растёт чуть медленнее HP
+const GOLD_PER_STAGE := 1.20       # золото за стадию — чуть ниже HP (фундирует прокачку, но боец постепенно отстаёт → затухание)
+const LVL_COST_GROWTH := 1.075     # цена уровня ×1.075 (диапазон 1.07–1.08 индустрии)
+const DPS_MILESTONE := 25          # ×2 к силе бойца каждые N уровней = регулярный рывок (изломы Clicker Heroes)
+const BOSS_HP_CYCLE := [3.0, 4.0, 5.0, 6.0, 10.0]   # множитель HP босса по циклу (stage-1)%5 → каждый 5-й = ×10 (milestone-стена)
+const STAT_CAP := 1.0e15           # потолок урона/HP — предохранитель от int64-переполнения (большие числа → научная запись)
 const STAGE_WAVES := 5         # норм-волн на стадии (потом босс). Кратно 5.
 const PRESTIGE_TOTAL_LVL := 200   # престиж: совместный уровень отряда (нельзя читерить 1 бойцом)
 const PRESTIGE_STAGE := 15        # ИЛИ достижение этой стадии
@@ -517,9 +523,11 @@ func _recalc_hero(hh: Dictionary) -> void:
 	var wbonus: int = int(_gear_bonus(hh, "wdmg"))   # ОРУЖИЕ = главный урон (роллы предмета ×уровень)
 	var base_dmg: int = hh["data"]["dmg"] + wbonus + int(_gear_bonus(hh, "dmg"))
 	var base_hp: int = hh["data"]["hp"] + int(_gear_bonus(hh, "hp"))
-	# ЭКСПОНЕНЦИАЛЬНЫЙ рост от уровня — в темпе с HP врагов → плавная затухающая кривая. min() = предохранитель от int64-переполнения.
-	hh["dmg"] = int(round(min(base_dmg * pow(1.0 + hh["data"]["dmgg"] * LVL_GROWTH, lv - 1) * aug_dmg, STAT_CAP)))
-	hh["max"] = int(min(base_hp * pow(1.0 + hh["data"]["hpg"] * LVL_GROWTH, lv - 1) * aura_hp * aug_hp * 2.0, STAT_CAP))   # ×2 выживаемость
+	# ЛИНЕЙНЫЙ рост ×уровень + ×2-излом каждые DPS_MILESTONE уровней (модель Clicker Heroes).
+	# Темп %/уровень убывает (L→L+1: +1/L) = плавное затухание; ×2 на рубежах = power-spike «волна». min()=кламп от переполнения.
+	var milestone := pow(2.0, floor(float(lv - 1) / float(DPS_MILESTONE)))
+	hh["dmg"] = int(round(min(base_dmg * lv * milestone * aug_dmg, STAT_CAP)))
+	hh["max"] = int(min(base_hp * lv * milestone * aura_hp * aug_hp * 2.0, STAT_CAP))   # ×2 выживаемость
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] + aug_critx
@@ -535,14 +543,11 @@ func _prestige_score() -> float:
 	return stage * stage / 4.0 + float(_total_levels()) * 0.5
 
 func _cores_gain() -> int:
-	# Платим за ПРОГРЕСС, а не за повтор:
-	#  • гарант-поток 40% от текущего счёта — платится ВСЕГДА (растёт с глубиной → застрявший не зависнет, копит и пробивает стену)
-	#  • бонус за превышение прошлой планки (новый рекорд глубины/силы) — крупно
-	# числа (0.4 / вес уровней / 1.0) — болванка под калибровку ботами
-	var score := _prestige_score()
-	var base := score * 0.4
-	var newground: float = max(0.0, score - cores_peak)
-	return max(1, int(floor((base + newground) * aug_core)))
+	# ПАС4 (ресёрч): корневая формула — ядра = 10·√(макс.достигнутая стадия).
+	# Корень = «налог» на повтор: чтобы удвоить ядра, надо пройти ×4 дальше (растягивает забеги, Realm Grinder/AdVenture Capitalist).
+	# Всегда >0 → застрявший копит и пробивает стену, не зависает.
+	var depth: int = max(best_stage, stage)
+	return max(1, int(floor(10.0 * sqrt(float(depth)) * aug_core)))
 
 func _buy_aug(id: String) -> void:
 	var c := _aug_cost(id)
@@ -688,7 +693,7 @@ func _build_reboot() -> void:
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_reboot())
 	reboot_panel.add_child(bg)
 	var title := Label.new()
-	title.text = "♻ ПЕРЕЗАГРУЗКА · АУГМЕНТЫ"
+	title.text = "♻ ПЕРЕЗАГРУЗКА · УСИЛЕНИЯ"
 	title.add_theme_color_override("font_color", Color("#b46bff")); title.add_theme_font_size_override("font_size", 21)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 24); title.size = Vector2(W, 30)
@@ -721,95 +726,114 @@ func _build_reboot() -> void:
 
 func _refresh_reboot() -> void:
 	var unlocked := _can_prestige()
-	if unlocked:
-		reboot_info.text = "💪 Мощь отряда: %s   🧬 ЯДЕР: %d   +%d за перезагрузку   старт стадия %d   🎒 слоты %d/%d" % [_gsep(_party_power()), cores, _cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5))), equipped_augs.size(), _slot_total()]
-	else:
-		reboot_info.text = "💪 Мощь отряда: %s   🧬 ЯДЕР: %d  — трать на аугменты\n🔒 Перезагрузка: ур. отряда %d/%d ИЛИ стадия %d (сейчас %d)" % [_gsep(_party_power()), cores, _total_levels(), PRESTIGE_TOTAL_LVL, PRESTIGE_STAGE, max(stage, best_stage)]
+	# чисто: только мощь + ядра. Условие перезагрузки — на самой кнопке (не грузим экран).
+	reboot_info.text = "💪 Мощь: %s    🧬 Ядра: %d" % [_gsep(_party_power()), cores]
 	rb_main.disabled = not unlocked
+	if unlocked:
+		rb_main.text = "♻ ПЕРЕЗАГРУЗИТЬСЯ  (+%d 🧬, старт стадия %d)" % [_cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5)))]
+	else:
+		rb_main.text = "🔒 Перезагрузка: нужна стадия %d или ур.отряда %d" % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
 	for c in reboot_list.get_children():
 		c.queue_free()
-	# витрина аугментов доступна ВСЕГДА (трать накопленные ядра, даже когда перезагрузка под гейтом)
-	# карточка докупки слота
-	var scard := PanelContainer.new()
-	var ssb := StyleBoxFlat.new()
-	ssb.bg_color = Color(0.10, 0.08, 0.16, 0.95); ssb.set_corner_radius_all(10); ssb.set_content_margin_all(10)
-	ssb.border_color = Color("#7a5aa8"); ssb.set_border_width_all(1)
-	scard.add_theme_stylebox_override("panel", ssb)
-	scard.custom_minimum_size = Vector2(516, 0)
-	var shb := HBoxContainer.new(); shb.add_theme_constant_override("separation", 8); scard.add_child(shb)
-	var sinfo := VBoxContainer.new(); sinfo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var snm := Label.new(); snm.text = "🎒 Слоты лоадаута: %d / %d" % [equipped_augs.size(), _slot_total()]; snm.add_theme_font_size_override("font_size", 15); snm.add_theme_color_override("font_color", Color("#d9c7ff")); sinfo.add_child(snm)
-	var sds := Label.new(); sds.text = "активных аугментов одновременно (рубежи 20/60/120/220 дают +1)"; sds.add_theme_font_size_override("font_size", 11); sds.add_theme_color_override("font_color", Color("#9a8fb5")); sinfo.add_child(sds)
-	shb.add_child(sinfo)
-	var sbtn := Button.new(); sbtn.custom_minimum_size = Vector2(150, 48); sbtn.add_theme_font_size_override("font_size", 13)
-	if _slot_total() >= 10:
-		sbtn.text = "МАКС"; sbtn.disabled = true
+	# === TAP TITANS-МОДЕЛЬ: открыть СЛУЧАЙНОЕ усиление за ядра; переролл за премиум (скоро) ===
+	var n_unowned := 0
+	for a in AUGMENTS:
+		if _al(a["id"]) == 0: n_unowned += 1
+	var disc := Button.new(); disc.custom_minimum_size = Vector2(516, 52); disc.add_theme_font_size_override("font_size", 15)
+	if n_unowned > 0:
+		disc.text = "🎲 ОТКРЫТЬ СЛУЧАЙНОЕ УСИЛЕНИЕ  (%d 🧬)" % _discover_cost()
+		disc.disabled = cores < _discover_cost()
 	else:
-		sbtn.text = "➕ СЛОТ\n%d 🧬" % _slot_cost(); sbtn.disabled = cores < _slot_cost()
-	sbtn.pressed.connect(_buy_slot)
-	shb.add_child(sbtn)
-	reboot_list.add_child(scard)
-	# === РАНДОМ-3 ДРАФТ: 3 случайных аугмента, берёшь 1 (рероллит тройку) ===
-	if draft_offers.size() < 3:
-		_roll_draft()
-	var dh := _lbl("🎲 ВЫБЕРИ 1 ИЗ 3 (берёшь — выпадают новые):", 14, Color("#ffd24a"))
-	reboot_list.add_child(dh)
-	for id in draft_offers:
-		reboot_list.add_child(_draft_card(id))
-	var rrb := Button.new(); rrb.custom_minimum_size = Vector2(516, 40); rrb.add_theme_font_size_override("font_size", 13)
-	rrb.text = "🎲 Обновить тройку (2 🧬)"; rrb.disabled = cores < 2
-	rrb.pressed.connect(_reroll_draft)
+		disc.text = "✓ Все усиления открыты — качай их ниже"; disc.disabled = true
+	disc.pressed.connect(_discover_aug)
+	reboot_list.add_child(disc)
+	var rrb := Button.new(); rrb.custom_minimum_size = Vector2(516, 38); rrb.add_theme_font_size_override("font_size", 12)
+	rrb.text = "💎 Переролл усиления — за премиум (скоро)"; rrb.disabled = true
 	reboot_list.add_child(rrb)
-	# === НАДЕТЫЕ аугменты (компактно) ===
-	if equipped_augs.size() > 0:
-		var eh := _lbl("🎒 Надетые аугменты (тап «СНЯТЬ» освобождает слот):", 13, Color("#d9c7ff"))
-		reboot_list.add_child(eh)
-		for id in equipped_augs:
-			reboot_list.add_child(_equipped_aug_row(id))
+	# слот-лоадаут
+	var sl := _lbl("🎒 Слотов: %d/%d" % [equipped_augs.size(), _slot_total()], 13, Color("#d9c7ff")); reboot_list.add_child(sl)
+	if _slot_total() < 10:
+		var sbtn := Button.new(); sbtn.custom_minimum_size = Vector2(516, 38); sbtn.add_theme_font_size_override("font_size", 12)
+		sbtn.text = "➕ Купить слот (%d 🧬)" % _slot_cost(); sbtn.disabled = cores < _slot_cost()
+		sbtn.pressed.connect(_buy_slot); reboot_list.add_child(sbtn)
+	# === СПИСОК ВЛАДЕЕМЫХ: сначала НАДЕТЫЕ, потом в наличии (Диана) ===
+	var owned := []
+	for a in AUGMENTS:
+		if _al(a["id"]) > 0: owned.append(a["id"])
+	owned.sort_custom(func(x, y): return (x in equipped_augs) and not (y in equipped_augs))
+	if owned.size() > 0:
+		reboot_list.add_child(_lbl("— ТВОИ УСИЛЕНИЯ (надетые сверху) —", 12, Color("#9a8fb5")))
+		for id in owned:
+			reboot_list.add_child(_owned_aug_row(id))
 
-func _draft_card(id: String) -> Control:
+# понятный эффект усиления с единицами (Диана: «+100%» — а чего?)
+func _aug_effect(a: Dictionary, lvl: int) -> String:
+	var v: float = lvl * a["per"]
+	match a["stat"]:
+		"dmg": return "+%d%% урона" % int(round(v * 100))
+		"hp": return "+%d%% HP" % int(round(v * 100))
+		"atk": return "+%d%% скор.атаки" % int(round(v * 100))
+		"gold": return "+%d%% золота/лома" % int(round(v * 100))
+		"core": return "+%d%% ядер" % int(round(v * 100))
+		"crit": return "+%.1f%% шанс крита" % (v * 100)
+		"critx": return "+%.2f× крит-урон" % v
+		"ultcd": return "−%d%% КД ульт" % int(round(v * 100))
+		"qte": return "+%.2fс окно QTE" % v
+		"density": return "−%d%% HP врагов" % int(round(v * 100))
+		_: return "+%d%%" % int(round(v * 100))
+
+# Tap Titans: цена открытия случайного усиления растёт с числом уже открытых
+func _discover_cost() -> int:
+	var owned := 0
+	for a in AUGMENTS:
+		if _al(a["id"]) > 0: owned += 1
+	return int(8 * pow(1.5, owned))
+
+func _discover_aug() -> void:
+	var c := _discover_cost()
+	if cores < c: return
+	var pool := []
+	for a in AUGMENTS:
+		if _al(a["id"]) == 0: pool.append(a["id"])
+	if pool.is_empty(): return
+	cores -= c
+	var id: String = pool[randi() % pool.size()]
+	aug_lvl[id] = 1
+	if equipped_augs.size() < _slot_total():   # авто-надеть в свободный слот
+		equipped_augs.append(id)
+	_apply_augments(); _recalc_auras()
+	_save(); _refresh_reboot(); _refresh_hud()
+	var a := _aug_def(id)
+	_popup_center("🎲 Открыто: %s %s!\n%s" % [a["icon"], a["name"], _aug_effect(a, 1)], Color("#ffd24a"), 2.4)
+
+# строка владеемого усиления: надетые — фиолет/СНЯТЬ, в наличии — тускло/НАДЕТЬ; + кнопка «+ур» за ядра
+func _owned_aug_row(id: String) -> Control:
 	var a := _aug_def(id)
 	var lvl := _al(id)
 	var eq: bool = id in equipped_augs
 	var cost := _aug_cost(id)
-	var per: float = a["per"]
 	var card := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.14, 0.11, 0.04, 0.96); sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
-	sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2)
+	sb.bg_color = Color(0.12, 0.10, 0.18, 0.95) if eq else Color(0.09, 0.09, 0.12, 0.9)
+	sb.set_corner_radius_all(10); sb.set_content_margin_all(8)
+	sb.border_color = Color("#b46bff") if eq else Color("#44485e"); sb.set_border_width_all(2 if eq else 1)
 	card.add_theme_stylebox_override("panel", sb)
 	card.custom_minimum_size = Vector2(516, 0)
 	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); card.add_child(hb)
 	var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var nm := _lbl("%s %s  ур.%d%s" % [a["icon"], a["name"], lvl, ("  ✓ надет" if eq else "")], 14, Color("#ffe9b0")); info.add_child(nm)
-	var ds := _lbl(a["desc"], 11, Color("#bdb18f")); info.add_child(ds)
-	var ef := _lbl(("сейчас +%d%% → станет +%d%%" % [int(round(lvl * per * 100.0)), int(round((lvl + 1) * per * 100.0))]) if lvl > 0 else ("новый аугмент: +%d%%" % int(round(per * 100.0))), 11, Color("#7fe0a0")); info.add_child(ef)
+	info.add_child(_lbl("%s %s  ур.%d%s" % [a["icon"], a["name"], lvl, ("  ✓надето" if eq else "")], 14, Color("#d9c7ff") if eq else Color("#9aa0b5")))
+	info.add_child(_lbl(_aug_effect(a, lvl) + "  →  " + _aug_effect(a, lvl + 1), 11, Color("#7fe0a0")))
 	hb.add_child(info)
 	var aid: String = id
-	var bb := Button.new(); bb.custom_minimum_size = Vector2(130, 54); bb.add_theme_font_size_override("font_size", 13)
-	bb.text = "%s\n%d 🧬" % ["ВЗЯТЬ" if lvl == 0 else "+1 УРОВЕНЬ", cost]
-	bb.disabled = cores < cost
-	bb.pressed.connect(func(): _take_draft(aid))
-	hb.add_child(bb)
-	return card
-
-func _equipped_aug_row(id: String) -> Control:
-	var a := _aug_def(id)
-	var lvl := _al(id)
-	var per: float = a["per"]
-	var card := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.12, 0.10, 0.18, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(8)
-	sb.border_color = Color("#b46bff"); sb.set_border_width_all(2)
-	card.add_theme_stylebox_override("panel", sb)
-	card.custom_minimum_size = Vector2(516, 0)
-	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); card.add_child(hb)
-	var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_child(_lbl("%s %s  ур.%d  (+%d%%)" % [a["icon"], a["name"], lvl, int(round(lvl * per * 100.0))], 13, Color("#d9c7ff")))
-	hb.add_child(info)
-	var aid: String = id
-	var ub := Button.new(); ub.custom_minimum_size = Vector2(110, 40); ub.add_theme_font_size_override("font_size", 12); ub.text = "СНЯТЬ"
-	ub.pressed.connect(func(): _equip_aug(aid))
+	var eqb := Button.new(); eqb.custom_minimum_size = Vector2(96, 46); eqb.add_theme_font_size_override("font_size", 12)
+	if eq: eqb.text = "СНЯТЬ"
+	elif equipped_augs.size() >= _slot_total(): eqb.text = "нет\nслота"; eqb.disabled = true
+	else: eqb.text = "НАДЕТЬ"
+	eqb.pressed.connect(func(): _equip_aug(aid))
+	hb.add_child(eqb)
+	var ub := Button.new(); ub.custom_minimum_size = Vector2(96, 46); ub.add_theme_font_size_override("font_size", 12)
+	ub.text = "+ур\n%d🧬" % cost; ub.disabled = cores < cost
+	ub.pressed.connect(func(): _buy_aug(aid))
 	hb.add_child(ub)
 	return card
 
@@ -1236,7 +1260,7 @@ func _build_restart_confirm() -> void:
 	restart_confirm.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14); card.add_child(v)
 	var t := Label.new(); t.text = "♻ СБРОСИТЬ ВЕСЬ ПРОГРЕСС?"; t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#ff6060")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
-	var d := Label.new(); d.text = "Сотрёт уровни, шмот, ядра, аугменты, стадию.\nЭто новая игра с нуля."; d.add_theme_font_size_override("font_size", 13); d.add_theme_color_override("font_color", Color("#c9a0a0")); d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d)
+	var d := Label.new(); d.text = "Сотрёт уровни, шмот, ядра, усиления, стадию.\nЭто новая игра с нуля."; d.add_theme_font_size_override("font_size", 13); d.add_theme_color_override("font_color", Color("#c9a0a0")); d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d)
 	var yes := Button.new(); yes.text = "ДА, СБРОСИТЬ"; yes.add_theme_font_size_override("font_size", 16); yes.custom_minimum_size = Vector2(0, 50)
 	yes.pressed.connect(func(): restart_confirm.visible = false; _hard_restart())
 	v.add_child(yes)
@@ -1374,7 +1398,6 @@ func _spawn_wave() -> void:
 	var base_idx := (stage - 1) * (STAGE_WAVES + 1)
 	wave = base_idx + ((STAGE_WAVES + 1) if boss else 3)
 	var count := (1 if boss else clampi(2 + int(stage / 5), 2, 5))   # стабильно в пределах стадии
-	var hpmul := pow(ENEMY_HP_EXP, wave)   # КАЛИБРОВКА: рост HP врагов за волну (стена). 1.10→1.08 пасс1
 	var pool := _enemy_pool()
 	for j in count:
 		# ДЕТЕРМИНИРОВАННО по (стадия, под-волна, позиция) — одна стадия = одни и те же враги всегда
@@ -1388,10 +1411,13 @@ func _spawn_wave() -> void:
 		d.position = Vector2(700, ey)                        # въезжают справа
 		d.z_index = int(ey)
 		world.add_child(d)
-		var ehp := int(45.0 * hpmul * (2.5 if boss else et["hp"]) * aug_density)
+		# ПАС4: per-STAGE экспонента (constant внутри стадии, скачок на стадии). Босс ×цикл [3,4,5,6,10] → каждый 5-й = milestone-стена.
+		var hp_stage := pow(ENEMY_HP_PER_STAGE, stage - 1)
+		var boss_mult: float = BOSS_HP_CYCLE[(stage - 1) % BOSS_HP_CYCLE.size()]
+		var ehp := int(min(ENEMY_HP_BASE * hp_stage * (boss_mult if boss else et["hp"]) * aug_density, STAT_CAP))
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": int((9 if boss else 5) * pow(1.06, wave) * (1.0 if boss else et["dmg"])),
+			"dmg": int(min((9 if boss else 5) * pow(ENEMY_DMG_PER_STAGE, stage - 1) * (1.0 if boss else et["dmg"]), STAT_CAP)),
 			"atk": (1.5 if boss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": boss,
 			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
@@ -1533,7 +1559,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: int, is_crit := false) -> void:
 		_popup(str(d) + ("!" if is_crit else ""), col, e["node"].position + Vector2(randf_range(-10, 10), -86), sz)
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
-		var kg: float = (40.0 if e.get("boss", false) else 5.0) * pow(1.09, wave) * aug_gold   # доход растёт с глубиной (в пару с HP врагов) → leveling успевает
+		var kg: float = (50.0 if e.get("boss", false) else 5.0) * pow(GOLD_PER_STAGE, stage - 1) * aug_gold   # ПАС4: золото ×1.15/стадию (≈1:1 с HP), босс ×10 → поспевает за ценой апгрейдов
 		gold += kg
 		_stat_add("gold", kg)
 		if e.get("boss", false): _stat_add("bosses", 1)
@@ -2154,7 +2180,7 @@ func _upgrade_level(i: int) -> void:
 		while gold >= hh["lvl_cost"]:
 			gold -= hh["lvl_cost"]
 			hh["level"] += 1
-			hh["lvl_cost"] = int(hh["lvl_cost"] * 1.09) + 2
+			hh["lvl_cost"] = int(hh["lvl_cost"] * LVL_COST_GROWTH) + 2
 			bought += 1
 		if bought > 0:
 			_recalc_hero(hh)
@@ -2167,7 +2193,7 @@ func _upgrade_level(i: int) -> void:
 	for k in n:
 		gold -= hh["lvl_cost"]
 		hh["level"] += 1
-		hh["lvl_cost"] = int(hh["lvl_cost"] * 1.09) + 2
+		hh["lvl_cost"] = int(hh["lvl_cost"] * LVL_COST_GROWTH) + 2
 	_recalc_hero(hh)
 	_refresh_inv()
 
@@ -2277,7 +2303,7 @@ func _affordable_levels(hh: Dictionary) -> int:
 	var n := 0
 	while g >= cost and n < 100000:
 		g -= cost
-		cost = int(cost * 1.09) + 2
+		cost = int(cost * LVL_COST_GROWTH) + 2
 		n += 1
 	return n
 
@@ -2287,7 +2313,7 @@ func _batch_cost(hh: Dictionary, n: int) -> int:
 	var total := 0
 	for k in n:
 		total += cost
-		cost = int(cost * 1.09) + 2
+		cost = int(cost * LVL_COST_GROWTH) + 2
 	return total
 
 func _passive_rate() -> float:
