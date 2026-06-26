@@ -547,9 +547,9 @@ func _equip_aug(id: String) -> void:
 func _apply_augments() -> void:
 	aug_dmg = _augmul("dmg")     # Фикс №1: УМНОЖЕНИЕ → экспонента → пробивает потолок (СИЛА)
 	aug_hp = _augmul("hp")
-	aug_crit = _augsum("crit")   # крит-шанс — складываем (нельзя >95%)
-	aug_critx = _augsum("critx")
-	aug_atk = 1.0 + _augsum("atk")
+	aug_crit = _augsum("crit")   # крит-ШАНС — складываем (нельзя >95%)
+	aug_critx = _augmul("critx") # крит-МНОЖИТЕЛЬ — УМНОЖАЕМ (билд-разнообразие: крит-билд тоже пробивает потолок)
+	aug_atk = _augmul("atk")     # скорость атаки — УМНОЖАЕМ (скорость-билд = альтернативный ДПС-путь)
 	aug_gold = 1.0 + _augsum("gold")   # СЛОЖЕНИЕ: иначе экономика взрывается (golf→уровни→golf петля)
 	aug_core = 1.0 + _augsum("core")   # СЛОЖЕНИЕ: компаунд ядер = runaway (ядра→ядра, hoard улетел в 1.5e16). Только урон/HP множим.
 	aug_ultcd = max(0.4, 1.0 - _augsum("ultcd"))
@@ -569,7 +569,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	hh["max"] = int(min(base_hp * lv * milestone * aura_hp * aug_hp * 2.0, STAT_CAP))   # ×2 выживаемость
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
-	hh["critx"] = hh["data"]["critx"] + aug_critx
+	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
 	hh["atk_mult"] = (1.0 + _gear_bonus(hh, "atk") / 100.0) * aug_atk * _ad_mult("atk")   # ×реклама-буст скорости
 	hh["ult_cd_eff"] = hh["data"]["ult_cd"] * aura_ult * max(0.4, 1.0 - _gear_bonus(hh, "ult") / 100.0) * aug_ultcd
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
@@ -1669,7 +1669,14 @@ func _process(delta: float) -> void:
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
 			var spd: float = aura_atk * hh["atk_mult"] * (1.4 if atk_buff_t > 0.0 else 1.0)
-			hh["t"] = hh["atk_spd"] / spd
+			var interval: float = hh["atk_spd"] / spd
+			# скорость-атаки быстрее кадра → не теряем ДПС: «лишние» атаки идут в множитель урона
+			if interval < delta:
+				hh["hitmult"] = min(delta / max(interval, 0.00001), 1.0e6)
+				hh["t"] = delta
+			else:
+				hh["hitmult"] = 1.0
+				hh["t"] = interval
 			_hero_hit(hh)
 	if auto_battle:
 		_auto_cast()
@@ -1724,7 +1731,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	var e = _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.18
-	var base := int(round(hh["dmg"] * aura_dmg * hack_mult))
+	var base := int(round(min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)))   # ×hitmult: overflow скорости-атаки → урон
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
 	if is_crit: base = int(base * hh.get("critx", hh["data"]["critx"]))
