@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.7.5"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.7.6"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1595,7 +1595,10 @@ func _load() -> void:
 	gacha_pity = int(d.get("gacha_pity", 0)); ad_boosts = d.get("ad_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
-	bp_claimed = d.get("bp_claimed", []); bp_claimed_prem = d.get("bp_claimed_prem", []); bp_premium = bool(d.get("bp_premium", false))
+	# ВАЖНО: JSON грузит числа как float → "5 in [5.0]" = false → тиры рекламировались как незабранные (Диана: реклейм каждый заход). Коэрсим в int.
+	bp_claimed = (d.get("bp_claimed", []) as Array).map(func(x): return int(x))
+	bp_claimed_prem = (d.get("bp_claimed_prem", []) as Array).map(func(x): return int(x))
+	bp_premium = bool(d.get("bp_premium", false))
 	ach_claimed = d.get("ach_claimed", {})
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
 	_apply_meta()
@@ -2821,7 +2824,10 @@ func _open_battlepass() -> void:
 		pb.position = Vector2(W * 0.5 - 200, 88); pb.size = Vector2(400, 38); pb.disabled = diamonds < BP_PREMIUM_COST
 		pb.pressed.connect(func(): if diamonds >= BP_PREMIUM_COST: diamonds -= BP_PREMIUM_COST; bp_premium = true; _bp_cache_stage = -1; _save(); panel.queue_free(); _open_battlepass())
 		panel.add_child(pb)
-	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 134); scroll.custom_minimum_size = Vector2(440, 560); scroll.size = Vector2(440, 560); panel.add_child(scroll)
+	# заголовки колонок (фидбэк Дианы: непонятно где бесплатно/премиум)
+	var fh := _lbl("🆓 БЕСПЛАТНО", 12, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); fh.position = Vector2(W * 0.5 - 176, 128); fh.size = Vector2(190, 18); panel.add_child(fh)
+	var ph := _lbl("💎 ПРЕМИУМ" + (" ✓" if bp_premium else " (за 500💎)"), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); ph.position = Vector2(W * 0.5 + 22, 128); ph.size = Vector2(190, 18); panel.add_child(ph)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 150); scroll.custom_minimum_size = Vector2(440, 544); scroll.size = Vector2(440, 544); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
 	# показать тиры от 5 до best_stage+25 (несколько вперёд как тизер)
 	var m := BP_STEP
