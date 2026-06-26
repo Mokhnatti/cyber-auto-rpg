@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.5"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.6.6"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -236,6 +236,14 @@ const GOLD_PER_STAGE := 1.20       # золото за стадию — чуть
 const LVL_COST_GROWTH := 1.12      # цена уровня. Пас4f: →1.12 — ещё медленнее прокачка → ~60 мин до 1-го престижа. Главный рычаг времени.
 const DPS_MILESTONE := 25          # ×2 к силе бойца каждые N уровней = регулярный рывок (изломы Clicker Heroes)
 const BOSS_HP_CYCLE := [3.0, 4.0, 5.0, 6.0, 10.0]   # множитель HP босса по циклу (stage-1)%5 → каждый 5-й = ×10 (milestone-стена)
+# СВИТА БОССА (Рамиль): спец-войска при боссе → тактическая загадка «кого вкачать». Цикл по (stage-1)%size.
+const BOSS_ESCORTS := [
+	["healer"],          # хил лечит босса → нужен СНАЙПЕР (бьёт хила первым)
+	["swarm", "swarm"],  # рой задавит → нужен ХАКЕР (AoE)
+	["shield"],          # щит-стена → нужен бурст-СНАЙПЕР
+	["bomber"],          # взрыв по отряду → нужен ТАНК/HP
+	["healer", "swarm"], # микс
+]
 const STAT_CAP := 1.0e15           # потолок урона/HP — предохранитель от int64-переполнения (большие числа → научная запись)
 const INNATE_WDMG := 16            # вшитый базовый урон «стартового оружия» (слоты на старте ПУСТЫЕ — Диана; боец не слабее)
 const STAGE_WAVES := 10        # норм-волн на стадии (потом босс). Кратно 5. Диана/Рамиль: 5→10 — стадия длиннее, темп спокойнее, не суматошно.
@@ -1639,40 +1647,46 @@ func _spawn_wave() -> void:
 	# стадии). Босс — единственный скачок. Прогресс — от стадии к стадии (6 шагов экспоненты/стадию).
 	var base_idx := (stage - 1) * (STAGE_WAVES + 1)
 	wave = base_idx + ((STAGE_WAVES + 1) if boss else 3)
-	var count := (1 if boss else clampi(2 + int(stage / 5), 2, 5))   # стабильно в пределах стадии
 	var pool := _enemy_pool()
-	for j in count:
-		# ДЕТЕРМИНИРОВАННО по (стадия, под-волна, позиция) — одна стадия = одни и те же враги всегда
-		var etype: String = "boss" if boss else pool[(stage * 7 + sub * 3 + j * 2) % pool.size()]
+	# СПИСОК на спавн: босс → [босс + СВИТА из спец-войск]; обычная волна → набор по пулу
+	var spawn_types := []
+	if boss:
+		spawn_types.append("boss")
+		for e in BOSS_ESCORTS[(stage - 1) % BOSS_ESCORTS.size()]: spawn_types.append(e)
+	else:
+		var count := clampi(2 + int(stage / 5), 2, 5)
+		for j in count: spawn_types.append(pool[(stage * 7 + sub * 3 + j * 2) % pool.size()])
+	for j in spawn_types.size():
+		var etype: String = spawn_types[j]
+		var iboss: bool = etype == "boss"
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
-		var glow := Color("#ff2d95") if boss else Color(et["col"])
-		var es: float = 1.9 if boss else (1.35 - j * 0.1) * et["s"]
+		var glow := Color("#ff2d95") if iboss else Color(et["col"])
+		var es: float = 1.9 if iboss else (1.3 - j * 0.08) * et["s"]
 		var d := _make_char("enemy", -1, es, glow)
-		# 🏷 значок-тип над головой (грейбокс-читаемость: видно кто это без текстур). Контр-флип т.к. враг смотрит влево (scale.x<0).
-		var eicon: String = "" if boss else str(et.get("icon", ""))
+		# 🏷 значок-тип над головой (грейбокс-читаемость). Контр-флип т.к. враг смотрит влево.
+		var eicon: String = "" if iboss else str(et.get("icon", ""))
 		if eicon != "":
 			var il := Label.new(); il.text = eicon; il.add_theme_font_size_override("font_size", 13)
 			il.add_theme_color_override("font_color", Color(et["col"]).lightened(0.35))
 			il.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 			il.add_theme_constant_override("outline_size", 7)
-			il.scale = Vector2(-1, 1); il.position = Vector2(34, -100); il.z_index = 6   # контр-флип (враг смотрит влево)
+			il.scale = Vector2(-1, 1); il.position = Vector2(34, -100); il.z_index = 6
 			d.add_child(il)
-		if not boss and etype == "shield":   # 🛡 полупрозрачный пузырь-щит
+		if not iboss and etype == "shield":   # полупрозрачный пузырь-щит
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
 			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
-		var px := 420.0 + j * 60.0                          # фронт-враг ближе к центру
-		var ey := GROUND_Y + 62.0 - (0.0 if boss else j * 20.0)  # на дороге, задние чуть выше (изо)
-		d.position = Vector2(700, ey)                        # въезжают справа
-		d.z_index = int(ey)
+		# босс впереди-центр, СВИТА позади него (бэклайн); обычные — рядком
+		var px: float = (420.0 if iboss else 506.0 + j * 50.0) if boss else 420.0 + j * 60.0
+		var ey: float = GROUND_Y + 62.0 - ((0.0 if iboss else 20.0 + j * 12.0) if boss else j * 20.0)
+		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
-		# ПАС4: per-STAGE экспонента (constant внутри стадии, скачок на стадии). Босс ×цикл [3,4,5,6,10] → каждый 5-й = milestone-стена.
 		var hp_stage := pow(ENEMY_HP_PER_STAGE, stage - 1)
 		var boss_mult: float = BOSS_HP_CYCLE[(stage - 1) % BOSS_HP_CYCLE.size()]
-		var ehp := int(min(ENEMY_HP_BASE * hp_stage * (boss_mult if boss else et["hp"]) * aug_density, STAT_CAP))
+		var ehp := int(min(ENEMY_HP_BASE * hp_stage * (boss_mult if iboss else et["hp"]) * aug_density, STAT_CAP))
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": int(min((9 if boss else 5) * pow(float(_cfg("edmg", ENEMY_DMG_PER_STAGE)) if bot else ENEMY_DMG_PER_STAGE, stage - 1) * (1.0 if boss else et["dmg"]), STAT_CAP)),
-			"atk": (1.5 if boss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": boss,
+			"dmg": int(min((9 if iboss else 5) * pow(float(_cfg("edmg", ENEMY_DMG_PER_STAGE)) if bot else ENEMY_DMG_PER_STAGE, stage - 1) * (1.0 if iboss else et["dmg"]), STAT_CAP)),
+			"atk": (1.5 if iboss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": iboss,
 			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
 		var tw := create_tween()
