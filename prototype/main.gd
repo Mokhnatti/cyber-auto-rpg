@@ -43,6 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
+const VERSION := "0.6.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -803,6 +804,7 @@ func _build_nick_prompt() -> void:
 	v.position = Vector2(W * 0.5 - 200, 360); v.size = Vector2(400, 0)
 	nick_panel.add_child(v)
 	var t := Label.new(); t.text = "ВВЕДИ НИК"; t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var ver := Label.new(); ver.text = "версия " + VERSION; ver.add_theme_font_size_override("font_size", 13); ver.add_theme_color_override("font_color", Color("#5a6a8a")); ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(ver)
 	var sub2 := Label.new(); sub2.text = "для теста (прогресс сохраняется по нику)"; sub2.add_theme_font_size_override("font_size", 13); sub2.add_theme_color_override("font_color", Color("#7a7f99")); sub2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(sub2)
 	nick_show = Label.new(); nick_show.text = "ник не задан"; nick_show.add_theme_font_size_override("font_size", 20); nick_show.add_theme_color_override("font_color", Color("#ffd24a")); nick_show.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; nick_show.custom_minimum_size = Vector2(0, 40); v.add_child(nick_show)
 	var enter := Button.new(); enter.text = "✏ ВВЕСТИ НИК"; enter.add_theme_font_size_override("font_size", 18); enter.custom_minimum_size = Vector2(0, 50); v.add_child(enter)
@@ -1305,6 +1307,8 @@ func _build_settings() -> void:
 	settings_panel.add_child(bg)
 	var t := Label.new(); t.text = "⚙ НАСТРОЙКИ"; t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; t.position = Vector2(0, 50); t.size = Vector2(W, 34)
 	settings_panel.add_child(t)
+	var sver := Label.new(); sver.text = "версия " + VERSION; sver.add_theme_font_size_override("font_size", 14); sver.add_theme_color_override("font_color", Color("#ffd24a")); sver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sver.position = Vector2(0, 86); sver.size = Vector2(W, 20)
+	settings_panel.add_child(sver)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14)
 	v.position = Vector2(30, 130); v.size = Vector2(W - 60, 0)
 	settings_panel.add_child(v)
