@@ -386,9 +386,9 @@ func _module_variant(cls: int, vid: String) -> Dictionary:   # совмести�
 func _make_item(cls: int, vid: String, rarity: int, slot: String = "module") -> Dictionary:
 	var v := _variant(slot, cls, vid)
 	var rolls := [_primary_roll(slot, v["stat"])]
-	var others := STAT_KEYS.duplicate()
-	others.erase(v["stat"])
-	if slot == "weapon": others.erase("dmg")   # оружие: доп-стат не дублирует «урон» (у него уже wdmg-урон)
+	# РАСПРЕДЕЛЕНИЕ СТАТОВ ПО РОЛЯМ (Диана): оружие = офенс (крит/скор), модуль = защита/утилита (HP/заряд/крит).
+	var others: Array = ["crit", "atk"] if slot == "weapon" else ["hp", "ult", "crit"]
+	others.erase(v["stat"])   # не дублируем primary
 	others.shuffle()
 	for i in range(min(rarity - 1, others.size())):
 		rolls.append(_roll_stat(others[i]))
