@@ -234,7 +234,7 @@ const BOSS_HP_CYCLE := [3.0, 4.0, 5.0, 6.0, 10.0]   # множитель HP бо
 const STAT_CAP := 1.0e15           # потолок урона/HP — предохранитель от int64-переполнения (большие числа → научная запись)
 const INNATE_WDMG := 16            # вшитый базовый урон «стартового оружия» (слоты на старте ПУСТЫЕ — Диана; боец не слабее)
 const STAGE_WAVES := 10        # норм-волн на стадии (потом босс). Кратно 5. Диана/Рамиль: 5→10 — стадия длиннее, темп спокойнее, не суматошно.
-const AUG_DIMINISH := 0.78     # убывающая отдача на стак ОДНОГО стата (комбо-билды > моно): 1.0=нет убывания, ниже=сильнее поощряет разнообразие
+const AUG_DIMINISH := 0.88     # убывающая отдача на стак ОДНОГО стата (комбо>моно): 1.0=нет убывания, ниже=сильнее поощряет разнообразие. 0.88 = комбо выигрывает, но потолок ползёт бодро
 const PRESTIGE_TOTAL_LVL := 350   # престиж: совместный уровень отряда (Пас4f: 200→350 — нельзя рашить престиж голой прокачкой)
 const PRESTIGE_STAGE := 26        # ИЛИ достижение этой стадии (Пас4g: 20→26 — позже первый престиж, ~час; кривая плавная → не застрять)
 
@@ -1131,6 +1131,7 @@ func _bot_telemetry() -> void:
 		"dmg": int(stats_run["dmg"]), "mobs": stats_run["mobs"], "bosses": stats_run["bosses"],
 		"ppwr": _party_power(),
 		"quanta": quanta, "sing": singularity_count, "mpow": _ml("mpow"), "mcore": _ml("mcore"), "mslot": _ml("mslot"),
+		"alive": heroes.reduce(func(acc, h): return acc + (1 if h["alive"] else 0), 0),
 	}
 	bot_logf.store_line(JSON.stringify(row))
 	bot_logf.flush()
