@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.8"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.6.9"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1142,6 +1142,7 @@ func _reset() -> void:
 	diamonds = 999999; x3_unlocked = false; x2_until = 0.0; gacha_pity = 0; last_discovered = ""; ad_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
 	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}; daily_day = 0; daily_streak = 0
+	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1798,7 +1799,7 @@ func _process(delta: float) -> void:
 	if in_boss:
 		_qte_tick(delta)
 
-	if _all_dead(enemies):
+	if _all_dead(enemies) and not _all_dead(heroes):   # фикс: если 💥взрывной-последний вынес отряд — вайп важнее победы
 		enemies.clear()
 		if in_boss:
 			# 🏆 БОСС ПРОЙДЕН → шмот (только тут!) + следующая стадия (свежий заход → авто-босс)
@@ -2745,7 +2746,7 @@ func _gacha_result_text(results: Array) -> String:
 func _bp_free_reward(m: int) -> Dictionary:
 	var r := {"cores": m}                       # ядра = веха (растёт со стадией)
 	if m % 25 == 0: r["diamonds"] = 30          # на круглых тирах — алмазы
-	else: r["gold"] = int(50.0 * pow(GOLD_PER_STAGE, m))
+	else: r["gold"] = int(min(50.0 * pow(GOLD_PER_STAGE, m), STAT_CAP))   # кламп от int64-переполнения (баг: m>218 → негатив)
 	return r
 
 func _bp_prem_reward(m: int) -> Dictionary:
@@ -2754,8 +2755,8 @@ func _bp_prem_reward(m: int) -> Dictionary:
 	return r
 
 func _bp_apply(r: Dictionary) -> void:
-	cores += int(r.get("cores", 0)); diamonds += int(r.get("diamonds", 0))
-	gold += float(r.get("gold", 0)); scrap += int(r.get("scrap", 0))
+	cores += max(0, int(r.get("cores", 0))); diamonds += max(0, int(r.get("diamonds", 0)))
+	gold += max(0.0, float(r.get("gold", 0))); scrap += max(0, int(r.get("scrap", 0)))
 
 func _bp_claim(m: int, prem: bool) -> void:
 	if best_stage < m: return
@@ -2842,7 +2843,7 @@ func _ach_value(key: String) -> int:
 			var mn := 999999
 			for hh in heroes: mn = min(mn, int(hh["level"]))
 			return mn
-		_: return int(stats_all.get(key, 0))
+		_: return int(min(float(stats_all.get(key, 0)), STAT_CAP))   # кламп от int64-переполнения накопит. статов
 
 func _ach_reward(idx: int) -> Dictionary:
 	match idx:
