@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.7.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.7.4"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -335,18 +335,18 @@ var seen_intro := false   # показано ли интро-обучение (1
 # === АЧИВКИ (Рамиль): журнал-книжка, тиры ×10, награды дрипом (лом→ядра→алмазы). Ретроактив: значения живые.
 var ach_claimed := {}     # id → сколько тиров забрано
 const ACHIEVEMENTS := [
-	{"id": "mobs",    "name": "Истребитель",       "icon": "🗡", "key": "mobs",     "tiers": [100, 1000, 10000, 100000]},
-	{"id": "bosses",  "name": "Босс-киллер",        "icon": "👑", "key": "bosses",   "tiers": [10, 50, 250, 1000]},
-	{"id": "gold",    "name": "Магнат",             "icon": "💰", "key": "gold",     "tiers": [10000, 1000000, 100000000, 10000000000]},
-	{"id": "dmg",     "name": "Разрушитель",        "icon": "⚔", "key": "dmg",      "tiers": [100000, 10000000, 1000000000, 100000000000]},
-	{"id": "drops",   "name": "Барахольщик",        "icon": "🎁", "key": "drops",    "tiers": [50, 500, 5000, 50000]},
-	{"id": "ads",     "name": "Рекламный",          "icon": "📺", "key": "ads",      "tiers": [5, 25, 100, 500]},
-	{"id": "pulls",   "name": "Гачамен",            "icon": "🎰", "key": "pulls",    "tiers": [1, 10, 50, 200]},
-	{"id": "stage",   "name": "Покоритель глубин",  "icon": "📈", "key": "stage",    "tiers": [10, 25, 50, 100]},
-	{"id": "prestige","name": "Перезагрузка",       "icon": "♻", "key": "prestige", "tiers": [1, 10, 50, 200]},
-	{"id": "sing",    "name": "Сингулярность",      "icon": "🌌", "key": "sing",     "tiers": [1, 5, 25, 100]},
-	{"id": "hlvl",    "name": "Чемпион",            "icon": "⭐", "key": "hlvl",     "tiers": [25, 50, 100, 200]},
-	{"id": "allhlvl", "name": "Командир",           "icon": "🎖", "key": "allhlvl",  "tiers": [20, 50, 100]},
+	{"id": "mobs",    "name": "Истребитель",       "icon": "🗡", "key": "mobs",     "desc": "Убей врагов в бою",          "tiers": [100, 1000, 10000, 100000]},
+	{"id": "bosses",  "name": "Босс-киллер",        "icon": "👑", "key": "bosses",   "desc": "Победи боссов",              "tiers": [10, 50, 250, 1000]},
+	{"id": "gold",    "name": "Магнат",             "icon": "💰", "key": "gold",     "desc": "Накопи золота (всего)",      "tiers": [10000, 1000000, 100000000, 10000000000]},
+	{"id": "dmg",     "name": "Разрушитель",        "icon": "⚔", "key": "dmg",      "desc": "Нанеси урона (всего)",       "tiers": [100000, 10000000, 1000000000, 100000000000]},
+	{"id": "drops",   "name": "Барахольщик",        "icon": "🎁", "key": "drops",    "desc": "Собери предметов лута",      "tiers": [50, 500, 5000, 50000]},
+	{"id": "ads",     "name": "Рекламный",          "icon": "📺", "key": "ads",      "desc": "Посмотри реклам-бустов",     "tiers": [5, 25, 100, 500]},
+	{"id": "pulls",   "name": "Гачамен",            "icon": "🎰", "key": "pulls",    "desc": "Сделай круток гачи",         "tiers": [1, 10, 50, 200]},
+	{"id": "stage",   "name": "Покоритель глубин",  "icon": "📈", "key": "stage",    "desc": "Дойди до стадии",            "tiers": [10, 25, 50, 100]},
+	{"id": "prestige","name": "Перезагрузка",       "icon": "♻", "key": "prestige", "desc": "Сделай перезагрузок",        "tiers": [1, 10, 50, 200]},
+	{"id": "sing",    "name": "Сингулярность",      "icon": "🌌", "key": "sing",     "desc": "Сделай сингулярностей",      "tiers": [1, 5, 25, 100]},
+	{"id": "hlvl",    "name": "Чемпион",            "icon": "⭐", "key": "hlvl",     "desc": "Прокачай бойца до уровня",   "tiers": [25, 50, 100, 200]},
+	{"id": "allhlvl", "name": "Командир",           "icon": "🎖", "key": "allhlvl",  "desc": "Прокачай ВСЕХ бойцов до ур.","tiers": [20, 50, 100]},
 ]
 var wipe_streak := 0      # подряд вайпов на одной стадии (для коуч-подсказок)
 var last_wipe_stage := 0
@@ -2500,38 +2500,38 @@ func _build() -> void:
 	hud.add_child(menubar)
 	inv_btn = Button.new()
 	inv_btn.text = "📊 ПРОКАЧКА"
-	inv_btn.add_theme_font_size_override("font_size", 14)
-	inv_btn.custom_minimum_size = Vector2(168, 42)
+	inv_btn.add_theme_font_size_override("font_size", 13)
+	inv_btn.custom_minimum_size = Vector2(128, 42)
 	inv_btn.pressed.connect(_toggle_inv)
 	menubar.add_child(inv_btn)
 	impl_btn = Button.new()
 	impl_btn.text = "🦾 ЭКИПИРОВКА"
-	impl_btn.add_theme_font_size_override("font_size", 14)
-	impl_btn.custom_minimum_size = Vector2(176, 42)
+	impl_btn.add_theme_font_size_override("font_size", 13)
+	impl_btn.custom_minimum_size = Vector2(140, 42)
 	impl_btn.pressed.connect(_toggle_impl)
 	menubar.add_child(impl_btn)
 	var reboot_mb := Button.new()
 	reboot_mb.text = "♻ ПРЕСТИЖ"
-	reboot_mb.add_theme_font_size_override("font_size", 13)
-	reboot_mb.custom_minimum_size = Vector2(120, 42)
+	reboot_mb.add_theme_font_size_override("font_size", 12)
+	reboot_mb.custom_minimum_size = Vector2(96, 42)
 	reboot_mb.pressed.connect(_toggle_reboot)
 	menubar.add_child(reboot_mb)
 	bp_btn = Button.new()
 	bp_btn.text = "🎟"
-	bp_btn.add_theme_font_size_override("font_size", 18)
-	bp_btn.custom_minimum_size = Vector2(50, 42)
+	bp_btn.add_theme_font_size_override("font_size", 17)
+	bp_btn.custom_minimum_size = Vector2(44, 42)
 	bp_btn.pressed.connect(_open_battlepass)
 	menubar.add_child(bp_btn)
 	ach_btn = Button.new()
 	ach_btn.text = "📖"
-	ach_btn.add_theme_font_size_override("font_size", 18)
-	ach_btn.custom_minimum_size = Vector2(50, 42)
+	ach_btn.add_theme_font_size_override("font_size", 17)
+	ach_btn.custom_minimum_size = Vector2(44, 42)
 	ach_btn.pressed.connect(_open_achievements)
 	menubar.add_child(ach_btn)
 	var settings_btn := Button.new()
 	settings_btn.text = "⚙"
-	settings_btn.add_theme_font_size_override("font_size", 18)
-	settings_btn.custom_minimum_size = Vector2(52, 42)
+	settings_btn.add_theme_font_size_override("font_size", 17)
+	settings_btn.custom_minimum_size = Vector2(44, 42)
 	settings_btn.pressed.connect(_toggle_settings)
 	menubar.add_child(settings_btn)
 	_build_inventory()
@@ -2895,9 +2895,9 @@ func _ach_claim(a: Dictionary) -> void:
 
 func _ach_reward_text(idx: int) -> String:
 	var r := _ach_reward(idx)
-	if r.has("diamonds"): return "%d💎" % r["diamonds"]
-	if r.has("cores"): return "%d🧬" % r["cores"]
-	return "%d♻" % r.get("scrap", 0)
+	if r.has("diamonds"): return "+%d💎 алмазов" % r["diamonds"]
+	if r.has("cores"): return "+%d🧬 ядер" % r["cores"]
+	return "+%d♻ скрапа" % r.get("scrap", 0)
 
 func _open_achievements() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -2932,17 +2932,17 @@ func _ach_row(a: Dictionary, panel: Control) -> Control:
 	sb.border_color = Color("#ffd24a") if canclaim else Color("#2a2f45"); sb.set_border_width_all(2 if canclaim else 1)
 	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(424, 0)
 	var v2 := VBoxContainer.new(); v2.add_theme_constant_override("separation", 2); box.add_child(v2)
-	# тир: римские I-IV по числу забранных
-	var tierroman: String = ["—", "I", "II", "III", "IV"][min(4, claimed)]
+	# тир: сколько уровней достижения уже забрано из всех
 	var nextidx: int = min(reached if canclaim else claimed, maxt - 1)
 	var nextt: int = a["tiers"][nextidx]
-	var head := "%s %s  [%s/%s]" % [a["icon"], a["name"], tierroman, ["I","II","III","IV"][maxt-1]]
+	var head := "%s %s · Тир %d/%d" % [a["icon"], a["name"], claimed, maxt]
 	v2.add_child(_lbl(head, 14, Color("#ffd24a") if canclaim else Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT))
+	v2.add_child(_lbl(a.get("desc", ""), 11, Color("#8a90a5"), HORIZONTAL_ALIGNMENT_LEFT))   # что качает достижение (фидбэк Дианы)
 	if claimed >= maxt:
 		v2.add_child(_lbl("✓ ВСЁ ВЫПОЛНЕНО", 12, Color("#3ad97a"), HORIZONTAL_ALIGNMENT_LEFT))
 	else:
 		var hrow := HBoxContainer.new(); hrow.add_theme_constant_override("separation", 8); v2.add_child(hrow)
-		hrow.add_child(_lbl("%s / %s  → %s" % [_gsep(v), _gsep(nextt), _ach_reward_text(nextidx)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
+		hrow.add_child(_lbl("%s / %s  → награда %s" % [_gsep(v), _gsep(nextt), _ach_reward_text(nextidx)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
 		if canclaim:
 			var cb := Button.new(); cb.text = "ЗАБРАТЬ ✨"; cb.custom_minimum_size = Vector2(110, 30); cb.add_theme_font_size_override("font_size", 12)
 			var aa: Dictionary = a
