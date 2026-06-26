@@ -292,7 +292,7 @@ var scrap := 0             # ♻ ЛОМ: валюта с разбора шмот
 # ПРЕСТИЖ:
 var cores := 0            # 🧬 ЯДРА — валюта престижа (трата на аугменты)
 # === МОНЕТИЗАЦИЯ (Фаза А) ===
-var diamonds := 50        # 💎 АЛМАЗЫ — премиум-валюта (покупка за реал — стаб под IAP; чуть капает беспл)
+var diamonds := 999999    # 💎 АЛМАЗЫ — премиум (ВРЕМЕННО: всем 999999 для теста монетизации — Рамиль)
 var x3_unlocked := false  # x3-скорость куплена навсегда (за алмазы)
 var x2_until := 0.0       # x2-скорость активна до этого ticks_msec/1000 (выдаётся за рекламу, таймер)
 var shop_panel: Control
@@ -903,7 +903,7 @@ func _reset() -> void:
 	scrap = 0
 	cores = 0
 	cores_peak = 0.0
-	diamonds = 50; x3_unlocked = false; x2_until = 0.0
+	diamonds = 999999; x3_unlocked = false; x2_until = 0.0
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1320,7 +1320,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0))
-	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false))
+	diamonds = max(int(d.get("diamonds", 999999)), 999999); x3_unlocked = bool(d.get("x3_unlocked", false))   # ВРЕМЕННО: всем 999999 (тест)
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
 	fav = d.get("fav", {})
