@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.6"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.6.7"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -118,6 +118,7 @@ var hero_rows := []   # строки прокачки по героям: {lvl_bt
 # ИМПЛАНТЫ-СКЕЛЕТ (шмотки) — дают БАЗОВЫЕ статы отряду; уровень потом множит (HP/урон)
 var impl_btn: Button
 var bp_btn: Button
+var ach_btn: Button
 var loot_badge: Label
 var impl_panel: Control
 var impl_open := false
@@ -327,6 +328,22 @@ const AD_BOOST := {       # base% + step%/уровень (растёт от чи
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var seen_intro := false   # показано ли интро-обучение (1й запуск)
+# === АЧИВКИ (Рамиль): журнал-книжка, тиры ×10, награды дрипом (лом→ядра→алмазы). Ретроактив: значения живые.
+var ach_claimed := {}     # id → сколько тиров забрано
+const ACHIEVEMENTS := [
+	{"id": "mobs",    "name": "Истребитель",       "icon": "🗡", "key": "mobs",     "tiers": [100, 1000, 10000, 100000]},
+	{"id": "bosses",  "name": "Босс-киллер",        "icon": "👑", "key": "bosses",   "tiers": [10, 50, 250, 1000]},
+	{"id": "gold",    "name": "Магнат",             "icon": "💰", "key": "gold",     "tiers": [10000, 1000000, 100000000, 10000000000]},
+	{"id": "dmg",     "name": "Разрушитель",        "icon": "⚔", "key": "dmg",      "tiers": [100000, 10000000, 1000000000, 100000000000]},
+	{"id": "drops",   "name": "Барахольщик",        "icon": "🎁", "key": "drops",    "tiers": [50, 500, 5000, 50000]},
+	{"id": "ads",     "name": "Рекламный",          "icon": "📺", "key": "ads",      "tiers": [5, 25, 100, 500]},
+	{"id": "pulls",   "name": "Гачамен",            "icon": "🎰", "key": "pulls",    "tiers": [1, 10, 50, 200]},
+	{"id": "stage",   "name": "Покоритель глубин",  "icon": "📈", "key": "stage",    "tiers": [10, 25, 50, 100]},
+	{"id": "prestige","name": "Перезагрузка",       "icon": "♻", "key": "prestige", "tiers": [1, 10, 50, 200]},
+	{"id": "sing",    "name": "Сингулярность",      "icon": "🌌", "key": "sing",     "tiers": [1, 5, 25, 100]},
+	{"id": "hlvl",    "name": "Чемпион",            "icon": "⭐", "key": "hlvl",     "tiers": [25, 50, 100, 200]},
+	{"id": "allhlvl", "name": "Командир",           "icon": "🎖", "key": "allhlvl",  "tiers": [20, 50, 100]},
+]
 var wipe_streak := 0      # подряд вайпов на одной стадии (для коуч-подсказок)
 var last_wipe_stage := 0
 # === БАТЛПАС (Рамиль): награды по пройденным стадиям, тир каждые BP_STEP стадий ===
@@ -357,8 +374,8 @@ var meta_core := 1.0      # вычисленные мета-множители
 var meta_pow := 1.0
 var meta_slot := 0
 # === РЕКОРДЫ/СТАТИСТИКА (п.7) ===
-var stats_run := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0}
-var stats_all := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0}
+var stats_run := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
+var stats_all := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
 var rec_maxhit := 0       # самый большой удар за всё время
 var rec_prestiges := 0    # сколько престижей сделано
 var stats_panel: Control
@@ -1109,7 +1126,7 @@ func _reset() -> void:
 	cores_peak = 0.0
 	diamonds = 999999; x3_unlocked = false; x2_until = 0.0; gacha_pity = 0; last_discovered = ""; ad_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
-	bp_claimed = []; bp_claimed_prem = []; bp_premium = false
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1523,7 +1540,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1552,6 +1569,7 @@ func _load() -> void:
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
 	bp_claimed = d.get("bp_claimed", []); bp_claimed_prem = d.get("bp_claimed_prem", []); bp_premium = bool(d.get("bp_premium", false))
+	ach_claimed = d.get("ach_claimed", {})
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
@@ -2254,6 +2272,10 @@ func _refresh_hud() -> void:
 		var bpn := _bp_unclaimed_count()
 		bp_btn.text = "🎟" + ("●%d" % bpn if bpn > 0 else "")
 		bp_btn.modulate = Color(1.6, 1.4, 0.3) if bpn > 0 else Color(1, 1, 1)
+	if ach_btn:
+		var acn := _ach_claimable()
+		ach_btn.text = "📖" + ("●%d" % acn if acn > 0 else "")
+		ach_btn.modulate = Color(1.6, 1.4, 0.3) if acn > 0 else Color(1, 1, 1)
 	if loot_badge:
 		loot_badge.visible = new_gear.size() > 0 and not impl_open
 		if loot_badge.visible:
@@ -2464,9 +2486,15 @@ func _build() -> void:
 	bp_btn = Button.new()
 	bp_btn.text = "🎟"
 	bp_btn.add_theme_font_size_override("font_size", 18)
-	bp_btn.custom_minimum_size = Vector2(52, 42)
+	bp_btn.custom_minimum_size = Vector2(50, 42)
 	bp_btn.pressed.connect(_open_battlepass)
 	menubar.add_child(bp_btn)
+	ach_btn = Button.new()
+	ach_btn.text = "📖"
+	ach_btn.add_theme_font_size_override("font_size", 18)
+	ach_btn.custom_minimum_size = Vector2(50, 42)
+	ach_btn.pressed.connect(_open_achievements)
+	menubar.add_child(ach_btn)
 	var settings_btn := Button.new()
 	settings_btn.text = "⚙"
 	settings_btn.add_theme_font_size_override("font_size", 18)
@@ -2562,6 +2590,7 @@ func _watch_ad_boost(b: String) -> void:
 	d["until"] = Time.get_ticks_msec() / 1000.0 + AD_DUR
 	d["lvl"] = min(int(d["lvl"]) + 1, 30)
 	ad_boosts[b] = d
+	_stat_add("ads", 1)   # ачивка: просмотры реклама-бустов
 	for hh in heroes: _recalc_hero(hh)
 	_save(); _refresh_hud()
 	var pct: int = int(AD_BOOST[b]["base"] + AD_BOOST[b]["step"] * (int(d["lvl"]) - 1))
@@ -2638,6 +2667,7 @@ func _gacha_pull(n: int) -> Array:
 	var cost: int = GACHA_COST1 if n == 1 else GACHA_COST10
 	if diamonds < cost: return []
 	diamonds -= cost
+	_stat_add("pulls", n)   # ачивка: гача-пуллы
 	var results := []
 	for k in n:
 		var rar := _gacha_rarity()
@@ -2783,6 +2813,109 @@ func _bp_tier_row(m: int, panel: Control) -> Control:
 	pbn.disabled = pclaimed or not reached or not bp_premium
 	pbn.pressed.connect(func(): _bp_claim(mm, true); panel.queue_free(); _open_battlepass())
 	row.add_child(pbn)
+	return box
+
+# === АЧИВКИ ===
+func _ach_value(key: String) -> int:
+	match key:
+		"stage": return best_stage
+		"prestige": return rec_prestiges
+		"sing": return singularity_count
+		"hlvl": return _max_hero_level()
+		"allhlvl":
+			var mn := 999999
+			for hh in heroes: mn = min(mn, int(hh["level"]))
+			return mn
+		_: return int(stats_all.get(key, 0))
+
+func _ach_reward(idx: int) -> Dictionary:
+	match idx:
+		0: return {"scrap": 40}
+		1: return {"cores": 20}
+		2: return {"diamonds": 25}
+		_: return {"diamonds": 100}
+
+# сколько тиров ДОСТИГНУТО (по значению)
+func _ach_reached(a: Dictionary) -> int:
+	var v := _ach_value(a["key"]); var n := 0
+	for t in a["tiers"]:
+		if v >= int(t): n += 1
+	return n
+
+func _ach_claim_all() -> void:
+	for a in ACHIEVEMENTS: _ach_claim(a)
+
+func _ach_claimable() -> int:
+	var n := 0
+	for a in ACHIEVEMENTS:
+		n += max(0, _ach_reached(a) - int(ach_claimed.get(a["id"], 0)))
+	return n
+
+func _ach_claim(a: Dictionary) -> void:
+	var reached := _ach_reached(a)
+	var cl := int(ach_claimed.get(a["id"], 0))
+	while cl < reached:
+		var r := _ach_reward(cl)
+		cores += int(r.get("cores", 0)); diamonds += int(r.get("diamonds", 0)); scrap += int(r.get("scrap", 0))
+		cl += 1
+	ach_claimed[a["id"]] = cl
+	_save(); _refresh_hud()
+
+func _ach_reward_text(idx: int) -> String:
+	var r := _ach_reward(idx)
+	if r.has("diamonds"): return "%d💎" % r["diamonds"]
+	if r.has("cores"): return "%d🧬" % r["cores"]
+	return "%d♻" % r.get("scrap", 0)
+
+func _open_achievements() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	panel.add_child(_lbl_at("📖 ДОСТИЖЕНИЯ", 20, Color("#ffd24a"), 30))
+	var claimable := _ach_claimable()
+	panel.add_child(_lbl_at("Готово к забору: %d   ·   награда → 💎/🧬/♻" % claimable, 13, Color("#cfe6ff") if claimable > 0 else Color("#9aa0b5"), 60))
+	if claimable > 0:
+		var ca := Button.new(); ca.text = "✨ ЗАБРАТЬ ВСЁ (%d)" % claimable; ca.add_theme_font_size_override("font_size", 15); ca.add_theme_color_override("font_color", Color("#ffd24a"))
+		ca.position = Vector2(W * 0.5 - 130, 84); ca.size = Vector2(260, 38)
+		ca.pressed.connect(func(): _ach_claim_all(); panel.queue_free(); _open_achievements())
+		panel.add_child(ca)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 222, 130); scroll.custom_minimum_size = Vector2(444, 580); scroll.size = Vector2(444, 580); panel.add_child(scroll)
+	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(444, 0); scroll.add_child(list)
+	for a in ACHIEVEMENTS:
+		list.add_child(_ach_row(a, panel))
+	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 720); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+
+func _lbl_at(t: String, sz: int, col: Color, y: float) -> Label:
+	var l := _lbl(t, sz, col, HORIZONTAL_ALIGNMENT_CENTER); l.position = Vector2(0, y); l.size = Vector2(W, sz + 8); return l
+
+func _ach_row(a: Dictionary, panel: Control) -> Control:
+	var reached := _ach_reached(a)
+	var claimed := int(ach_claimed.get(a["id"], 0))
+	var canclaim := reached > claimed
+	var maxt: int = a["tiers"].size()
+	var v := _ach_value(a["key"])
+	var box := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.13, 0.11, 0.04, 0.97) if canclaim else Color(0.07, 0.08, 0.12, 0.95); sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
+	sb.border_color = Color("#ffd24a") if canclaim else Color("#2a2f45"); sb.set_border_width_all(2 if canclaim else 1)
+	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(424, 0)
+	var v2 := VBoxContainer.new(); v2.add_theme_constant_override("separation", 2); box.add_child(v2)
+	# тир: римские I-IV по числу забранных
+	var tierroman: String = ["—", "I", "II", "III", "IV"][min(4, claimed)]
+	var nextidx: int = min(reached if canclaim else claimed, maxt - 1)
+	var nextt: int = a["tiers"][nextidx]
+	var head := "%s %s  [%s/%s]" % [a["icon"], a["name"], tierroman, ["I","II","III","IV"][maxt-1]]
+	v2.add_child(_lbl(head, 14, Color("#ffd24a") if canclaim else Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT))
+	if claimed >= maxt:
+		v2.add_child(_lbl("✓ ВСЁ ВЫПОЛНЕНО", 12, Color("#3ad97a"), HORIZONTAL_ALIGNMENT_LEFT))
+	else:
+		var hrow := HBoxContainer.new(); hrow.add_theme_constant_override("separation", 8); v2.add_child(hrow)
+		hrow.add_child(_lbl("%s / %s  → %s" % [_gsep(v), _gsep(nextt), _ach_reward_text(nextidx)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
+		if canclaim:
+			var cb := Button.new(); cb.text = "ЗАБРАТЬ ✨"; cb.custom_minimum_size = Vector2(110, 30); cb.add_theme_font_size_override("font_size", 12)
+			var aa: Dictionary = a
+			cb.pressed.connect(func(): _ach_claim(aa); panel.queue_free(); _open_achievements())
+			hrow.add_child(cb)
 	return box
 
 # описание класса (Диана: непонятно чем герои различаются / что делают ульты)
@@ -3555,6 +3688,7 @@ func _close_detail() -> void:
 # 35% оружие / 65% спецмодуль — оба полноценные предметы (редкость/статы/уровень от стадии).
 func _drop_implant() -> void:
 	implants_count += 1
+	_stat_add("drops", 1)   # ачивка: собрано дропа
 	var i := randi() % heroes.size()
 	var slot: String = "weapon" if randf() < 0.35 else "module"
 	_drop_into(heroes[i], i, slot)
