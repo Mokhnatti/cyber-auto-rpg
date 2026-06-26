@@ -308,6 +308,7 @@ const AD_BOOST := {       # base% + step%/уровень (растёт от чи
 }
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
+var seen_intro := false   # показано ли интро-обучение (1й запуск)
 var last_discovered := "" # последнее открытое усиление (можно перебросить за алмазы — хук Tap Titans)
 const REROLL_COST := 50   # алмазов за переброс усиления
 var gacha_pity := 0       # пуллов с последнего Эпического (pity-гарант на 90)
@@ -805,7 +806,8 @@ func _build_nick_prompt() -> void:
 		if nick == "": nick = "гость"
 		nick_panel.visible = false
 		_save()
-		_send_telemetry("start"))
+		_send_telemetry("start")
+		if not seen_intro: _show_intro())   # первый запуск → интро-обучение
 	var upd := Button.new(); upd.text = "🔄 обновить версию"; upd.add_theme_font_size_override("font_size", 13); upd.custom_minimum_size = Vector2(0, 40); v.add_child(upd)
 	upd.pressed.connect(_clear_cache)
 
@@ -837,6 +839,7 @@ func _build_reboot() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 24); title.size = Vector2(W, 30)
 	reboot_panel.add_child(title)
+	_add_help(reboot_panel, "Престиж и усиления", "Застрял? ПЕРЕЗАГРУЗКА ♻ обнуляет стадии и уровни, но даёт ЯДРА 🧬 (тем больше, чем глубже зашёл).\n\n• На ядра ОТКРЫВАЕШЬ случайные УСИЛЕНИЯ и качаешь их. Они остаются НАВСЕГДА.\n• Усиления = множители урона/HP/крита/скорости. Следующий заход — сильно мощнее → проходишь дальше.\n• 🎯 КОМБИНИРУЙ разные усиления (урон+крит+скорость+HP) — это выгоднее, чем качать одно. Без HP бойцы дохнут на глубине!\n• Не везёт с усилением — перебрось за алмазы 💎.\n\nСо стадии 40 откроется 🌌 СИНГУЛЯРНОСТЬ — второй слой с вечными мета-бонусами.")
 	reboot_info = Label.new()
 	reboot_info.add_theme_font_size_override("font_size", 14); reboot_info.add_theme_color_override("font_color", Color("#cdbbe8"))
 	reboot_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1044,6 +1047,8 @@ func _ready() -> void:
 		nick_panel.visible = true   # первый вход → спросить ник (ввод через нативный браузерный prompt)
 	elif _offline_gold > 0:
 		_show_offline()
+	if not bot and nick != "" and not seen_intro:   # вернувшийся игрок без интро → показать
+		_show_intro()
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -1480,7 +1485,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1507,6 +1512,7 @@ func _load() -> void:
 	diamonds = max(int(d.get("diamonds", 999999)), 999999); x3_unlocked = bool(d.get("x3_unlocked", false))   # ВРЕМЕННО: всем 999999 (тест)
 	gacha_pity = int(d.get("gacha_pity", 0)); ad_boosts = d.get("ad_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
+	seen_intro = bool(d.get("seen_intro", false))
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
@@ -2607,6 +2613,37 @@ func _show_hero_desc(i: int) -> void:
 	v.add_child(_lbl("🔫 %s   ❤ %d   ⚔ %d   🎯 %d%%" % [h["wname"], h["hp"], h["dmg"], int(h["crit"] * 100)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
 	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 44); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
+# === ОБУЧЕНИЕ / ПОДСКАЗКИ (Рамиль) ===
+# маленькая кнопка «?» в углу панели → попап-объяснение
+func _add_help(parent: Control, title: String, body: String) -> void:
+	var b := Button.new()
+	b.text = "?"
+	b.add_theme_font_size_override("font_size", 19)
+	b.add_theme_color_override("font_color", Color("#ffd24a"))
+	b.custom_minimum_size = Vector2(40, 40)
+	b.position = Vector2(14, 40)
+	b.pressed.connect(func(): _show_help(title, body))
+	parent.add_child(b)
+
+func _show_help(title: String, body: String) -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 4000; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.8); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.06, 0.10, 0.17, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 215, 190); card.custom_minimum_size = Vector2(430, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	v.add_child(_lbl("❓ " + title, 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	var t := _lbl(body, 15, Color("#d7dcf0"), HORIZONTAL_ALIGNMENT_LEFT); t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; t.custom_minimum_size = Vector2(394, 0); v.add_child(t)
+	var bc := Button.new(); bc.text = "Понятно 👍"; bc.custom_minimum_size = Vector2(0, 46); bc.add_theme_font_size_override("font_size", 16); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+
+# первый запуск — короткое интро по основной петле
+func _show_intro() -> void:
+	_show_help("Добро пожаловать!", "Твой отряд из 4 бойцов АВТО-бьётся с волнами врагов.\n\n• 📊 ПРОКАЧКА — повышай уровни бойцов за золото 💰\n• 🦾 ЭКИПИРОВКА — надевай выпавший лут (оружие/модули)\n• ⚡ Тапай ульты бойцов внизу когда готовы\n• ♻ ПРЕСТИЖ — когда застрял: сброс ради ЯДЕР → усиления навсегда\n\nЦель: бей волны → собирай лут → прокачивайся → проходи стадии глубже. У каждого экрана есть «?» с подсказкой.")
+	seen_intro = true; _save()
+
 func _toggle_inv() -> void:
 	inv_open = not inv_open
 	inv_panel.visible = inv_open
@@ -2656,6 +2693,7 @@ func _build_inventory() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 40); title.size = Vector2(W, 34)
 	inv_panel.add_child(title)
+	_add_help(inv_panel, "Прокачка отряда", "Повышай УРОВЕНЬ бойцов за золото 💰. Уровень множит их урон и здоровье — основа силы.\n\n• Чем выше уровень — тем дороже следующий.\n• Кнопка ×1/×10/×100 — сколько уровней брать за раз.\n• Качай отстающих или вливай в любимца под свой билд.\n\nЗолото капает само + падает с врагов. Не хватает — фарми текущую стадию.")
 	inv_gold = Label.new()
 	inv_gold.add_theme_color_override("font_color", Color("#ffe14d"))
 	inv_gold.add_theme_font_size_override("font_size", 18)
@@ -3046,6 +3084,7 @@ func _build_implants() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 26); title.size = Vector2(W, 30)
 	impl_panel.add_child(title)
+	_add_help(impl_panel, "Экипировка", "Надевай выпавший ЛУТ бойцам.\n\n• Выбери бойца портретом слева (подсветка = активный).\n• ОРУЖИЕ 🔫 = урон. МОДУЛЬ 🦾 = защита/утилита (HP, заряд ульты).\n• Тап по предмету в списке → сравнить и надеть лучший.\n• Цвет = редкость (серый→зелёный→синий→фиолет). «НАДЕТО» = то что носишь.\n• ℹ на портрете = описание класса и ульты.\n\nЛут падает с волн и боссов под конкретного бойца.")
 	var hdr := _lbl("боец              оружие            спецмодуль", 12, Color("#5a6080"), HORIZONTAL_ALIGNMENT_CENTER)
 	hdr.position = Vector2(0, 58); hdr.size = Vector2(W, 18)
 	impl_panel.add_child(hdr)
