@@ -117,6 +117,7 @@ var buy_btns := []         # кнопки выбора множителя
 var hero_rows := []   # строки прокачки по героям: {lvl_btn}
 # ИМПЛАНТЫ-СКЕЛЕТ (шмотки) — дают БАЗОВЫЕ статы отряду; уровень потом множит (HP/урон)
 var impl_btn: Button
+var bp_btn: Button
 var loot_badge: Label
 var impl_panel: Control
 var impl_open := false
@@ -312,6 +313,12 @@ const AD_BOOST := {       # base% + step%/уровень (растёт от чи
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var seen_intro := false   # показано ли интро-обучение (1й запуск)
+# === БАТЛПАС (Рамиль): награды по пройденным стадиям, тир каждые BP_STEP стадий ===
+const BP_STEP := 5
+var bp_claimed := []      # забранные бесплатные тиры (стадии-вехи)
+var bp_claimed_prem := [] # забранные премиум-тиры
+var bp_premium := false   # куплен ли премиум-трек
+const BP_PREMIUM_COST := 500   # алмазов за премиум-батлпас
 var last_discovered := "" # последнее открытое усиление (можно перебросить за алмазы — хук Tap Titans)
 const REROLL_COST := 50   # алмазов за переброс усиления
 var gacha_pity := 0       # пуллов с последнего Эпического (pity-гарант на 90)
@@ -1086,6 +1093,7 @@ func _reset() -> void:
 	cores_peak = 0.0
 	diamonds = 999999; x3_unlocked = false; x2_until = 0.0; gacha_pity = 0; last_discovered = ""; ad_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1499,7 +1507,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1527,6 +1535,7 @@ func _load() -> void:
 	gacha_pity = int(d.get("gacha_pity", 0)); ad_boosts = d.get("ad_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
+	bp_claimed = d.get("bp_claimed", []); bp_claimed_prem = d.get("bp_claimed_prem", []); bp_premium = bool(d.get("bp_premium", false))
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
@@ -2174,6 +2183,10 @@ func _refresh_hud() -> void:
 			impl_btn.modulate = Color(1.0, 1.0, 1.0).lerp(Color(1.7, 1.4, 0.2), ph)
 		else:
 			impl_btn.modulate = Color(1, 1, 1)
+	if bp_btn:
+		var bpn := _bp_unclaimed_count()
+		bp_btn.text = "🎟" + ("●%d" % bpn if bpn > 0 else "")
+		bp_btn.modulate = Color(1.6, 1.4, 0.3) if bpn > 0 else Color(1, 1, 1)
 	if loot_badge:
 		loot_badge.visible = new_gear.size() > 0 and not impl_open
 		if loot_badge.visible:
@@ -2381,6 +2394,12 @@ func _build() -> void:
 	reboot_mb.custom_minimum_size = Vector2(120, 42)
 	reboot_mb.pressed.connect(_toggle_reboot)
 	menubar.add_child(reboot_mb)
+	bp_btn = Button.new()
+	bp_btn.text = "🎟"
+	bp_btn.add_theme_font_size_override("font_size", 18)
+	bp_btn.custom_minimum_size = Vector2(52, 42)
+	bp_btn.pressed.connect(_open_battlepass)
+	menubar.add_child(bp_btn)
 	var settings_btn := Button.new()
 	settings_btn.text = "⚙"
 	settings_btn.add_theme_font_size_override("font_size", 18)
@@ -2608,6 +2627,96 @@ func _gacha_result_text(results: Array) -> String:
 		if counts[rr] > 0: parts.append("%s ×%d" % [RARITY[rr]["name"], counts[rr]])
 	var head := "🎉 ЭПИЧЕСКИЙ!" if best == 4 else ("✨ Редкий!" if best == 3 else "Выпало:")
 	return "%s\n%s\n(в коллекции бойцов, надень в Экипировке)" % [head, ", ".join(parts)]
+
+# === БАТЛПАС: награды по пройденным стадиям ===
+func _bp_free_reward(m: int) -> Dictionary:
+	var r := {"cores": m}                       # ядра = веха (растёт со стадией)
+	if m % 25 == 0: r["diamonds"] = 30          # на круглых тирах — алмазы
+	else: r["gold"] = int(50.0 * pow(GOLD_PER_STAGE, m))
+	return r
+
+func _bp_prem_reward(m: int) -> Dictionary:
+	var r := {"cores": m * 3, "diamonds": 15}   # премиум: жирнее ядра + алмазы
+	if m % 25 == 0: r["diamonds"] = 60
+	return r
+
+func _bp_apply(r: Dictionary) -> void:
+	cores += int(r.get("cores", 0)); diamonds += int(r.get("diamonds", 0))
+	gold += float(r.get("gold", 0)); scrap += int(r.get("scrap", 0))
+
+func _bp_claim(m: int, prem: bool) -> void:
+	if best_stage < m: return
+	if prem:
+		if not bp_premium or m in bp_claimed_prem: return
+		_bp_apply(_bp_prem_reward(m)); bp_claimed_prem.append(m)
+	else:
+		if m in bp_claimed: return
+		_bp_apply(_bp_free_reward(m)); bp_claimed.append(m)
+	_save(); _refresh_hud()
+
+func _bp_reward_text(r: Dictionary) -> String:
+	var p := []
+	if r.has("cores"): p.append("%d🧬" % r["cores"])
+	if r.has("diamonds"): p.append("%d💎" % r["diamonds"])
+	if r.has("gold"): p.append("%s💰" % _gsep(int(r["gold"])))
+	return " ".join(p)
+
+func _bp_unclaimed_count() -> int:
+	var n := 0
+	var m := BP_STEP
+	while m <= best_stage:
+		if not (m in bp_claimed): n += 1
+		if bp_premium and not (m in bp_claimed_prem): n += 1
+		m += BP_STEP
+	return n
+
+func _open_battlepass() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var title := _lbl("🎟 БАТЛПАС — награды за стадии", 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 30); title.size = Vector2(W, 30); panel.add_child(title)
+	var nextm: int = (int(best_stage / BP_STEP) + 1) * BP_STEP
+	var sub := _lbl("Текущая лучшая стадия: %d   ·   до след. тира: %d стадий" % [best_stage, nextm - best_stage], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 62); sub.size = Vector2(W, 20); panel.add_child(sub)
+	if not bp_premium:
+		var pb := Button.new(); pb.text = "💎 Премиум-батлпас (жирнее награды) — %d 💎" % BP_PREMIUM_COST; pb.add_theme_font_size_override("font_size", 14); pb.add_theme_color_override("font_color", Color("#ffd24a"))
+		pb.position = Vector2(W * 0.5 - 200, 88); pb.size = Vector2(400, 38); pb.disabled = diamonds < BP_PREMIUM_COST
+		pb.pressed.connect(func(): if diamonds >= BP_PREMIUM_COST: diamonds -= BP_PREMIUM_COST; bp_premium = true; _save(); panel.queue_free(); _open_battlepass())
+		panel.add_child(pb)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 134); scroll.custom_minimum_size = Vector2(440, 560); scroll.size = Vector2(440, 560); panel.add_child(scroll)
+	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
+	# показать тиры от 5 до best_stage+25 (несколько вперёд как тизер)
+	var m := BP_STEP
+	var top: int = (int(best_stage / BP_STEP) + 5) * BP_STEP
+	while m <= top:
+		list.add_child(_bp_tier_row(m, panel))
+		m += BP_STEP
+	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+
+func _bp_tier_row(m: int, panel: Control) -> Control:
+	var reached: bool = best_stage >= m
+	var box := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.10, 0.11, 0.17, 0.95) if reached else Color(0.06, 0.06, 0.09, 0.9); sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
+	sb.border_color = Color("#ffd24a") if reached else Color("#2a2f45"); sb.set_border_width_all(1)
+	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
+	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); box.add_child(row)
+	row.add_child(_lbl("ст.%d" % m, 14, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT))
+	# бесплатная награда
+	var fclaimed: bool = m in bp_claimed
+	var fb := Button.new(); fb.custom_minimum_size = Vector2(190, 40); fb.add_theme_font_size_override("font_size", 12)
+	fb.text = ("✓ " if fclaimed else "🆓 ") + _bp_reward_text(_bp_free_reward(m))
+	fb.disabled = fclaimed or not reached
+	var mm := m
+	fb.pressed.connect(func(): _bp_claim(mm, false); panel.queue_free(); _open_battlepass())
+	row.add_child(fb)
+	# премиум награда
+	var pclaimed: bool = m in bp_claimed_prem
+	var pbn := Button.new(); pbn.custom_minimum_size = Vector2(190, 40); pbn.add_theme_font_size_override("font_size", 12); pbn.add_theme_color_override("font_color", Color("#ffd24a"))
+	pbn.text = ("✓ " if pclaimed else "💎 ") + _bp_reward_text(_bp_prem_reward(m))
+	pbn.disabled = pclaimed or not reached or not bp_premium
+	pbn.pressed.connect(func(): _bp_claim(mm, true); panel.queue_free(); _open_battlepass())
+	row.add_child(pbn)
+	return box
 
 # описание класса (Диана: непонятно чем герои различаются / что делают ульты)
 func _show_hero_desc(i: int) -> void:
