@@ -575,7 +575,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	# Темп %/уровень убывает (L→L+1: +1/L) = плавное затухание; ×2 на рубежах = power-spike «волна». min()=кламп от переполнения.
 	var milestone := pow(2.0, floor(float(lv - 1) / float(DPS_MILESTONE)))
 	hh["dmg"] = int(round(min(base_dmg * lv * milestone * aug_dmg * _ad_mult("dmg") * meta_pow, STAT_CAP)))   # ×реклама-буст ×мета-мощь
-	hh["max"] = int(min(base_hp * lv * milestone * aura_hp * aug_hp * 1.0, STAT_CAP))   # врождённая живучесть ×2→×1 (Рамиль): без ХП-усилений реально опасно → ХП-стат важен
+	hh["max"] = int(min(base_hp * lv * milestone * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0), STAT_CAP))   # врождённая живучесть (бот-настраиваемая для свипа, у игрока ×1)
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
@@ -1622,7 +1622,7 @@ func _spawn_wave() -> void:
 		var ehp := int(min(ENEMY_HP_BASE * hp_stage * (boss_mult if boss else et["hp"]) * aug_density, STAT_CAP))
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": int(min((9 if boss else 5) * pow(ENEMY_DMG_PER_STAGE, stage - 1) * (1.0 if boss else et["dmg"]), STAT_CAP)),
+			"dmg": int(min((9 if boss else 5) * pow(float(_cfg("edmg", ENEMY_DMG_PER_STAGE)) if bot else ENEMY_DMG_PER_STAGE, stage - 1) * (1.0 if boss else et["dmg"]), STAT_CAP)),
 			"atk": (1.5 if boss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": boss,
 			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
