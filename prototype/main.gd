@@ -291,6 +291,12 @@ var dry_streak := 0        # дропов подряд без редкого (�
 var scrap := 0             # ♻ ЛОМ: валюта с разбора шмота → реролл статов
 # ПРЕСТИЖ:
 var cores := 0            # 🧬 ЯДРА — валюта престижа (трата на аугменты)
+# === МОНЕТИЗАЦИЯ (Фаза А) ===
+var diamonds := 50        # 💎 АЛМАЗЫ — премиум-валюта (покупка за реал — стаб под IAP; чуть капает беспл)
+var x3_unlocked := false  # x3-скорость куплена навсегда (за алмазы)
+var x2_until := 0.0       # x2-скорость активна до этого ticks_msec/1000 (выдаётся за рекламу, таймер)
+var shop_panel: Control
+var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var cores_peak := 0.0     # планка: макс. «счёт престижа», за который уже выдали ядра (повтор той же глубины → меньше)
 var best_stage := 1       # лучшая достигнутая стадия (для Memory-Bonus старта)
 # === РЕКОРДЫ/СТАТИСТИКА (п.7) ===
@@ -897,6 +903,7 @@ func _reset() -> void:
 	scrap = 0
 	cores = 0
 	cores_peak = 0.0
+	diamonds = 50; x3_unlocked = false; x2_until = 0.0
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1289,7 +1296,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1313,6 +1320,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0))
+	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false))
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
 	fav = d.get("fav", {})
@@ -1438,6 +1446,9 @@ func _spawn_wave() -> void:
 	_refresh_hud()
 
 func _process(delta: float) -> void:
+	# игрок: x2-ускорение по таймеру рекламы истекло → откат на x1 (ботов не трогаем — у них x16)
+	if not bot and Engine.time_scale >= 2.0 and Engine.time_scale < 3.0 and not _x2_active():
+		_set_speed(1.0)
 	save_t -= delta
 	if save_t <= 0.0:
 		save_t = 10.0
@@ -1991,7 +2002,7 @@ func _refresh_hud() -> void:
 	var etxt: String = ("   ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
 	stage_label.text = flags + etxt   # типы врагов — на строке флажков (не налезают на кнопки)
 	# золото + прокачка урона
-	gold_label.text = "💰 %s  +%s/с   ♻ %s   🧬 %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(scrap), _gsep(cores)]
+	gold_label.text = "💰 %s  +%s/с   ♻ %s   🧬 %s   💎 %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(scrap), _gsep(cores), _gsep(diamonds)]
 	if inv_open and inv_gold:
 		inv_gold.text = "💰 %s   +%s/с    💪 Мощь: %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(_party_power())]
 	if inv_open: _refresh_inv()
@@ -2172,11 +2183,78 @@ func _build() -> void:
 	restart.pressed.connect(_ask_restart)
 	hud.add_child(restart)
 
-func _cycle_speed() -> void:
-	speed_idx = (speed_idx + 1) % 3
-	var v: float = [1.0, 2.0, 3.0][speed_idx]
+# x2 активна (выдана за рекламу, таймер) / x3 куплена навсегда
+func _x2_active() -> bool:
+	return x2_until > Time.get_ticks_msec() / 1000.0
+
+func _set_speed(v: float) -> void:
+	if v >= 3.0 and not x3_unlocked: return
+	if v >= 2.0 and v < 3.0 and not _x2_active(): return
 	Engine.time_scale = v
 	speed_btn.text = "⏩ x%d" % int(v)
+
+func _cycle_speed() -> void:
+	# открыть меню скорости (монетизация: x1 беспл / x2 реклама / x3 алмазы)
+	_open_speed_menu()
+
+func _open_speed_menu() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.07, 0.09, 0.16, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 200, 180); card.custom_minimum_size = Vector2(400, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl("⏩ СКОРОСТЬ  (💎 %d)" % diamonds, 18, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	var b1 := Button.new(); b1.text = "⏩ x1 — обычная (беспл)"; b1.custom_minimum_size = Vector2(0, 46); b1.add_theme_font_size_override("font_size", 15)
+	b1.pressed.connect(func(): _set_speed(1.0); panel.queue_free()); v.add_child(b1)
+	var b2 := Button.new(); b2.custom_minimum_size = Vector2(0, 46); b2.add_theme_font_size_override("font_size", 15)
+	if _x2_active(): b2.text = "⏩⏩ x2 — активна (%dмин)" % int((x2_until - Time.get_ticks_msec() / 1000.0) / 60.0); b2.pressed.connect(func(): _set_speed(2.0); panel.queue_free())
+	else: b2.text = "▶ x2 на 30 мин — посмотреть рекламу"; b2.pressed.connect(func(): _watch_ad_x2(); panel.queue_free())
+	v.add_child(b2)
+	var b3 := Button.new(); b3.custom_minimum_size = Vector2(0, 46); b3.add_theme_font_size_override("font_size", 15)
+	if x3_unlocked: b3.text = "⏩⏩⏩ x3 — куплена"; b3.pressed.connect(func(): _set_speed(3.0); panel.queue_free())
+	else: b3.text = "💎 x3 НАВСЕГДА — 100 алмазов"; b3.disabled = diamonds < 100; b3.pressed.connect(func(): _buy_x3(); panel.queue_free())
+	v.add_child(b3)
+	var bs := Button.new(); bs.text = "💎 МАГАЗИН АЛМАЗОВ"; bs.custom_minimum_size = Vector2(0, 44); bs.add_theme_font_size_override("font_size", 14); bs.add_theme_color_override("font_color", Color("#ffd24a"))
+	bs.pressed.connect(func(): panel.queue_free(); _open_shop()); v.add_child(bs)
+	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+
+func _watch_ad_x2() -> void:
+	# СТАБ рекламы (на платформе — реальный rewarded-ad SDK). Сейчас выдаём сразу.
+	x2_until = Time.get_ticks_msec() / 1000.0 + 1800.0   # x2 на 30 мин
+	_set_speed(2.0); _save()
+	_popup_center("▶ Реклама → x2 на 30 минут!", Color("#3ad97a"), 2.0)
+
+func _buy_x3() -> void:
+	if diamonds < 100: return
+	diamonds -= 100; x3_unlocked = true
+	_set_speed(3.0); _save(); _refresh_hud()
+	_popup_center("⏩⏩⏩ x3 разблокирована навсегда!", Color("#b46bff"), 2.2)
+
+func _open_shop() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.10, 0.08, 0.04, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 200, 150); card.custom_minimum_size = Vector2(400, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl("💎 МАГАЗИН АЛМАЗОВ  (есть: %d)" % diamonds, 18, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("(покупка за реал — подключится в сборке под Google Play / App Store)", 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
+	for pack in [[100, "0.99$"], [550, "4.99$"], [1200, "9.99$"], [6500, "49.99$"]]:
+		var amt: int = pack[0]
+		var bp := Button.new(); bp.text = "💎 %d — %s" % [amt, pack[1]]; bp.custom_minimum_size = Vector2(0, 44); bp.add_theme_font_size_override("font_size", 15)
+		bp.pressed.connect(func(): diamonds += amt; _save(); _refresh_hud(); _popup_center("💎 +%d (стаб покупки)" % amt, Color("#ffd24a"), 1.6); panel.queue_free())
+		v.add_child(bp)
+	var bd := Button.new(); bd.text = "🎁 Ежедневный бонус +10 💎"; bd.custom_minimum_size = Vector2(0, 44); bd.add_theme_font_size_override("font_size", 14)
+	bd.pressed.connect(func(): diamonds += 10; _save(); _refresh_hud(); _popup_center("🎁 +10 💎", Color("#3ad97a"), 1.4); panel.queue_free())
+	v.add_child(bd)
+	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _toggle_inv() -> void:
 	inv_open = not inv_open
