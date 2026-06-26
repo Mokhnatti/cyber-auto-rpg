@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.6.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -218,11 +218,14 @@ const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 # === ТИПЫ ВРАГОВ (стат/поведение поверх стат-обмена) ===
 # hp/dmg/atk — множители; atk<1 = чаще бьёт; back=бьёт заднюю линию; heal=хилит союзников-врагов; s=масштаб
 const ENEMY_TYPES := {
-	"grunt":  {"name": "Грунт", "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0},
-	"armor":  {"name": "Бронебот", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#3ad97a", "s": 1.28},
-	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.82},
-	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true},
-	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#ff2d95", "s": 1.0, "heal": true},
+	"grunt":  {"name": "Грунт", "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0, "icon": ""},
+	"armor":  {"name": "Бронебот", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "🪨"},
+	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.80, "icon": "⚡"},
+	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true, "icon": "🏹"},
+	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#3ad97a", "s": 1.0, "heal": true, "icon": "✚"},
+	"shield": {"name": "Щитоносец", "hp": 5.5, "dmg": 0.7, "atk": 1.2, "col": "#4d9bff", "s": 1.18, "icon": "🛡", "shield": true},
+	"bomber": {"name": "Взрывной", "hp": 0.8, "dmg": 1.0, "atk": 1.0, "col": "#ff7a2d", "s": 1.05, "icon": "💥", "bomb": true},
+	"swarm":  {"name": "Рой", "hp": 0.25, "dmg": 0.45, "atk": 0.7, "col": "#c06bff", "s": 0.62, "icon": "🐝", "swarm": true},
 }
 
 # КАЛИБРОВКА ПАС4 — модель Clicker Heroes (PROGRESSION-RESEARCH.md): per-STAGE экспонента врагов + ЛИНЕЙНАЯ сила бойца с ×2-изломами каждые N уровней. Зазор линейной силы vs экспон.цены = плавное затухание; ×2-изломы = power-spike «волна».
@@ -261,8 +264,11 @@ func _enemy_pool() -> Array:
 	var pool := ["grunt"]
 	if stage >= 2: pool.append("swift")
 	if stage >= 4: pool.append("armor")
+	if stage >= 6: pool.append("swarm")     # 🐝 рой — AoE-контр (хакер)
 	if stage >= 7: pool.append("archer")
+	if stage >= 9: pool.append("bomber")    # 💥 взрывной — танк/HP-контр
 	if stage >= 11: pool.append("healer")
+	if stage >= 14: pool.append("shield")   # 🛡 щитоносец — бурст-контр (снайпер)
 	return pool
 # === ПРЕСТИЖ-АУГМЕНТЫ (LOOT-RULES §12): детерминированный выбор, перма-множители ===
 const AUGMENTS := [
@@ -1640,6 +1646,15 @@ func _spawn_wave() -> void:
 		var glow := Color("#ff2d95") if boss else Color(et["col"])
 		var es: float = 1.9 if boss else (1.35 - j * 0.1) * et["s"]
 		var d := _make_char("enemy", -1, es, glow)
+		# 🏷 значок-тип над головой (грейбокс-читаемость: видно кто это без текстур). Контр-флип т.к. враг смотрит влево (scale.x<0).
+		var eicon: String = "" if boss else str(et.get("icon", ""))
+		if eicon != "":
+			var il := Label.new(); il.text = eicon; il.add_theme_font_size_override("font_size", 20)
+			il.scale = Vector2(-1, 1); il.position = Vector2(10, -104); il.z_index = 6
+			d.add_child(il)
+		if not boss and etype == "shield":   # 🛡 полупрозрачный пузырь-щит
+			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
+			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
 		var px := 420.0 + j * 60.0                          # фронт-враг ближе к центру
 		var ey := GROUND_Y + 62.0 - (0.0 if boss else j * 20.0)  # на дороге, задние чуть выше (изо)
 		d.position = Vector2(700, ey)                        # въезжают справа
@@ -1813,6 +1828,17 @@ func _deal(hh: Dictionary, e: Dictionary, d: int, is_crit := false) -> void:
 		_stat_add("gold", kg)
 		if e.get("boss", false): _stat_add("bosses", 1)
 		else: _stat_add("mobs", 1)
+		# 💥 ВЗРЫВНОЙ: при смерти бьёт ПО ОТРЯДУ (контр для танк/HP-билдов)
+		if e.get("type", "") == "bomber":
+			_popup("💥", Color("#ff7a2d"), e["node"].position + Vector2(0, -40), 34)
+			var bdmg := int(e["dmg"] * 2.5)
+			var any_died := false
+			for ph in heroes:
+				if ph["alive"]:
+					ph["hp"] = max(0, ph["hp"] - bdmg)
+					if ph["hp"] <= 0:
+						ph["alive"] = false; ph["fall_tw"] = _fall(ph["node"]); any_died = true
+			if any_died: _recalc_auras()
 		_fall_enemy(e["node"])
 
 func _enemy_hit(e: Dictionary) -> void:
