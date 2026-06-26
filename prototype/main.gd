@@ -252,7 +252,8 @@ func _total_levels() -> int:
 	return s
 
 func _can_prestige() -> bool:
-	return _total_levels() >= PRESTIGE_TOTAL_LVL or best_stage >= PRESTIGE_STAGE or stage >= PRESTIGE_STAGE
+	# ТЕКУЩАЯ стадия/уровни (НЕ best_stage!) — иначе после 1го достижения 26 можно спамить престиж бесконечно (баг Дианы: лвл1 у всех, ядра ∞)
+	return _total_levels() >= PRESTIGE_TOTAL_LVL or stage >= PRESTIGE_STAGE
 
 func _enemy_pool() -> Array:
 	var pool := ["grunt"]
