@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.6.4"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -319,6 +319,8 @@ const AD_BOOST := {       # base% + step%/уровень (растёт от чи
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var seen_intro := false   # показано ли интро-обучение (1й запуск)
+var wipe_streak := 0      # подряд вайпов на одной стадии (для коуч-подсказок)
+var last_wipe_stage := 0
 # === БАТЛПАС (Рамиль): награды по пройденным стадиям, тир каждые BP_STEP стадий ===
 const BP_STEP := 5
 var bp_claimed := []      # забранные бесплатные тиры (стадии-вехи)
@@ -1771,6 +1773,18 @@ func _process(delta: float) -> void:
 		if in_boss:
 			print("TTEVENT bossloss stage=%d maxlvl=%d gold=%d" % [stage, _max_hero_level(), int(gold)])
 			boss_retry = true                 # теперь к боссу — по КНОПКЕ
+		# 💡 КОУЧ-ПОДСКАЗКА: от чего вайпнулись → кого качать (на 2-й+ вайп на стадии — значит застрял)
+		if not bot:
+			if stage == last_wipe_stage: wipe_streak += 1
+			else: wipe_streak = 1; last_wipe_stage = stage
+			if wipe_streak >= 2:
+				var th := {}
+				for e in enemies: th[e.get("type", "")] = true
+				var hint := "💡 Подкачай отряд или вкачай ТАНКА для живучести всех"
+				if "healer" in th or "shield" in th: hint = "💡 Качай СНАЙПЕРА — он первым бьёт 💊хилеров и 🛡щитоносцев"
+				elif "swarm" in th: hint = "💡 Качай ХАКЕРА — его AoE выкосит 🐝рой"
+				elif "bomber" in th: hint = "💡 Качай ТАНКА — 💥взрывные бьют по отряду, нужен запас HP"
+				_popup_center(hint, Color("#ffd24a"), 3.8)
 		for e in enemies:                     # ФИКС стака: убрать оставшихся врагов перед откатом
 			if e["node"]: e["node"].queue_free()
 		enemies.clear()
@@ -1781,8 +1795,18 @@ func _process(delta: float) -> void:
 		_start_march()
 	_refresh_hud()
 
+# СНАЙПЕР авто-фокусит приоритет: хилер > щитоносец > бэклайн-стрелок > остальные (Рамиль — «контр» работает сам)
+func _priority_target(arr: Array):
+	var prio := {"healer": 4, "shield": 3, "archer": 2}
+	var best = null; var bestp := -1
+	for e in arr:
+		if not e["alive"]: continue
+		var p: int = prio.get(e.get("type", ""), 0)
+		if p > bestp: bestp = p; best = e
+	return best if best != null else _first_alive(arr)
+
 func _hero_hit(hh: Dictionary) -> void:
-	var e = _first_alive(enemies)
+	var e = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.18
 	var base := int(round(min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)))   # ×hitmult: overflow скорости-атаки → урон
