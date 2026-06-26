@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.7"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.6.8"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -346,6 +346,18 @@ const ACHIEVEMENTS := [
 ]
 var wipe_streak := 0      # подряд вайпов на одной стадии (для коуч-подсказок)
 var last_wipe_stage := 0
+# === ДЕЙЛИКИ + СТРИК (Рамиль): награда за заход в новый день, 7-дневный цикл ===
+var daily_day := 0        # номер последнего дня когда забрал (unix/86400)
+var daily_streak := 0     # текущий день цикла 1..7
+const DAILY_REWARDS := [
+	{"scrap": 100},                  # день 1
+	{"cores": 20, "scrap": 150},     # день 2
+	{"cores": 40},                   # день 3
+	{"diamonds": 20},                # день 4
+	{"cores": 80},                   # день 5
+	{"diamonds": 40},                # день 6
+	{"diamonds": 100, "cores": 150}, # день 7 — ДЖЕКПОТ
+]
 # === БАТЛПАС (Рамиль): награды по пройденным стадиям, тир каждые BP_STEP стадий ===
 const BP_STEP := 5
 var bp_claimed := []      # забранные бесплатные тиры (стадии-вехи)
@@ -857,7 +869,8 @@ func _build_nick_prompt() -> void:
 		nick_panel.visible = false
 		_save()
 		_send_telemetry("start")
-		if not seen_intro: _show_intro())   # первый запуск → интро-обучение
+		if not seen_intro: _show_intro()   # первый запуск → интро-обучение
+		elif _daily_available(): _show_daily())
 	var upd := Button.new(); upd.text = "🔄 обновить версию"; upd.add_theme_font_size_override("font_size", 13); upd.custom_minimum_size = Vector2(0, 40); v.add_child(upd)
 	upd.pressed.connect(_clear_cache)
 
@@ -1099,6 +1112,8 @@ func _ready() -> void:
 		_show_offline()
 	if not bot and nick != "" and not seen_intro:   # вернувшийся игрок без интро → показать
 		_show_intro()
+	if _daily_available() and nick != "":   # новый день → ежедневная награда
+		_show_daily()
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -1126,7 +1141,7 @@ func _reset() -> void:
 	cores_peak = 0.0
 	diamonds = 999999; x3_unlocked = false; x2_until = 0.0; gacha_pity = 0; last_discovered = ""; ad_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
-	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}; daily_day = 0; daily_streak = 0
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1540,7 +1555,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1570,6 +1585,7 @@ func _load() -> void:
 	seen_intro = bool(d.get("seen_intro", false))
 	bp_claimed = d.get("bp_claimed", []); bp_claimed_prem = d.get("bp_claimed_prem", []); bp_premium = bool(d.get("bp_premium", false))
 	ach_claimed = d.get("ach_claimed", {})
+	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
@@ -2917,6 +2933,59 @@ func _ach_row(a: Dictionary, panel: Control) -> Control:
 			cb.pressed.connect(func(): _ach_claim(aa); panel.queue_free(); _open_achievements())
 			hrow.add_child(cb)
 	return box
+
+# === ДЕЙЛИКИ ===
+func _today_num() -> int:
+	return int(Time.get_unix_time_from_system() / 86400.0)
+
+func _daily_available() -> bool:
+	return not bot and _today_num() > daily_day
+
+func _daily_next_streak() -> int:
+	if _today_num() == daily_day + 1: return (daily_streak % 7) + 1   # подряд → следующий день цикла
+	return 1                                                          # пропуск/первый → сброс на день 1
+
+func _daily_reward_text(r: Dictionary) -> String:
+	var p := []
+	if r.has("diamonds"): p.append("%d💎" % r["diamonds"])
+	if r.has("cores"): p.append("%d🧬" % r["cores"])
+	if r.has("scrap"): p.append("%d♻" % r["scrap"])
+	return " ".join(p)
+
+func _claim_daily(panel: Control) -> void:
+	if not _daily_available(): return
+	var ns := _daily_next_streak()
+	var r: Dictionary = DAILY_REWARDS[ns - 1]
+	cores += int(r.get("cores", 0)); diamonds += int(r.get("diamonds", 0)); scrap += int(r.get("scrap", 0))
+	daily_day = _today_num(); daily_streak = ns
+	_save(); _refresh_hud()
+	_popup_center("🎁 День %d: +%s!" % [ns, _daily_reward_text(r)], Color("#ffd24a"), 2.4)
+	if panel: panel.queue_free()
+
+func _show_daily() -> void:
+	var ns := _daily_next_streak()
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.8); dim.set_anchors_preset(Control.PRESET_FULL_RECT); panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.08, 0.07, 0.13, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 200); card.custom_minimum_size = Vector2(420, 0); panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl("🎁 ЕЖЕДНЕВНАЯ НАГРАДА", 19, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("Стрик: день %d из 7   ·   заходи каждый день!" % ns, 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	# трек 7 дней
+	var grid := HBoxContainer.new(); grid.add_theme_constant_override("separation", 5); grid.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_child(grid)
+	for day in range(1, 8):
+		var cell := PanelContainer.new()
+		var csb := StyleBoxFlat.new(); csb.set_corner_radius_all(6); csb.set_content_margin_all(4)
+		csb.bg_color = Color(0.18, 0.15, 0.05, 1.0) if day == ns else (Color(0.05, 0.08, 0.06, 1.0) if day < ns else Color(0.06, 0.06, 0.1, 1.0))
+		csb.border_color = Color("#ffd24a") if day == ns else Color("#2a2f45"); csb.set_border_width_all(2 if day == ns else 1)
+		cell.add_theme_stylebox_override("panel", csb); cell.custom_minimum_size = Vector2(54, 60)
+		var cv := VBoxContainer.new(); cell.add_child(cv)
+		cv.add_child(_lbl("Д%d" % day, 11, Color("#ffd24a") if day == ns else Color("#7a809a"), HORIZONTAL_ALIGNMENT_CENTER))
+		cv.add_child(_lbl(_daily_reward_text(DAILY_REWARDS[day - 1]), 9, Color("#cfe6ff") if day == ns else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_CENTER))
+		grid.add_child(cell)
+	var cb := Button.new(); cb.text = "🎁 ЗАБРАТЬ ДЕНЬ %d (+%s)" % [ns, _daily_reward_text(DAILY_REWARDS[ns - 1])]; cb.custom_minimum_size = Vector2(0, 50); cb.add_theme_font_size_override("font_size", 16); cb.add_theme_color_override("font_color", Color("#ffd24a"))
+	cb.pressed.connect(func(): _claim_daily(panel)); v.add_child(cb)
 
 # описание класса (Диана: непонятно чем герои различаются / что делают ульты)
 func _show_hero_desc(i: int) -> void:
