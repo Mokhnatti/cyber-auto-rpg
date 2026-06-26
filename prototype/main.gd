@@ -1285,7 +1285,7 @@ func _show_offline() -> void:
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
 	var t := Label.new(); t.text = "🌙 ОТРЯД РАБОТАЛ БЕЗ ТЕБЯ"; t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
-	var d2 := Label.new(); d2.text = "Тебя не было: %s\n\n💰 Заработано: %d золота" % [away, _offline_gold]; d2.add_theme_font_size_override("font_size", 16); d2.add_theme_color_override("font_color", Color("#cfe6ff")); d2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d2)
+	var d2 := Label.new(); d2.text = "Тебя не было: %s\n\n💰 Заработано: %s золота" % [away, _gsep(_offline_gold)]; d2.add_theme_font_size_override("font_size", 16); d2.add_theme_color_override("font_color", Color("#cfe6ff")); d2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d2)
 	var b := Button.new(); b.text = "ЗАБРАТЬ"; b.add_theme_font_size_override("font_size", 17); b.custom_minimum_size = Vector2(0, 50)
 	b.pressed.connect(func(): panel.queue_free())
 	v.add_child(b)
@@ -2755,7 +2755,7 @@ func _ic_do_scrap() -> void:
 	_save()
 	_refresh_invcol()
 	_refresh_impl()
-	_popup_center("♻ Разобрано → +%d лом" % got, Color("#3ad97a"), 1.8)
+	_popup_center("♻ Разобрано → +%s лом" % _gsep(got), Color("#3ad97a"), 1.8)
 
 func _build_ic_confirm() -> void:
 	ic_confirm = Control.new()
