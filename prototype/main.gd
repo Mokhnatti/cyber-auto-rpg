@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.7.4"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.7.5"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1796,6 +1796,7 @@ func _process(delta: float) -> void:
 			else:
 				hh["hitmult"] = 1.0
 				hh["t"] = interval
+			hh["atk_interval"] = interval   # для привязки скорости анимации выстрела к скорости атаки (Рамиль)
 			_hero_hit(hh)
 	if auto_battle:
 		_auto_cast()
@@ -1871,7 +1872,9 @@ func _priority_target(arr: Array):
 func _hero_hit(hh: Dictionary) -> void:
 	var e = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)
 	if e == null: return
-	hh["atk_anim"] = 0.18
+	var aw: float = clamp(float(hh.get("atk_interval", 0.6)) * 0.9, 0.3, 1.1)   # окно анимации выстрела ≈ интервал атаки
+	hh["atk_anim"] = aw
+	hh["atk_anim_max"] = aw
 	var base := int(round(min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)))   # ×hitmult: overflow скорости-атаки → урон
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
@@ -2174,7 +2177,13 @@ func _anim_doll(o: Dictionary, t: float, marching: bool, delta: float) -> void:
 		var want := "hit" if o["atk_anim"] > 0.0 else ("walk" if marching else "idle")
 		if spr.animation != want:
 			spr.play(want)
-		spr.position.x = (o["atk_anim"] / 0.18) * 10.0   # выпад вперёд (local +x = к врагу)
+		var amax: float = float(o.get("atk_anim_max", 0.18))
+		# скорость выстрела привязана к скорости атаки: 25 кадров проигрываются за окно amax (Рамиль)
+		if want == "hit" and o.has("atk_anim_max"):
+			spr.speed_scale = 1.0 / max(amax, 0.1)
+		else:
+			spr.speed_scale = 1.0
+		spr.position.x = (o["atk_anim"] / max(amax, 0.001)) * 9.0   # выпад вперёд (local +x = к врагу)
 	# hp-бар над головой — только если ранен (и не босс: у него полоса сверху)
 	var hbg: ColorRect = d.get_node("HpBg")
 	var bar: ColorRect = d.get_node("HpFill")
@@ -2255,7 +2264,7 @@ func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2
 
 func _frames(folder: String) -> SpriteFrames:
 	var sf := SpriteFrames.new()
-	for spec in [["walk", 10.0, true], ["idle", 6.0, true], ["hit", 14.0, false]]:
+	for spec in [["walk", 16.0, true], ["idle", 16.0, true], ["hit", 25.0, false]]:   # hit=25fps: speed_scale в _anim_doll растягивает выстрел под скорость атаки
 		var anim: String = spec[0]
 		sf.add_animation(anim)
 		sf.set_animation_speed(anim, spec[1])
