@@ -6,10 +6,10 @@ extends Control
 
 const HEROES := [
 	# atk_type: snipe/single/aoe/tank · hpg/dmgg = рост HP/урона за уровень (профиль класса)
-	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "crit": 0.30, "critx": 2.2, "ult": "burst",  "ult_cd": 9.0,  "wname": "Рельса-винтовка", "wicon": "🔭"},
-	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "crit": 0.10, "critx": 1.6, "ult": "barrage","ult_cd": 8.0,  "wname": "Штурм-ган", "wicon": "🔫"},
-	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0, "wname": "Тяж-орудие", "wicon": "💥"},
-	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0, "wname": "Взлом-дрон", "wicon": "📡"},
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "crit": 0.30, "critx": 2.2, "ult": "burst",  "ult_cd": 9.0,  "wname": "Рельса-винтовка", "wicon": "🔭", "role": "Снайпер · урон по одной цели", "desc": "Бьёт ОДНУ цель издалека, огромный крит (30% шанс, ×2.2). В автобою сам выбирает приоритетную цель.\nУЛЬТА «Залп»: тапаешь врага → мега-крит-выстрел."},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "crit": 0.10, "critx": 1.6, "ult": "barrage","ult_cd": 8.0,  "wname": "Штурм-ган", "wicon": "🔫", "role": "Штурмовик · стабильный ДПС", "desc": "Быстрый одиночный урон, рабочая лошадка отряда. Высокая скорость атаки.\nУЛЬТА «Шквал»: очередь выстрелов по врагам, всплеск урона."},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0, "wname": "Тяж-орудие", "wicon": "💥", "role": "Танк · держит удар", "desc": "Огромный запас HP (×3.75 от других), принимает урон на себя, защищает сквиши.\nУЛЬТА «Щит»: даёт щит ВСЕМУ отряду — пережить опасный момент."},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0, "wname": "Взлом-дрон", "wicon": "📡", "role": "Хакер · урон по площади", "desc": "Бьёт по ВСЕМ врагам сразу (AoE) — чистит толпы.\nУЛЬТА «Взлом»: мощный импульс урона по площади + дебафф врагам."},
 ]
 const W := 600.0
 const H := 960.0
@@ -2367,6 +2367,24 @@ func _gacha_result_text(results: Array) -> String:
 	var head := "🎉 ЭПИЧЕСКИЙ!" if best == 4 else ("✨ Редкий!" if best == 3 else "Выпало:")
 	return "%s\n%s\n(в коллекции бойцов, надень в Экипировке)" % [head, ", ".join(parts)]
 
+# описание класса (Диана: непонятно чем герои различаются / что делают ульты)
+func _show_hero_desc(i: int) -> void:
+	var h = HEROES[i]
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.7); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.06, 0.09, 0.16, 0.99); sb.set_corner_radius_all(14); sb.border_color = h["color"]; sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 260); card.custom_minimum_size = Vector2(420, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl("%s %s" % [h["icon"], h["name"]], 22, h["color"], HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(h["role"], 14, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	var d := _lbl(h["desc"], 14, Color("#c7ccea"), HORIZONTAL_ALIGNMENT_CENTER); d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; d.custom_minimum_size = Vector2(384, 0); v.add_child(d)
+	v.add_child(_lbl("🔫 %s   ❤ %d   ⚔ %d   🎯 %d%%" % [h["wname"], h["hp"], h["dmg"], int(h["crit"] * 100)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 44); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+
 func _toggle_inv() -> void:
 	inv_open = not inv_open
 	inv_panel.visible = inv_open
@@ -2826,6 +2844,11 @@ func _build_implants() -> void:
 		var hic := _lbl(HEROES[i]["icon"], 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); hic.position = Vector2(16, ry + 8); hic.size = Vector2(168, 46); impl_panel.add_child(hic)
 		var hnm := _lbl(HEROES[i]["name"], 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); hnm.position = Vector2(16, ry + 56); hnm.size = Vector2(168, 20); impl_panel.add_child(hnm)
 		var hlv := _lbl("", 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); hlv.position = Vector2(20, ry + 80); hlv.size = Vector2(160, 48); impl_panel.add_child(hlv)
+		var hinfo := _lbl("ℹ инфо", 11, Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_CENTER); hinfo.position = Vector2(16, ry + 112); hinfo.size = Vector2(168, 16); hinfo.mouse_filter = Control.MOUSE_FILTER_IGNORE; impl_panel.add_child(hinfo)
+		var hbtn := Button.new(); hbtn.flat = true; hbtn.position = Vector2(16, ry); hbtn.size = Vector2(168, 134); hbtn.custom_minimum_size = Vector2(168, 134)
+		var hidx := i
+		hbtn.pressed.connect(func(): _show_hero_desc(hidx))
+		impl_panel.add_child(hbtn)
 		cell["hlv"] = hlv
 		var wi := i
 		var wsb := StyleBoxFlat.new(); wsb.bg_color = Color(0.13, 0.10, 0.03, 0.96); wsb.set_corner_radius_all(10); wsb.border_color = Color("#ffb02e"); wsb.set_border_width_all(2)
