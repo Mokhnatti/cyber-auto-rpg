@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.7.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.7.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -941,7 +941,11 @@ func _refresh_reboot() -> void:
 	if unlocked:
 		rb_main.text = "♻ ПЕРЕЗАГРУЗИТЬСЯ  (+%d 🧬, старт стадия %d)" % [_cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5)))]
 	else:
-		rb_main.text = "🔒 Престиж: стадия %d или %d ур." % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
+		var minst: int = int(floor(float(best_stage) * 0.5))
+		if stage <= minst and (stage >= PRESTIGE_STAGE or _total_levels() >= PRESTIGE_TOTAL_LVL):
+			rb_main.text = "🔒 Продвинься выше стадии %d, чтобы престижнуть снова" % minst
+		else:
+			rb_main.text = "🔒 Престиж: стадия %d или %d ур." % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
 	for c in reboot_list.get_children():
 		c.queue_free()
 	# === 2-Й СЛОЙ: кнопка Сингулярности — ПОЯВЛЯЕТСЯ только со стадии 40 (новичку не грузим) ===
@@ -1118,6 +1122,8 @@ func _ready() -> void:
 		_show_intro()
 	elif _daily_available() and nick != "":   # новый день → ежедневная награда (elif: не стакать с интро, фикс R4)
 		_show_daily()
+	if not bot and _x2_active():   # активный x2 пережил перезаход → вернуть скорость (фикс C2)
+		_set_speed(2.0)
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -1634,7 +1640,7 @@ func _load() -> void:
 			if away > 60:
 				var capped: int = min(away, 43200)   # кап 12 часов
 				var rate := _passive_rate()   # пассив (растёт со стадией) — тот же расчёт что и онлайн
-				_offline_gold = int(rate * capped)
+				_offline_gold = int(min(rate * capped, STAT_CAP))   # кламп офлайн-дохода от int64-overflow (Godot-ресёрч)
 				_offline_secs = capped
 				gold += _offline_gold
 	_refresh_hud()
@@ -2802,7 +2808,7 @@ func _open_battlepass() -> void:
 	if not bp_premium:
 		var pb := Button.new(); pb.text = "💎 Премиум-батлпас (жирнее награды) — %d 💎" % BP_PREMIUM_COST; pb.add_theme_font_size_override("font_size", 14); pb.add_theme_color_override("font_color", Color("#ffd24a"))
 		pb.position = Vector2(W * 0.5 - 200, 88); pb.size = Vector2(400, 38); pb.disabled = diamonds < BP_PREMIUM_COST
-		pb.pressed.connect(func(): if diamonds >= BP_PREMIUM_COST: diamonds -= BP_PREMIUM_COST; bp_premium = true; _save(); panel.queue_free(); _open_battlepass())
+		pb.pressed.connect(func(): if diamonds >= BP_PREMIUM_COST: diamonds -= BP_PREMIUM_COST; bp_premium = true; _bp_cache_stage = -1; _save(); panel.queue_free(); _open_battlepass())
 		panel.add_child(pb)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 134); scroll.custom_minimum_size = Vector2(440, 560); scroll.size = Vector2(440, 560); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
