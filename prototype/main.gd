@@ -299,6 +299,9 @@ var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var last_discovered := "" # последнее открытое усиление (можно перебросить за алмазы — хук Tap Titans)
 const REROLL_COST := 50   # алмазов за переброс усиления
+var gacha_pity := 0       # пуллов с последнего Эпического (pity-гарант на 90)
+const GACHA_COST1 := 50   # алмазов за 1 пулл
+const GACHA_COST10 := 450 # за 10 пуллов (скидка)
 var cores_peak := 0.0     # планка: макс. «счёт престижа», за который уже выдали ядра (повтор той же глубины → меньше)
 var best_stage := 1       # лучшая достигнутая стадия (для Memory-Bonus старта)
 # === РЕКОРДЫ/СТАТИСТИКА (п.7) ===
@@ -933,7 +936,7 @@ func _reset() -> void:
 	scrap = 0
 	cores = 0
 	cores_peak = 0.0
-	diamonds = 999999; x3_unlocked = false; x2_until = 0.0
+	diamonds = 999999; x3_unlocked = false; x2_until = 0.0; gacha_pity = 0; last_discovered = ""
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1326,7 +1329,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1351,6 +1354,7 @@ func _load() -> void:
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0))
 	diamonds = max(int(d.get("diamonds", 999999)), 999999); x3_unlocked = bool(d.get("x3_unlocked", false))   # ВРЕМЕННО: всем 999999 (тест)
+	gacha_pity = int(d.get("gacha_pity", 0))
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
 	fav = d.get("fav", {})
@@ -2284,7 +2288,84 @@ func _open_shop() -> void:
 	var bd := Button.new(); bd.text = "🎁 Ежедневный бонус +10 💎"; bd.custom_minimum_size = Vector2(0, 44); bd.add_theme_font_size_override("font_size", 14)
 	bd.pressed.connect(func(): diamonds += 10; _save(); _refresh_hud(); _popup_center("🎁 +10 💎", Color("#3ad97a"), 1.4); panel.queue_free())
 	v.add_child(bd)
+	var bg := Button.new(); bg.text = "🎰 ГАЧА — призыв шмота"; bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
+	bg.pressed.connect(func(): panel.queue_free(); _open_gacha()); v.add_child(bg)
 	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+
+# === ГАЧА (Фаза Б): призыв шмота за алмазы, pity ≤90, прозрачные дропрейты ===
+func _gacha_rarity() -> int:
+	gacha_pity += 1
+	if gacha_pity >= 90:        # хард-pity: гарант Эпического
+		gacha_pity = 0; return 4
+	var p4 := 0.05              # софт-pity: с 74-го пулла шанс Эпического растёт
+	if gacha_pity >= 74: p4 = 0.05 + (gacha_pity - 73) * 0.06
+	if randf() < p4:
+		gacha_pity = 0; return 4
+	var r := randf()
+	if r < 0.50: return 1       # Обычный 50%
+	if r < 0.80: return 2       # Необычный 30%
+	return 3                    # Редкий 15% (Эпический 5% базово через p4)
+
+func _gacha_pull(n: int) -> Array:
+	var cost: int = GACHA_COST1 if n == 1 else GACHA_COST10
+	if diamonds < cost: return []
+	diamonds -= cost
+	var results := []
+	for k in n:
+		var rar := _gacha_rarity()
+		var i := randi() % heroes.size()
+		var hh = heroes[i]
+		var slot: String = "weapon" if randf() < 0.4 else "module"
+		var variants := _slot_variants(slot, hh["cls"])
+		var vv = variants[randi() % variants.size()]
+		var key := _ik(vv["id"], rar)
+		var it := _make_item(hh["cls"], vv["id"], rar, slot)
+		it["lvl"] = max(1, stage)
+		var g = hh["gear"][slot]
+		if not g.has(key) or _item_power(it) > _item_power(g[key]):
+			g[key] = it
+			new_gear["%d:%s" % [i, slot]] = int(new_gear.get("%d:%s" % [i, slot], 0)) + 1
+		_recalc_hero(hh)
+		results.append({"hero": i, "slot": slot, "rar": rar, "name": vv["name"]})
+	_save(); _refresh_hud()
+	return results
+
+func _open_gacha() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.7); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.12, 0.05, 0.13, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ff7adf"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 110); card.custom_minimum_size = Vector2(420, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 9); card.add_child(v)
+	v.add_child(_lbl("🎰 ГАЧА — призыв снаряжения", 19, Color("#ff7adf"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("💎 %d   ·   до гаранта Эпического: %d пуллов" % [diamonds, max(0, 90 - gacha_pity)], 13, Color("#d9c7ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("Шансы: Обычный 50% · Необычный 30% · Редкий 15% · Эпический 5%\n(с 74-го пулла шанс Эпического растёт, на 90-м — гарант)", 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var res := _lbl("", 13, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); res.custom_minimum_size = Vector2(0, 90); res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(res)
+	var p1 := Button.new(); p1.text = "🎲 ПУЛЛ x1 — %d 💎" % GACHA_COST1; p1.custom_minimum_size = Vector2(0, 46); p1.add_theme_font_size_override("font_size", 15)
+	p1.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(1)); _gacha_refresh_hdr(v)); v.add_child(p1)
+	var p10 := Button.new(); p10.text = "🎲 ПУЛЛ x10 — %d 💎" % GACHA_COST10; p10.custom_minimum_size = Vector2(0, 46); p10.add_theme_font_size_override("font_size", 15)
+	p10.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(10)); _gacha_refresh_hdr(v)); v.add_child(p10)
+	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+
+func _gacha_refresh_hdr(v: VBoxContainer) -> void:
+	# обновить строку алмазов/pity (2-й ребёнок) после пулла
+	if v.get_child_count() > 1 and v.get_child(1) is Label:
+		(v.get_child(1) as Label).text = "💎 %d   ·   до гаранта Эпического: %d пуллов" % [diamonds, max(0, 90 - gacha_pity)]
+
+func _gacha_result_text(results: Array) -> String:
+	if results.is_empty(): return "Недостаточно алмазов 💎"
+	var counts := {1: 0, 2: 0, 3: 0, 4: 0}
+	var best := 1
+	for r in results:
+		counts[r["rar"]] += 1; best = max(best, r["rar"])
+	var parts := []
+	for rr in [4, 3, 2, 1]:
+		if counts[rr] > 0: parts.append("%s ×%d" % [RARITY[rr]["name"], counts[rr]])
+	var head := "🎉 ЭПИЧЕСКИЙ!" if best == 4 else ("✨ Редкий!" if best == 3 else "Выпало:")
+	return "%s\n%s\n(в коллекции бойцов, надень в Экипировке)" % [head, ", ".join(parts)]
 
 func _toggle_inv() -> void:
 	inv_open = not inv_open
