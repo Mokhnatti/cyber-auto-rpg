@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.4"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.6.5"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -219,13 +219,13 @@ const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 # hp/dmg/atk — множители; atk<1 = чаще бьёт; back=бьёт заднюю линию; heal=хилит союзников-врагов; s=масштаб
 const ENEMY_TYPES := {
 	"grunt":  {"name": "Грунт", "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0, "icon": ""},
-	"armor":  {"name": "Бронебот", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "🪨"},
-	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.80, "icon": "⚡"},
-	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true, "icon": "🏹"},
-	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#3ad97a", "s": 1.0, "heal": true, "icon": "✚"},
-	"shield": {"name": "Щитоносец", "hp": 5.5, "dmg": 0.7, "atk": 1.2, "col": "#4d9bff", "s": 1.18, "icon": "🛡", "shield": true},
-	"bomber": {"name": "Взрывной", "hp": 0.8, "dmg": 1.0, "atk": 1.0, "col": "#ff7a2d", "s": 1.05, "icon": "💥", "bomb": true},
-	"swarm":  {"name": "Рой", "hp": 0.25, "dmg": 0.45, "atk": 0.7, "col": "#c06bff", "s": 0.62, "icon": "🐝", "swarm": true},
+	"armor":  {"name": "Бронебот", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "БРОНЯ"},
+	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.80, "icon": "ШУСТР"},
+	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true, "icon": "СТРЕЛ"},
+	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#3ad97a", "s": 1.0, "heal": true, "icon": "ХИЛ"},
+	"shield": {"name": "Щитоносец", "hp": 5.5, "dmg": 0.7, "atk": 1.2, "col": "#4d9bff", "s": 1.18, "icon": "ЩИТ", "shield": true},
+	"bomber": {"name": "Взрывной", "hp": 0.8, "dmg": 1.0, "atk": 1.0, "col": "#ff7a2d", "s": 1.05, "icon": "БОМБА", "bomb": true},
+	"swarm":  {"name": "Рой", "hp": 0.25, "dmg": 0.45, "atk": 0.7, "col": "#c06bff", "s": 0.62, "icon": "РОЙ", "swarm": true},
 }
 
 # КАЛИБРОВКА ПАС4 — модель Clicker Heroes (PROGRESSION-RESEARCH.md): per-STAGE экспонента врагов + ЛИНЕЙНАЯ сила бойца с ×2-изломами каждые N уровней. Зазор линейной силы vs экспон.цены = плавное затухание; ×2-изломы = power-spike «волна».
@@ -1651,8 +1651,11 @@ func _spawn_wave() -> void:
 		# 🏷 значок-тип над головой (грейбокс-читаемость: видно кто это без текстур). Контр-флип т.к. враг смотрит влево (scale.x<0).
 		var eicon: String = "" if boss else str(et.get("icon", ""))
 		if eicon != "":
-			var il := Label.new(); il.text = eicon; il.add_theme_font_size_override("font_size", 20)
-			il.scale = Vector2(-1, 1); il.position = Vector2(10, -104); il.z_index = 6
+			var il := Label.new(); il.text = eicon; il.add_theme_font_size_override("font_size", 13)
+			il.add_theme_color_override("font_color", Color(et["col"]).lightened(0.35))
+			il.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
+			il.add_theme_constant_override("outline_size", 7)
+			il.scale = Vector2(-1, 1); il.position = Vector2(34, -100); il.z_index = 6   # контр-флип (враг смотрит влево)
 			d.add_child(il)
 		if not boss and etype == "shield":   # 🛡 полупрозрачный пузырь-щит
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
