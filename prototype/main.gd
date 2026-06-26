@@ -575,7 +575,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	# Темп %/уровень убывает (L→L+1: +1/L) = плавное затухание; ×2 на рубежах = power-spike «волна». min()=кламп от переполнения.
 	var milestone := pow(2.0, floor(float(lv - 1) / float(DPS_MILESTONE)))
 	hh["dmg"] = int(round(min(base_dmg * lv * milestone * aug_dmg * _ad_mult("dmg") * meta_pow, STAT_CAP)))   # ×реклама-буст ×мета-мощь
-	hh["max"] = int(min(base_hp * lv * milestone * aura_hp * aug_hp * 2.0, STAT_CAP))   # ×2 выживаемость
+	hh["max"] = int(min(base_hp * lv * milestone * aura_hp * aug_hp * 1.0, STAT_CAP))   # врождённая живучесть ×2→×1 (Рамиль): без ХП-усилений реально опасно → ХП-стат важен
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
