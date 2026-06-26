@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.6.9"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.7.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -119,6 +119,8 @@ var hero_rows := []   # строки прокачки по героям: {lvl_bt
 var impl_btn: Button
 var bp_btn: Button
 var ach_btn: Button
+var _bp_cache_stage := -1   # кэш счёта батлпас-бейджа (перф)
+var _bp_badge_cache := 0
 var loot_badge: Label
 var impl_panel: Control
 var impl_open := false
@@ -266,8 +268,10 @@ func _total_levels() -> int:
 	return s
 
 func _can_prestige() -> bool:
-	# ТЕКУЩАЯ стадия/уровни (НЕ best_stage!) — иначе после 1го достижения 26 можно спамить престиж бесконечно (баг Дианы: лвл1 у всех, ядра ∞)
-	return _total_levels() >= PRESTIGE_TOTAL_LVL or stage >= PRESTIGE_STAGE
+	# гейт по ТЕКУЩЕЙ стадии/уровням + ОБЯЗАТЕЛЬНО продвинуться выше Memory-Bonus старта (floor(best*0.5)).
+	# Иначе после reboot (старт=26 при best≥52) можно спамить престиж за 0 действий (баг-хант R3).
+	var advanced: bool = stage > int(floor(float(best_stage) * 0.5))
+	return advanced and (_total_levels() >= PRESTIGE_TOTAL_LVL or stage >= PRESTIGE_STAGE)
 
 func _enemy_pool() -> Array:
 	var pool := ["grunt"]
@@ -1112,7 +1116,7 @@ func _ready() -> void:
 		_show_offline()
 	if not bot and nick != "" and not seen_intro:   # вернувшийся игрок без интро → показать
 		_show_intro()
-	if _daily_available() and nick != "":   # новый день → ежедневная награда
+	elif _daily_available() and nick != "":   # новый день → ежедневная награда (elif: не стакать с интро, фикс R4)
 		_show_daily()
 
 func _setup_font() -> void:
@@ -1143,6 +1147,7 @@ func _reset() -> void:
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
 	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}; daily_day = 0; daily_streak = 0
 	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0
+	aim_mode = false; aim_hero = -1; _qte_clear()   # чистка QTE-маркеров/прицела при hard-restart (баг-хант R2)
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -1556,7 +1561,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1580,7 +1585,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0))
-	diamonds = max(int(d.get("diamonds", 999999)), 999999); x3_unlocked = bool(d.get("x3_unlocked", false))   # ВРЕМЕННО: всем 999999 (тест)
+	diamonds = max(int(d.get("diamonds", 999999)), 999999); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0))   # ВРЕМЕННО: всем 999999 (тест)
 	gacha_pity = int(d.get("gacha_pity", 0)); ad_boosts = d.get("ad_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
@@ -1864,7 +1869,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	var base := int(round(min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)))   # ×hitmult: overflow скорости-атаки → урон
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
-	if is_crit: base = int(base * hh.get("critx", hh["data"]["critx"]))
+	if is_crit: base = int(min(float(base) * hh.get("critx", hh["data"]["critx"]), STAT_CAP))   # кламп критового урона от INF/overflow (баг-хант R3)
 	if hh["data"]["atk_type"] == "aoe":
 		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
 		for en in enemies:
@@ -1971,6 +1976,7 @@ func _use_ult(i: int) -> void:
 
 # выстрел снайпер-ульты по цели (общий для ручного тапа и авто-боя)
 func _sniper_fire(sn, target) -> void:
+	if sn["ult_t"] > 0.0 or not sn["alive"]: return   # фикс дабл-каста: не стрелять на КД или мёртвым (баг-хант R2)
 	sn["ult_t"] = sn["ult_cd_eff"]
 	sn["atk_anim"] = 0.25
 	var d := int(sn["dmg"] * 12 * aura_dmg)
@@ -2144,7 +2150,7 @@ func _die() -> void:
 
 # --- АНИМАЦИЯ БОЛВАНЧИКОВ ---
 func _animate(delta: float) -> void:
-	var t := Time.get_ticks_msec() / 1000.0
+	var t := Time.get_unix_time_from_system()
 	for hh in heroes:
 		_anim_doll(hh, t, phase == "march", delta)
 	for e in enemies:
@@ -2286,7 +2292,9 @@ func _refresh_hud() -> void:
 		else:
 			impl_btn.modulate = Color(1, 1, 1)
 	if bp_btn:
-		var bpn := _bp_unclaimed_count()
+		if best_stage != _bp_cache_stage:   # перф: O(n²) счёт только при смене стадии, не каждый кадр (баг-хант R4)
+			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
+		var bpn := _bp_badge_cache
 		bp_btn.text = "🎟" + ("●%d" % bpn if bpn > 0 else "")
 		bp_btn.modulate = Color(1.6, 1.4, 0.3) if bpn > 0 else Color(1, 1, 1)
 	if ach_btn:
@@ -2535,7 +2543,7 @@ func _build() -> void:
 
 # x2 активна (выдана за рекламу, таймер) / x3 куплена навсегда
 func _x2_active() -> bool:
-	return x2_until > Time.get_ticks_msec() / 1000.0
+	return x2_until > Time.get_unix_time_from_system()
 
 func _set_speed(v: float) -> void:
 	if v >= 3.0 and not x3_unlocked: return
@@ -2561,7 +2569,7 @@ func _open_speed_menu() -> void:
 	var b1 := Button.new(); b1.text = "⏩ x1 — обычная (беспл)"; b1.custom_minimum_size = Vector2(0, 46); b1.add_theme_font_size_override("font_size", 15)
 	b1.pressed.connect(func(): _set_speed(1.0); panel.queue_free()); v.add_child(b1)
 	var b2 := Button.new(); b2.custom_minimum_size = Vector2(0, 46); b2.add_theme_font_size_override("font_size", 15)
-	if _x2_active(): b2.text = "⏩⏩ x2 — активна (%dмин)" % int((x2_until - Time.get_ticks_msec() / 1000.0) / 60.0); b2.pressed.connect(func(): _set_speed(2.0); panel.queue_free())
+	if _x2_active(): b2.text = "⏩⏩ x2 — активна (%dмин)" % int((x2_until - Time.get_unix_time_from_system()) / 60.0); b2.pressed.connect(func(): _set_speed(2.0); panel.queue_free())
 	else: b2.text = "▶ x2 на 30 мин — посмотреть рекламу"; b2.pressed.connect(func(): _watch_ad_x2(); panel.queue_free())
 	v.add_child(b2)
 	var b3 := Button.new(); b3.custom_minimum_size = Vector2(0, 46); b3.add_theme_font_size_override("font_size", 15)
@@ -2576,7 +2584,7 @@ func _open_speed_menu() -> void:
 
 func _watch_ad_x2() -> void:
 	# СТАБ рекламы (на платформе — реальный rewarded-ad SDK). Сейчас выдаём сразу.
-	x2_until = Time.get_ticks_msec() / 1000.0 + 1800.0   # x2 на 30 мин
+	x2_until = Time.get_unix_time_from_system() + 1800.0   # x2 на 30 мин
 	_set_speed(2.0); _save()
 	_popup_center("▶ Реклама → x2 на 30 минут!", Color("#3ad97a"), 2.0)
 
@@ -2589,7 +2597,7 @@ func _buy_x3() -> void:
 # === РЕКЛАМА-БУСТЫ (Диана) ===
 func _ad_active(b: String) -> bool:
 	var d = ad_boosts.get(b, {})
-	return float(d.get("until", 0.0)) > Time.get_ticks_msec() / 1000.0
+	return float(d.get("until", 0.0)) > Time.get_unix_time_from_system()
 
 func _ad_lvl(b: String) -> int:
 	return int(ad_boosts.get(b, {}).get("lvl", 0))
@@ -2604,7 +2612,7 @@ func _ad_mult(b: String) -> float:
 func _watch_ad_boost(b: String) -> void:
 	# СТАБ рекламы. Каждый просмотр: продлевает на 30 мин И поднимает уровень (выше %) — петля Дианы.
 	var d = ad_boosts.get(b, {"until": 0.0, "lvl": 0})
-	d["until"] = Time.get_ticks_msec() / 1000.0 + AD_DUR
+	d["until"] = Time.get_unix_time_from_system() + AD_DUR
 	d["lvl"] = min(int(d["lvl"]) + 1, 30)
 	ad_boosts[b] = d
 	_stat_add("ads", 1)   # ачивка: просмотры реклама-бустов
@@ -2632,7 +2640,7 @@ func _open_ad_boosts() -> void:
 		var nextpct: int = int(AD_BOOST[b]["base"] + AD_BOOST[b]["step"] * lvl)   # после след. просмотра
 		var row := Button.new(); row.custom_minimum_size = Vector2(0, 56); row.add_theme_font_size_override("font_size", 14)
 		if _ad_active(b):
-			var mins := int((float(ad_boosts[b]["until"]) - Time.get_ticks_msec() / 1000.0) / 60.0)
+			var mins := int((float(ad_boosts[b]["until"]) - Time.get_unix_time_from_system()) / 60.0)
 			row.text = "▶ %s: +%d%% активен (%dмин, ур.%d) — ещё реклама → +%d%%" % [AD_BOOST[b]["name"], pct, mins, lvl, nextpct]
 		else:
 			row.text = "▶ %s — реклама → +%d%% на 30 мин (ур.%d)" % [AD_BOOST[b]["name"], nextpct, lvl + 1]
@@ -2657,9 +2665,7 @@ func _open_shop() -> void:
 		var bp := Button.new(); bp.text = "💎 %d — %s" % [amt, pack[1]]; bp.custom_minimum_size = Vector2(0, 44); bp.add_theme_font_size_override("font_size", 15)
 		bp.pressed.connect(func(): diamonds += amt; _save(); _refresh_hud(); _popup_center("💎 +%d (стаб покупки)" % amt, Color("#ffd24a"), 1.6); panel.queue_free())
 		v.add_child(bp)
-	var bd := Button.new(); bd.text = "🎁 Ежедневный бонус +10 💎"; bd.custom_minimum_size = Vector2(0, 44); bd.add_theme_font_size_override("font_size", 14)
-	bd.pressed.connect(func(): diamonds += 10; _save(); _refresh_hud(); _popup_center("🎁 +10 💎", Color("#3ad97a"), 1.4); panel.queue_free())
-	v.add_child(bd)
+	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
 	var bg := Button.new(); bg.text = "🎰 ГАЧА — призыв шмота"; bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
 	bg.pressed.connect(func(): panel.queue_free(); _open_gacha()); v.add_child(bg)
 	var ba := Button.new(); ba.text = "📺 БОНУСЫ ЗА РЕКЛАМУ"; ba.custom_minimum_size = Vector2(0, 46); ba.add_theme_font_size_override("font_size", 15); ba.add_theme_color_override("font_color", Color("#3ad97a"))
@@ -2673,12 +2679,12 @@ func _gacha_rarity() -> int:
 		gacha_pity = 0; return 4
 	var p4 := 0.05              # софт-pity: с 74-го пулла шанс Эпического растёт
 	if gacha_pity >= 74: p4 = 0.05 + (gacha_pity - 73) * 0.06
-	if randf() < p4:
-		gacha_pity = 0; return 4
+	# ОДИН roll → точные объявленные шансы 50/30/15/5 (баг-хант R3: раньше редкий выходил 19% вместо 15%)
 	var r := randf()
-	if r < 0.50: return 1       # Обычный 50%
-	if r < 0.80: return 2       # Необычный 30%
-	return 3                    # Редкий 15% (Эпический 5% базово через p4)
+	if r < p4: gacha_pity = 0; return 4   # Эпический 5% (+pity-рампа)
+	if r < p4 + 0.50: return 1            # Обычный 50%
+	if r < p4 + 0.80: return 2            # Необычный 30%
+	return 3                              # Редкий 15%
 
 func _gacha_pull(n: int) -> Array:
 	var cost: int = GACHA_COST1 if n == 1 else GACHA_COST10
@@ -2766,6 +2772,7 @@ func _bp_claim(m: int, prem: bool) -> void:
 	else:
 		if m in bp_claimed: return
 		_bp_apply(_bp_free_reward(m)); bp_claimed.append(m)
+	_bp_cache_stage = -1   # инвалидировать кэш бейджа после забора
 	_save(); _refresh_hud()
 
 func _bp_reward_text(r: Dictionary) -> String:
@@ -2954,7 +2961,9 @@ func _daily_reward_text(r: Dictionary) -> String:
 	return " ".join(p)
 
 func _claim_daily(panel: Control) -> void:
-	if not _daily_available(): return
+	if not _daily_available():
+		if panel: panel.queue_free()   # день сменился между открытием и кликом → просто закрыть (фикс soft-lock R4)
+		return
 	var ns := _daily_next_streak()
 	var r: Dictionary = DAILY_REWARDS[ns - 1]
 	cores += int(r.get("cores", 0)); diamonds += int(r.get("diamonds", 0)); scrap += int(r.get("scrap", 0))
@@ -2966,7 +2975,9 @@ func _claim_daily(panel: Control) -> void:
 func _show_daily() -> void:
 	var ns := _daily_next_streak()
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
-	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.8); dim.set_anchors_preset(Control.PRESET_FULL_RECT); panel.add_child(dim)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.8); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())   # тап по фону = закрыть (фикс R4)
+	panel.add_child(dim)
 	var card := PanelContainer.new()
 	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.08, 0.07, 0.13, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 200); card.custom_minimum_size = Vector2(420, 0); panel.add_child(card)
