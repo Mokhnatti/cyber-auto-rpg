@@ -235,6 +235,7 @@ const STAT_CAP := 1.0e15           # потолок урона/HP — предо
 const INNATE_WDMG := 16            # вшитый базовый урон «стартового оружия» (слоты на старте ПУСТЫЕ — Диана; боец не слабее)
 const STAGE_WAVES := 10        # норм-волн на стадии (потом босс). Кратно 5. Диана/Рамиль: 5→10 — стадия длиннее, темп спокойнее, не суматошно.
 const AUG_DIMINISH := 0.88     # убывающая отдача на стак ОДНОГО стата (комбо>моно): 1.0=нет убывания, ниже=сильнее поощряет разнообразие. 0.88 = комбо выигрывает, но потолок ползёт бодро
+const TANK_HP_PER_LVL := 0.06  # уровень ТАНКА → ×(1+это)^ур HP ВСЕМУ отряду (главный источник HP). Качаешь танка = живучесть всех; забил = стекляшка. Сweep-настраиваемо у ботов (tankhp)
 const PRESTIGE_TOTAL_LVL := 350   # престиж: совместный уровень отряда (Пас4f: 200→350 — нельзя рашить престиж голой прокачкой)
 const PRESTIGE_STAGE := 26        # ИЛИ достижение этой стадии (Пас4g: 20→26 — позже первый престиж, ~час; кривая плавная → не застрять)
 
@@ -482,15 +483,17 @@ var aim_mode := false   # снайпер целится (ждём тап по в
 var aim_hero = null
 
 func _recalc_auras() -> void:
-	var tank := false; var snipe := false; var storm := false; var hak := false
+	var snipe := false; var storm := false; var hak := false
+	var tank_lvl := 0
 	for hh in heroes:
-		if not hh["alive"]: continue
 		match hh["data"]["atk_type"]:
-			"tank": tank = true
-			"snipe": snipe = true
-			"single": storm = true
-			"aoe": hak = true
-	aura_hp = 1.0 + (0.10 if tank else 0.0)    # танк → +10% HP всем
+			"tank": tank_lvl = hh["level"]   # уровень ТАНКА (всегда в отряде, не зависит от alive — без death-spiral)
+			"snipe": if hh["alive"]: snipe = true
+			"single": if hh["alive"]: storm = true
+			"aoe": if hh["alive"]: hak = true
+	# 🛡 ТАНК = HP-ДВИГАТЕЛЬ ОТРЯДА: его уровень даёт ЭКСПОНЕНЦИАЛЬНЫЙ HP всему отряду (Рамиль).
+	# Это главный источник выживаемости → хочешь переть глубже = качай танка; забил = стекляшка.
+	aura_hp = pow(1.0 + float(_cfg("tankhp", TANK_HP_PER_LVL)) if bot else 1.0 + TANK_HP_PER_LVL, float(tank_lvl))
 	aura_dmg = 1.0 + (0.08 if snipe else 0.0)  # снайпер → +8% урон всем
 	aura_atk = 1.0 + (0.10 if storm else 0.0)  # штурм → +10% скор. атаки
 	aura_ult = 0.82 if hak else 1.0            # хакер → ульты заряжаются быстрее
@@ -575,8 +578,12 @@ func _recalc_hero(hh: Dictionary) -> void:
 	# ЛИНЕЙНЫЙ рост ×уровень + ×2-излом каждые DPS_MILESTONE уровней (модель Clicker Heroes).
 	# Темп %/уровень убывает (L→L+1: +1/L) = плавное затухание; ×2 на рубежах = power-spike «волна». min()=кламп от переполнения.
 	var milestone := pow(2.0, floor(float(lv - 1) / float(DPS_MILESTONE)))
-	hh["dmg"] = int(round(min(base_dmg * lv * milestone * aug_dmg * _ad_mult("dmg") * meta_pow, STAT_CAP)))   # ×реклама-буст ×мета-мощь
-	hh["max"] = int(min(base_hp * lv * milestone * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0), STAT_CAP))   # врождённая живучесть (бот-настраиваемая для свипа, у игрока ×1)
+	var is_tank: bool = hh["data"]["atk_type"] == "tank"
+	# УРОН: у ТАНКА качается ОТВРАТИТЕЛЬНО (он HP-двигатель, не дамагер); у остальных полный ×уровень×излом
+	var dmg_scale: float = (1.0 + lv * 0.04) if is_tank else (lv * milestone)
+	hh["dmg"] = int(round(min(base_dmg * dmg_scale * aug_dmg * _ad_mult("dmg") * meta_pow, STAT_CAP)))
+	# HP: НЕ от своего уровня, а от АУРЫ ТАНКА (его уровень, экспонента) + аугменты/модуль/surv. Качаешь танка = HP всему отряду.
+	hh["max"] = int(min(base_hp * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0), STAT_CAP))
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
@@ -1179,7 +1186,9 @@ func _bot_tick(delta: float) -> void:
 		for m in qte_markers.duplicate():
 			_qte_marker_hit(m)
 	# прокачка уровней за золото
+	var skiptank: bool = bool(_cfg("skiptank", false))   # тест: бот игнорит танка → отряд хрупкий (стекляшка)
 	for i in heroes.size():
+		if skiptank and heroes[i]["data"]["atk_type"] == "tank": continue
 		if heroes[i]["alive"] and gold >= heroes[i]["lvl_cost"]:
 			_upgrade_level(i)
 	# авто-экип лучшего лута (иначе шмот/оружие не тестируется) — БОТ-ОНЛИ
