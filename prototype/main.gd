@@ -297,6 +297,8 @@ var x3_unlocked := false  # x3-скорость куплена навсегда 
 var x2_until := 0.0       # x2-скорость активна до этого ticks_msec/1000 (выдаётся за рекламу, таймер)
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
+var last_discovered := "" # последнее открытое усиление (можно перебросить за алмазы — хук Tap Titans)
+const REROLL_COST := 50   # алмазов за переброс усиления
 var cores_peak := 0.0     # планка: макс. «счёт престижа», за который уже выдали ядра (повтор той же глубины → меньше)
 var best_stage := 1       # лучшая достигнутая стадия (для Memory-Bonus старта)
 # === РЕКОРДЫ/СТАТИСТИКА (п.7) ===
@@ -759,6 +761,13 @@ func _refresh_reboot() -> void:
 		disc.text = "✓ Все усиления открыты — качай их ниже"; disc.disabled = true
 	disc.pressed.connect(_discover_aug)
 	reboot_list.add_child(disc)
+	# ПЕРЕРОЛЛ за алмазы (монетизация): не понравилось открытое усиление → перебросить на другое случайное
+	if last_discovered != "" and _al(last_discovered) == 1 and n_unowned > 0:
+		var rb := Button.new(); rb.custom_minimum_size = Vector2(516, 40); rb.add_theme_font_size_override("font_size", 13)
+		rb.text = "🎲 Перебросить «%s» — %d 💎" % [_aug_def(last_discovered)["name"], REROLL_COST]
+		rb.disabled = diamonds < REROLL_COST
+		rb.pressed.connect(_reroll_discovered)
+		reboot_list.add_child(rb)
 	# слот-докупка — только когда есть хотя бы одно усиление (Диана: не грузить новичка)
 	if n_owned > 0 and _slot_total() < 10:
 		var sbtn := Button.new(); sbtn.custom_minimum_size = Vector2(516, 38); sbtn.add_theme_font_size_override("font_size", 12)
@@ -817,10 +826,31 @@ func _discover_aug() -> void:
 	aug_lvl[id] = 1
 	if equipped_augs.size() < _slot_total():   # авто-надеть в свободный слот
 		equipped_augs.append(id)
+	last_discovered = id   # можно перебросить за алмазы
 	_apply_augments(); _recalc_auras()
 	_save(); _refresh_reboot(); _refresh_hud()
 	var a := _aug_def(id)
 	_popup_center("🎲 Открыто: %s %s!\n%s" % [a["icon"], a["name"], _aug_effect(a, 1)], Color("#ffd24a"), 2.4)
+
+# ПЕРЕРОЛЛ за алмазы (Tap Titans): снять только что открытое усиление и открыть другое случайное
+func _reroll_discovered() -> void:
+	if last_discovered == "" or diamonds < REROLL_COST or _al(last_discovered) != 1:
+		return
+	var pool := []
+	for a in AUGMENTS:
+		if _al(a["id"]) == 0 and a["id"] != last_discovered: pool.append(a["id"])
+	if pool.is_empty(): return   # нечего перебрасывать (всё открыто)
+	diamonds -= REROLL_COST
+	var old: String = last_discovered
+	aug_lvl.erase(old); equipped_augs.erase(old)
+	var nid: String = pool[randi() % pool.size()]
+	aug_lvl[nid] = 1
+	if equipped_augs.size() < _slot_total(): equipped_augs.append(nid)
+	last_discovered = nid
+	_apply_augments(); _recalc_auras()
+	_save(); _refresh_reboot(); _refresh_hud()
+	var a := _aug_def(nid)
+	_popup_center("🎲 Переброс → %s %s!\n%s" % [a["icon"], a["name"], _aug_effect(a, 1)], Color("#b46bff"), 2.2)
 
 # строка владеемого усиления: надетые — фиолет/СНЯТЬ, в наличии — тускло/НАДЕТЬ; + кнопка «+ур» за ядра
 func _owned_aug_row(id: String) -> Control:
