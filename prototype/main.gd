@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.8.9"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -282,6 +282,9 @@ const LOCATIONS := [
 	 "desc": "Трущобы — психоз от дешёвых имплантов ZenoCore. Тут начал Вектор.",
 	 "quest": {"item": "🔪 Бритва главаря", "boss": "Главарь трущоб", "reward": "weapon", "contact": "🐀 Крыс",
 	           "chat": ["Ты тот курьер, которого ZenoCore списали? 🐀 Слыхал.", "Не дёргайся, я свой. Крыс. Тут все так зовут.", "Работа есть. Главарь трущоб таскает фирменную бритву — заказчик за неё отвалит ствол на выбор 🔫", "И гляди в оба: местные звереют от дешёвых имплантов. Психоз. Раньше такого не было...", "Зачисти Трущобы, выбей бритву с босса. Не подведи, Вектор."],
+	           "moral": {"id": "batch", "prompt": "Ещё момент. Тут склад нераспечатанных коробок — те самые импланты ZenoCore. Местные расхватают как «бесплатную силу». Что делать будем?",
+	                     "a": {"label": "🔥 Сжечь партию", "result": "Трущобы остались без «брони», Крыс в ярости — но психоз не расползётся. Ты заплатил репутацией ради чужих.", "karma": 1, "scrap": 0},
+	                     "b": {"label": "💰 Дать толкнуть", "result": "Крыс доволен, карман потяжелел (+400 лом). Но эти импланты ещё вернутся к тебе психами. ⚠️", "karma": -1, "scrap": 400}},
 	           "dialog": "Крыс: «Главарь носит фирменную бритву. Достань — заказчик отвалит ствол. И берегись психов: их плодят дешёвые импланты.»"}},
 	{"id": "corp",   "name": "Корп-район",   "icon": "🏢", "unlock": 8,
 	 "pool": ["grunt", "armor", "shield", "archer", "healer"],
@@ -310,13 +313,12 @@ var quest_done := []        # id локаций с закрытым сюжетн
 # ТОН ВЕКТОРА — чисто НАРРАТИВНЫЙ выбор реплики (БЕЗ эконом-силы → нет мин-макса, фикс критиков).
 # Награда — «Убеждённость»: консистентность одной линии даёт титул-характер, не бафф.
 var tone_counts := {"empathy": 0, "anger": 0, "cold": 0}
+var moral_choices := {}     # id морального выбора → "a"/"b" (сюжетные развилки)
+var karma := 0              # суммарная карма выборов (нарративный счётчик, не бафф)
 const TONES := {
-	"empathy": {"icon": "🫶", "name": "Эмпатия", "title": "Сострадающий",
-	            "lines": ["...Ладно. Но без лишней крови, если выйдет.", "Сделаю. Только эти люди — тоже жертвы, не забывай.", "Хорошо. Кто-то же должен ещё оставаться человеком."]},
-	"anger":   {"icon": "😡", "name": "Злость", "title": "Яростный",
-	            "lines": ["Хорошо. Кто-то за это ответит.", "Сделаю. И с удовольствием.", "Давно пора кому-то выставить счёт."]},
-	"cold":    {"icon": "🧊", "name": "Холод", "title": "Холодный",
-	            "lines": ["Цена?", "Просто работа. Сделаю.", "Без сантиментов. Где цель."]},
+	"empathy": {"icon": "🫶", "title": "Сострадающий", "reply": "...Ладно. Но без лишней крови, если выйдет."},
+	"anger":   {"icon": "😡", "title": "Яростный",     "reply": "Хорошо. Кто-то за это ответит."},
+	"cold":    {"icon": "🧊", "title": "Холодный",      "reply": "Цена?"},
 }
 func _tone_dominant() -> String:
 	var best := ""; var bn := 0; var total := 0
@@ -1636,7 +1638,7 @@ func _save() -> void:
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
-		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts,
+		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -1675,6 +1677,8 @@ func _load() -> void:
 	quest_done = (d.get("quest_done", []) as Array).map(func(x): return str(x))
 	var tc: Dictionary = d.get("tone_counts", {})
 	for k in tone_counts: tone_counts[k] = int(tc.get(k, 0))
+	moral_choices = d.get("moral_choices", {})
+	karma = int(d.get("karma", 0))
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = (d.get("dq_idx", []) as Array).map(func(x): return int(x))
 	dq_base = d.get("dq_base", {})
@@ -3105,36 +3109,67 @@ func _open_quest_chat(li: int) -> void:
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 8); box.custom_minimum_size = Vector2(376, 0)
 	var pad := MarginContainer.new(); pad.add_theme_constant_override("margin_left", 10); pad.add_theme_constant_override("margin_right", 10); pad.add_theme_constant_override("margin_top", 10); pad.add_theme_constant_override("margin_bottom", 10)
 	pad.add_child(box); scr.add_child(pad)
+	var scroll_btm := func(): if is_instance_valid(scr): scr.set_deferred("scroll_vertical", 999999)
 	# сообщения по очереди: «печатает...» → облачко
 	for m in msgs:
 		var typing := _chat_bubble("• • •", true, accent)
-		box.add_child(typing)
+		box.add_child(typing); scroll_btm.call()
 		await get_tree().create_timer(0.75).timeout
 		if not is_instance_valid(panel): return
 		typing.queue_free()
-		box.add_child(_chat_bubble(str(m), true, accent))
+		box.add_child(_chat_bubble(str(m), true, accent)); scroll_btm.call()
 		await get_tree().create_timer(0.4).timeout
 		if not is_instance_valid(panel): return
-	# ВЫБОР ТОНА реплики Вектора (нарративный — окрашивает характер, без эконом-силы)
+	# ВЫБОР РЕПЛИКИ Вектора — настоящие фразы (игрок выбирает что сказать). Тон считается за кадром.
 	var goal_txt := "🎯 Цель: «%s» с босса «%s» · 🎁 пушка на выбор" % [str(q["item"]), str(q["boss"])]
-	var trow := HBoxContainer.new(); trow.alignment = BoxContainer.ALIGNMENT_END; trow.add_theme_constant_override("separation", 6)
+	box.add_child(_lbl("— что ответишь? —", 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var tchoices := VBoxContainer.new(); tchoices.add_theme_constant_override("separation", 6)
 	for tk in ["empathy", "anger", "cold"]:
-		var t: Dictionary = TONES[tk]
-		var tb := Button.new(); tb.text = "%s %s" % [t["icon"], t["name"]]; tb.add_theme_font_size_override("font_size", 13); tb.custom_minimum_size = Vector2(0, 36)
+		var reply: String = str(TONES[tk]["reply"])
 		var key: String = tk
-		tb.pressed.connect(func():
-			if is_instance_valid(trow): trow.queue_free()
+		tchoices.add_child(_reply_choice(reply, accent, func():
+			if is_instance_valid(tchoices): tchoices.queue_free()
 			tone_counts[key] = int(tone_counts[key]) + 1
-			var lines: Array = TONES[key]["lines"]
-			box.add_child(_chat_bubble(str(lines[(int(tone_counts[key]) - 1) % lines.size()]), false, accent))
+			box.add_child(_chat_bubble(reply, false, accent))
 			box.add_child(_chat_bubble(goal_txt, true, accent))
 			var dom := _tone_dominant()
 			if dom != "":
-				box.add_child(_chat_bubble("〔 Убеждённость: ты — %s %s 〕" % [TONES[dom]["icon"], TONES[dom]["title"]], true, Color("#ffd24a")))
-			_save())
-		trow.add_child(tb)
-	box.add_child(_lbl("— как ответишь? —", 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(trow)
+				box.add_child(_chat_bubble("〔 ты держишь линию: %s %s 〕" % [TONES[dom]["icon"], TONES[dom]["title"]], true, Color("#ffd24a")))
+			_save(); scroll_btm.call()
+			_show_moral_choice(box, q, accent, scroll_btm)))
+	box.add_child(tchoices); scroll_btm.call()
+
+# тапаемая реплика-выбор (как строка диалога, не кнопка-ярлык)
+func _reply_choice(text: String, accent: Color, cb: Callable) -> Control:
+	var pc := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(accent.r * 0.20, accent.g * 0.20, accent.b * 0.20, 0.95); sb.set_corner_radius_all(10); sb.set_content_margin_all(9)
+	sb.border_color = accent.darkened(0.1); sb.set_border_width_all(1)
+	pc.add_theme_stylebox_override("panel", sb); pc.custom_minimum_size = Vector2(360, 0); pc.mouse_filter = Control.MOUSE_FILTER_STOP
+	var l := Label.new(); l.text = "▸ " + text; l.add_theme_font_size_override("font_size", 13); l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(338, 0); l.add_theme_color_override("font_color", accent.lightened(0.45))
+	pc.add_child(l)
+	pc.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT: cb.call())
+	return pc
+
+# моральный микровыбор — сюжетная развилка реальными репликами-действиями (после выбора реплики)
+func _show_moral_choice(box: VBoxContainer, q: Dictionary, accent: Color, scroll_btm: Callable) -> void:
+	if not q.has("moral"): return
+	var mo: Dictionary = q["moral"]
+	if str(mo["id"]) in moral_choices: return   # уже решено
+	box.add_child(_chat_bubble(str(mo["prompt"]), true, accent)); scroll_btm.call()
+	var mchoices := VBoxContainer.new(); mchoices.add_theme_constant_override("separation", 6)
+	for opt in ["a", "b"]:
+		var o: Dictionary = mo[opt]
+		var ch: String = opt
+		mchoices.add_child(_reply_choice(str(o["label"]), accent, func():
+			if is_instance_valid(mchoices): mchoices.queue_free()
+			moral_choices[str(mo["id"])] = ch
+			karma += int(o.get("karma", 0))
+			var sc := int(o.get("scrap", 0))
+			if sc > 0: scrap += sc
+			box.add_child(_chat_bubble(str(o["result"]), true, Color("#ffd24a")))
+			_save(); _refresh_hud(); scroll_btm.call()))
+	box.add_child(mchoices); scroll_btm.call()
 
 func _open_messages() -> void:
 	if not (str(_loc()["id"]) in quest_done):
