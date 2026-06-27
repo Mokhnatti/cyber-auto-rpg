@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.5"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.6"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -352,6 +352,7 @@ const FRAGMENTS := [
 var frag_flags := {}        # idx фрагмента → помечен подделкой (bool)
 var case_solved := false
 var frags_notified := 0     # сколько фрагментов уже показали (для попапа-уведомления)
+var milestones_hit := 0     # рубежи стадий (каждые 10) — награда-celebration, БЕЗ DPS (не трогает кривую 1.34)
 # нарративный пульс фарма (анти-выгорание): редкие реплики мира/Сигнала во время гринда
 const PULSE_LINES := [
 	"📡 Сигнал: «…всё ещё слышу тебя. Не оборачивайся.»",
@@ -1711,7 +1712,7 @@ func _save() -> void:
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
-		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode,
+		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -1759,6 +1760,7 @@ func _load() -> void:
 	for k in ff: frag_flags[int(k)] = bool(ff[k])
 	case_solved = bool(d.get("case_solved", false))
 	endgame_mode = str(d.get("endgame_mode", ""))
+	milestones_hit = int(d.get("milestones_hit", 0))
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = (d.get("dq_idx", []) as Array).map(func(x): return int(x))
@@ -1999,6 +2001,14 @@ func _process(delta: float) -> void:
 			if _frags_open() > frags_notified:
 				frags_notified = _frags_open()
 				_popup_center("🧩 Восстановлен фрагмент памяти — открой 📓 Дело", Color("#ff2d95"), 2.6)
+			# РУБЕЖИ: celebration-награда каждые 10 стадий (positive reinforcement, лом+алмазы, БЕЗ DPS-спайка)
+			var ms := int(best_stage / 10)
+			if ms > milestones_hit:
+				milestones_hit = ms
+				var msc := ms * 300
+				var msd := ms * 4
+				scrap += msc; diamonds += msd
+				_popup_center("🏆 РУБЕЖ: СТАДИЯ %d! +%d🔩 +%d💎" % [ms * 10, msc, msd], Color("#ffd24a"), 2.8)
 			_check_quest_complete()   # сюжетный квест локации: предмет упал с босса
 			_start_march()
 		elif sub < STAGE_WAVES:
