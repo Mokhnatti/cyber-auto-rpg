@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.8.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.8.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -119,6 +119,7 @@ var hero_rows := []   # строки прокачки по героям: {lvl_bt
 var impl_btn: Button
 var bp_btn: Button
 var ach_btn: Button
+var more_btn: Button   # «☰ Ещё» — сворачивает баттлпас/ачивки/карту/настройки (UI-редизайн)
 var _bp_cache_stage := -1   # кэш счёта батлпас-бейджа (перф)
 var _bp_badge_cache := 0
 var loot_badge: Label
@@ -2165,8 +2166,8 @@ func _qte_resolve(boss) -> void:
 
 func _toggle_auto() -> void:
 	auto_battle = not auto_battle
-	auto_btn.text = "🤖 АВТО on" if auto_battle else "🤖 АВТО off"
-	auto_btn.modulate = Color(1.3, 1.3, 0.6) if auto_battle else Color(1, 1, 1)
+	auto_btn.text = "🤖"   # иконка; цвет = вкл/выкл
+	auto_btn.modulate = Color(1.4, 1.4, 0.5) if auto_battle else Color(0.7, 0.7, 0.7)
 	if auto_battle and aim_mode:   # включили во время ручного прицела — выходим из него
 		aim_mode = false; aim_hero = null; status_label.text = ""
 
@@ -2350,16 +2351,12 @@ func _refresh_hud() -> void:
 			impl_btn.modulate = Color(1.0, 1.0, 1.0).lerp(Color(1.7, 1.4, 0.2), ph)
 		else:
 			impl_btn.modulate = Color(1, 1, 1)
-	if bp_btn:
-		if best_stage != _bp_cache_stage:   # перф: O(n²) счёт только при смене стадии, не каждый кадр (баг-хант R4)
+	if more_btn:   # бейдж «Ещё» = сумма незабранных (батлпас + ачивки)
+		if best_stage != _bp_cache_stage:   # перф: O(n²) счёт только при смене стадии (баг-хант R4)
 			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
-		var bpn := _bp_badge_cache
-		bp_btn.text = "🎟" + ("●%d" % bpn if bpn > 0 else "")
-		bp_btn.modulate = Color(1.6, 1.4, 0.3) if bpn > 0 else Color(1, 1, 1)
-	if ach_btn:
-		var acn := _ach_claimable()
-		ach_btn.text = "📖" + ("●%d" % acn if acn > 0 else "")
-		ach_btn.modulate = Color(1.6, 1.4, 0.3) if acn > 0 else Color(1, 1, 1)
+		var total := _bp_badge_cache + _ach_claimable()
+		more_btn.text = "☰\nЕщё" + ("  ●%d" % total if total > 0 else "")
+		more_btn.modulate = Color(1.6, 1.4, 0.3) if total > 0 else Color(1, 1, 1)
 	if loot_badge:
 		loot_badge.visible = new_gear.size() > 0 and not impl_open
 		if loot_badge.visible:
@@ -2454,16 +2451,16 @@ func _build() -> void:
 	speed_btn = Button.new()
 	speed_btn.text = "⏩ x1"
 	speed_btn.add_theme_font_size_override("font_size", 16)
-	speed_btn.custom_minimum_size = Vector2(78, 36)
-	speed_btn.position = Vector2(W - 94, 14)
+	speed_btn.custom_minimum_size = Vector2(74, 40)
+	speed_btn.position = Vector2(W - 140, 762)   # UI-редизайн: вниз к пальцу (было верх-право)
 	speed_btn.pressed.connect(_cycle_speed)
 	hud.add_child(speed_btn)
 	# тумблер АВТОБОЯ
 	auto_btn = Button.new()
-	auto_btn.text = "🤖 АВТО off"
-	auto_btn.add_theme_font_size_override("font_size", 15)
-	auto_btn.custom_minimum_size = Vector2(104, 36)
-	auto_btn.position = Vector2(W - 204, 14)
+	auto_btn.text = "🤖"
+	auto_btn.add_theme_font_size_override("font_size", 18)
+	auto_btn.custom_minimum_size = Vector2(58, 40)
+	auto_btn.position = Vector2(W - 62, 762)   # UI-редизайн: вниз к пальцу, иконка (было верх-право + слова)
 	auto_btn.pressed.connect(_toggle_auto)
 	hud.add_child(auto_btn)
 	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
@@ -2547,50 +2544,33 @@ func _build() -> void:
 	var menubar := HBoxContainer.new()
 	menubar.add_theme_constant_override("separation", 8)
 	menubar.alignment = BoxContainer.ALIGNMENT_CENTER
-	menubar.position = Vector2(0, H - 50); menubar.size = Vector2(W, 42)
+	menubar.position = Vector2(0, H - 56); menubar.size = Vector2(W, 50)
 	hud.add_child(menubar)
+	# UI-редизайн: навбар 4 кнопки (иконка + подпись), остальное в «☰ Ещё»
 	inv_btn = Button.new()
-	inv_btn.text = "📊 ПРОКАЧКА"
-	inv_btn.add_theme_font_size_override("font_size", 13)
-	inv_btn.custom_minimum_size = Vector2(128, 42)
+	inv_btn.text = "📊\nПрокачка"
+	inv_btn.add_theme_font_size_override("font_size", 12)
+	inv_btn.custom_minimum_size = Vector2(112, 48)
 	inv_btn.pressed.connect(_toggle_inv)
 	menubar.add_child(inv_btn)
 	impl_btn = Button.new()
-	impl_btn.text = "🦾 ЭКИПИРОВКА"
-	impl_btn.add_theme_font_size_override("font_size", 13)
-	impl_btn.custom_minimum_size = Vector2(140, 42)
+	impl_btn.text = "🦾\nЭкип"
+	impl_btn.add_theme_font_size_override("font_size", 12)
+	impl_btn.custom_minimum_size = Vector2(112, 48)
 	impl_btn.pressed.connect(_toggle_impl)
 	menubar.add_child(impl_btn)
 	var reboot_mb := Button.new()
-	reboot_mb.text = "♻ ПРЕСТИЖ"
+	reboot_mb.text = "♻\nПрестиж"
 	reboot_mb.add_theme_font_size_override("font_size", 12)
-	reboot_mb.custom_minimum_size = Vector2(96, 42)
+	reboot_mb.custom_minimum_size = Vector2(112, 48)
 	reboot_mb.pressed.connect(_toggle_reboot)
 	menubar.add_child(reboot_mb)
-	bp_btn = Button.new()
-	bp_btn.text = "🎟"
-	bp_btn.add_theme_font_size_override("font_size", 17)
-	bp_btn.custom_minimum_size = Vector2(44, 42)
-	bp_btn.pressed.connect(_open_battlepass)
-	menubar.add_child(bp_btn)
-	ach_btn = Button.new()
-	ach_btn.text = "📖"
-	ach_btn.add_theme_font_size_override("font_size", 17)
-	ach_btn.custom_minimum_size = Vector2(44, 42)
-	ach_btn.pressed.connect(_open_achievements)
-	menubar.add_child(ach_btn)
-	var map_btn := Button.new()
-	map_btn.text = "🗺"
-	map_btn.add_theme_font_size_override("font_size", 17)
-	map_btn.custom_minimum_size = Vector2(44, 42)
-	map_btn.pressed.connect(_open_map)
-	menubar.add_child(map_btn)
-	var settings_btn := Button.new()
-	settings_btn.text = "⚙"
-	settings_btn.add_theme_font_size_override("font_size", 17)
-	settings_btn.custom_minimum_size = Vector2(44, 42)
-	settings_btn.pressed.connect(_toggle_settings)
-	menubar.add_child(settings_btn)
+	more_btn = Button.new()
+	more_btn.text = "☰\nЕщё"
+	more_btn.add_theme_font_size_override("font_size", 12)
+	more_btn.custom_minimum_size = Vector2(112, 48)
+	more_btn.pressed.connect(_open_more)
+	menubar.add_child(more_btn)
 	_build_inventory()
 	_build_implants()
 	_build_invcol()
@@ -2963,6 +2943,28 @@ func _quest_reward(loc: Dictionary) -> void:
 		b.position = Vector2(W * 0.5 - 180, 320 + i * 54)
 		var ii := i
 		b.pressed.connect(func(): _grant_quest_weapon(ii); _popup_center("🔫 Эпик-пушка выдана!", Color("#ff2d95"), 1.6); panel.queue_free())
+		panel.add_child(b)
+
+# UI-редизайн: «☰ Ещё» — свёрнутые пункты (батлпас/ачивки/карта/настройки) в досягаемой нижней зоне
+func _open_more() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var t := _lbl("☰ ЕЩЁ", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 420); t.size = Vector2(W, 30); panel.add_child(t)
+	var bpn := _bp_unclaimed_count()
+	var acn := _ach_claimable()
+	var items := [
+		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
+		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
+		["🗺  Карта локаций", Callable(self, "_open_map")],
+		["⚙  Настройки", Callable(self, "_toggle_settings")],
+	]
+	for i in items.size():
+		var b := Button.new(); b.text = items[i][0]; b.custom_minimum_size = Vector2(300, 54); b.add_theme_font_size_override("font_size", 17)
+		b.position = Vector2(W * 0.5 - 150, 462 + i * 62)
+		var cb: Callable = items[i][1]
+		b.pressed.connect(func(): panel.queue_free(); cb.call())
 		panel.add_child(b)
 
 func _open_battlepass() -> void:
