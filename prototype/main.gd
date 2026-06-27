@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.8.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.8.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -423,6 +423,18 @@ var meta_slot := 0
 # === РЕКОРДЫ/СТАТИСТИКА (п.7) ===
 var stats_run := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
 var stats_all := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
+# === ЕЖЕДНЕВНЫЕ КВЕСТЫ (Рамиль): 3 задачи/день, прогресс = текущий стат − снимок на старте дня ===
+const DAILY_QUESTS := [
+	{"id": "kill",  "icon": "🗡", "name": "Зачистка",         "stat": "mobs",   "target": 200,    "rew": {"diamonds": 30}},
+	{"id": "boss",  "icon": "👑", "name": "Охота на боссов",   "stat": "bosses", "target": 6,      "rew": {"diamonds": 40}},
+	{"id": "crit",  "icon": "🎯", "name": "Криткарь",          "stat": "crits",  "target": 300,    "rew": {"diamonds": 25}},
+	{"id": "drops", "icon": "🎁", "name": "Лутер",             "stat": "drops",  "target": 12,     "rew": {"diamonds": 25}},
+	{"id": "gold",  "icon": "💰", "name": "Золотая лихорадка", "stat": "gold",   "target": 100000, "rew": {"scrap": 2000}},
+]
+var dq_day := 0           # день, для которого выбраны квесты
+var dq_idx := []          # индексы 3 квестов на сегодня
+var dq_base := {}         # снимок статов на старте дня
+var dq_claimed := []      # забранные сегодня (id)
 var rec_maxhit := 0       # самый большой удар за всё время
 var rec_prestiges := 0    # сколько престижей сделано
 var stats_panel: Control
@@ -1141,6 +1153,7 @@ func _ready() -> void:
 	_reset()
 	_load()   # подхватить сейв (по слоту)
 	_apply_location_theme()   # тема фона под активную локацию
+	_dq_refresh()   # ежедневные квесты на сегодня
 	if bot:
 		auto_battle = true
 		Engine.max_fps = 0          # снять кап fps → CPU свободен, рисует больше кадров → шаг кадра мелкий даже на высоком time_scale (легитимно)
@@ -1601,6 +1614,7 @@ func _save() -> void:
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done,
+		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1636,6 +1650,10 @@ func _load() -> void:
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
 	quest_done = (d.get("quest_done", []) as Array).map(func(x): return str(x))
+	dq_day = int(d.get("dq_day", 0))
+	dq_idx = (d.get("dq_idx", []) as Array).map(func(x): return int(x))
+	dq_base = d.get("dq_base", {})
+	dq_claimed = (d.get("dq_claimed", []) as Array).map(func(x): return str(x))
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
@@ -2354,7 +2372,7 @@ func _refresh_hud() -> void:
 	if more_btn:   # бейдж «Ещё» = сумма незабранных (батлпас + ачивки)
 		if best_stage != _bp_cache_stage:   # перф: O(n²) счёт только при смене стадии (баг-хант R4)
 			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
-		var total := _bp_badge_cache + _ach_claimable()
+		var total := _bp_badge_cache + _ach_claimable() + _dq_ready_count()
 		more_btn.text = "☰\nЕщё" + ("  ●%d" % total if total > 0 else "")
 		more_btn.modulate = Color(1.6, 1.4, 0.3) if total > 0 else Color(1, 1, 1)
 	if loot_badge:
@@ -2945,6 +2963,80 @@ func _quest_reward(loc: Dictionary) -> void:
 		b.pressed.connect(func(): _grant_quest_weapon(ii); _popup_center("🔫 Эпик-пушка выдана!", Color("#ff2d95"), 1.6); panel.queue_free())
 		panel.add_child(b)
 
+# === ЕЖЕДНЕВНЫЕ КВЕСТЫ ===
+func _dq_stat(s) -> float: return float(stats_all.get(s, 0))
+
+func _dq_refresh() -> void:
+	var today := _today_num()
+	if dq_day == today and dq_idx.size() == 3: return
+	dq_day = today
+	var n := DAILY_QUESTS.size()
+	dq_idx = []
+	for k in 3: dq_idx.append((today + k * 2) % n)
+	dq_base = {}
+	for qi in dq_idx: dq_base[DAILY_QUESTS[qi]["stat"]] = _dq_stat(DAILY_QUESTS[qi]["stat"])
+	dq_claimed = []
+	_save()
+
+func _dq_progress(qi: int) -> float:
+	var s = DAILY_QUESTS[qi]["stat"]
+	return max(0.0, _dq_stat(s) - float(dq_base.get(s, 0)))
+
+func _dq_ready_count() -> int:
+	var c := 0
+	for qi in dq_idx:
+		var q = DAILY_QUESTS[qi]
+		if not (str(q["id"]) in dq_claimed) and _dq_progress(qi) >= float(q["target"]): c += 1
+	return c
+
+func _dq_rew_text(q) -> String:
+	var r = q["rew"]
+	return ("+%d💎" % r["diamonds"]) if r.has("diamonds") else ("+%d🔩" % r.get("scrap", 0))
+
+func _dq_claim(qi: int) -> void:
+	var q = DAILY_QUESTS[qi]
+	if str(q["id"]) in dq_claimed or _dq_progress(qi) < float(q["target"]): return
+	dq_claimed.append(str(q["id"]))
+	var r = q["rew"]
+	if r.has("diamonds"): diamonds += int(r["diamonds"])
+	if r.has("scrap"): scrap += int(r["scrap"])
+	_save(); _refresh_hud()
+	_popup_center("✅ Квест выполнен: " + _dq_rew_text(q), Color("#3ad97a"), 1.6)
+
+func _open_daily_quests() -> void:
+	_dq_refresh()
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.88); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var t := _lbl("📋 ЕЖЕДНЕВНЫЕ КВЕСТЫ", 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 120); t.size = Vector2(W, 30); panel.add_child(t)
+	var s := _lbl("Обновляются каждый день. Прогресс — за сегодня.", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); s.position = Vector2(0, 152); s.size = Vector2(W, 20); panel.add_child(s)
+	for n in dq_idx.size():
+		var qi: int = dq_idx[n]
+		var q = DAILY_QUESTS[qi]
+		var prog := _dq_progress(qi)
+		var tgt := float(q["target"])
+		var claimed: bool = str(q["id"]) in dq_claimed
+		var ready: bool = prog >= tgt
+		var box := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.13, 0.11, 0.04, 0.97) if (ready and not claimed) else Color(0.08, 0.09, 0.13, 0.95)
+		sb.set_corner_radius_all(8); sb.set_content_margin_all(10)
+		sb.border_color = Color("#ffd24a") if (ready and not claimed) else Color("#2a2f45"); sb.set_border_width_all(2 if (ready and not claimed) else 1)
+		box.add_theme_stylebox_override("panel", sb); box.position = Vector2(W * 0.5 - 210, 196 + n * 92); box.custom_minimum_size = Vector2(420, 84)
+		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
+		v.add_child(_lbl("%s %s" % [q["icon"], q["name"]], 15, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
+		var pr := "%s / %s   → %s" % [_gsep(int(prog)), _gsep(int(tgt)), _dq_rew_text(q)]
+		if claimed: pr = "✅ Забрано   " + _dq_rew_text(q)
+		v.add_child(_lbl(pr, 13, Color("#7ee08a") if claimed else Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
+		if ready and not claimed:
+			var b := Button.new(); b.text = "ЗАБРАТЬ ✨"; b.custom_minimum_size = Vector2(0, 30); b.add_theme_font_size_override("font_size", 13)
+			var qii := qi
+			b.pressed.connect(func(): _dq_claim(qii); panel.queue_free(); _open_daily_quests())
+			v.add_child(b)
+	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	close.position = Vector2(W * 0.5 - 100, 196 + 3 * 92 + 16); close.pressed.connect(panel.queue_free); panel.add_child(close)
+
 # UI-редизайн: «☰ Ещё» — свёрнутые пункты (батлпас/ачивки/карта/настройки) в досягаемой нижней зоне
 func _open_more() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -2954,7 +3046,10 @@ func _open_more() -> void:
 	var t := _lbl("☰ ЕЩЁ", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 420); t.size = Vector2(W, 30); panel.add_child(t)
 	var bpn := _bp_unclaimed_count()
 	var acn := _ach_claimable()
+	_dq_refresh()
+	var dqn := _dq_ready_count()
 	var items := [
+		["📋  Ежедневные квесты" + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
 		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
 		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
 		["🗺  Карта локаций", Callable(self, "_open_map")],

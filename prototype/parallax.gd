@@ -24,13 +24,19 @@ func set_textures(bg: Texture2D, road: Texture2D) -> void:
 	queue_redraw()
 
 func _scroll_tex(tex: Texture2D, y0: float, h: float, factor: float) -> void:
-	# тайлим текстуру по горизонтали со скроллом, масштаб под высоту полосы
+	# тайлим текстуру по горизонтали со скроллом + ЗЕРКАЛИМ чётные/нечётные тайлы → бесшовный стык (фикс шва дороги)
 	var tw := tex.get_width() * (h / tex.get_height())
-	var off := fmod(scroll * factor, tw)
-	var x := -off
+	var s := scroll * factor
+	var first_idx := int(floor(s / tw))
+	var x := -(s - first_idx * tw)
+	var idx := first_idx
 	while x < W:
-		draw_texture_rect(tex, Rect2(x, y0, tw, h), false)
+		if (idx % 2 + 2) % 2 == 0:
+			draw_texture_rect(tex, Rect2(x, y0, tw, h), false)
+		else:
+			draw_texture_rect(tex, Rect2(x + tw, y0, -tw, h), false)   # зеркало по X
 		x += tw
+		idx += 1
 
 func _process(delta: float) -> void:
 	scroll += speed * delta
