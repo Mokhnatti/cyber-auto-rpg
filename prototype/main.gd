@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.8.6"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.8.7"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -280,25 +280,29 @@ const LOCATIONS := [
 	 "pool": ["grunt", "swift", "swarm", "bomber"],
 	 "neon": ["#ff2d95", "#b400ff", "#00f0ff"], "ground": "#ffb02e",
 	 "desc": "Кибернетические трущобы — маньяки и импланты-чудовища.",
-	 "quest": {"item": "🔪 Бритва-бандита", "boss": "Главарь трущоб", "reward": "weapon",
+	 "quest": {"item": "🔪 Бритва-бандита", "boss": "Главарь трущоб", "reward": "weapon", "contact": "🐀 Крыс",
+	           "chat": ["Эй, новенький. Есть работёнка 👀", "Главарь трущоб таскает фирменную бритву — коллекционная вещь.", "Достань её. Заказчик щедрый — отвалит ствол на выбор 🔫", "Зачисти Трущобы, выбей бритву с босса. Не подведи."],
 	           "dialog": "Связной: «Главарь трущоб носит фирменную бритву. Достань её — заказчик отвалит ствол на выбор.»"}},
 	{"id": "corp",   "name": "Корп-район",   "icon": "🏢", "unlock": 8,
 	 "pool": ["grunt", "armor", "shield", "archer", "healer"],
 	 "neon": ["#00f0ff", "#0077ff", "#7ee08a"], "ground": "#00f0ff",
 	 "desc": "Корпоративный район — лощёные костюмчики с топ-имплантами.",
-	 "quest": {"item": "💳 Корп-КПК", "boss": "Корп-директор", "reward": "weapon",
+	 "quest": {"item": "💳 Корп-КПК", "boss": "Корп-директор", "reward": "weapon", "contact": "💼 Агент Ким",
+	           "chat": ["Привет. У меня контракт под тебя 💼", "В сейфе корп-директора — КПК с компроматом.", "Корпы такое не прощают, так что... без свидетелей 😏", "Выбей КПК с босса Корп-района. Оплата — оружие на выбор."],
 	           "dialog": "Связной: «В сейфе директора — КПК с компроматом. Выбей его на боссе района.»"}},
 	{"id": "docks",  "name": "Доки",         "icon": "⚓", "unlock": 16,
 	 "pool": ["grunt", "swift", "armor", "bomber", "archer"],
 	 "neon": ["#ffb02e", "#00f0ff", "#ff5050"], "ground": "#ffb02e",
 	 "desc": "Грузовые доки — контрабанда, дроны, тяжёлая броня.",
-	 "quest": {"item": "📦 Чёрный груз", "boss": "Босс доков", "reward": "weapon",
+	 "quest": {"item": "📦 Чёрный груз", "boss": "Босс доков", "reward": "weapon", "contact": "⚓ Боцман",
+	           "chat": ["Слышь. На доках застрял груз 📦", "Чёрный ящик. Не спрашивай, что внутри.", "Босс доков сидит на нём — вышиби и забери.", "Там дроны и тяжёлая броня, будь готов. Награда — пушка."],
 	           "dialog": "Связной: «На доках застрял груз. Зачисти причал и забери ящик с босса.»"}},
 	{"id": "core",   "name": "Нео-Ядро",     "icon": "🌐", "unlock": 26,
 	 "pool": ["grunt", "swift", "armor", "swarm", "archer", "bomber", "healer", "shield"],
 	 "neon": ["#ffffff", "#ff2d95", "#00f0ff"], "ground": "#ff2d95",
 	 "desc": "Ядро мегаполиса — все угрозы сразу, элита врагов.",
-	 "quest": {"item": "🧠 Ядро-ИИ", "boss": "Страж Ядра", "reward": "weapon",
+	 "quest": {"item": "🧠 Ядро-ИИ", "boss": "Страж Ядра", "reward": "weapon", "contact": "🧠 Оракул",
+	           "chat": ["...ты слышишь меня? Это Оракул 🧠", "В Ядре спрятан ИИ-чип. Он меняет всё.", "Страж Ядра охраняет его. Дойди — и вырви чип.", "Это конец цепочки. Награда будет достойной."],
 	           "dialog": "Связной: «В Ядре спрятан ИИ-чип. Дойди до Стража и вырви чип.»"}},
 ]
 var cur_location := 0       # индекс активной локации
@@ -2906,10 +2910,10 @@ func _go_location(i: int) -> void:
 	_save(); _refresh_hud()
 	var loc := _loc()
 	_popup_center("%s %s" % [loc["icon"], loc["name"]], Color(loc["neon"][0]), 1.6)
-	# показать диалог сюжетного квеста если ещё не закрыт
-	if not (loc["id"] in quest_done):
-		var q: Dictionary = loc["quest"]
-		_show_help("📜 " + str(loc["name"]) + " — задание", str(q["dialog"]) + "\n\nЦель: добыть «%s» с босса локации (упадёт по ходу зачистки). Награда: ПУШКА на выбор + алмазы." % str(q["item"]))
+	# квест-чат: фиксер пишет задание в мессенджер (идея Рамиля)
+	if not (str(loc["id"]) in quest_done):
+		_popup_center("📨 Новое сообщение от %s" % str(loc["quest"].get("contact", "Связной")), Color("#3ad97a"), 1.8)
+		_open_quest_chat(cur_location)
 
 func _apply_location_theme() -> void:
 	if is_instance_valid(bg) and bg.has_method("set_palette"):
@@ -3037,6 +3041,68 @@ func _open_daily_quests() -> void:
 	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 196 + 3 * 92 + 16); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
+# === КВЕСТ-ЧАТ (идея Рамиля): фиксер шлёт задание в мессенджер-облачках ===
+func _chat_bubble(text: String, incoming: bool, accent: Color) -> Control:
+	var row := HBoxContainer.new(); row.custom_minimum_size = Vector2(360, 0)
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN if incoming else BoxContainer.ALIGNMENT_END
+	var pc := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.16, 0.18, 0.26, 0.98) if incoming else Color(accent.r * 0.35, accent.g * 0.35, accent.b * 0.35, 0.97)
+	sb.set_corner_radius_all(13); sb.set_content_margin_all(9)
+	if incoming: sb.corner_radius_top_left = 3
+	else: sb.corner_radius_top_right = 3
+	pc.add_theme_stylebox_override("panel", sb)
+	var l := Label.new(); l.text = text; l.add_theme_font_size_override("font_size", 14)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; l.custom_minimum_size = Vector2(250, 0)
+	l.add_theme_color_override("font_color", Color("#e8ecf5"))
+	pc.add_child(l); row.add_child(pc)
+	return row
+
+func _open_quest_chat(li: int) -> void:
+	var loc: Dictionary = LOCATIONS[li]
+	var q: Dictionary = loc["quest"]
+	var contact: String = str(q.get("contact", "📡 Связной"))
+	var msgs: Array = q.get("chat", [str(q.get("dialog", ""))])
+	var accent := Color(loc["neon"][0])
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var phone := PanelContainer.new()
+	var psb := StyleBoxFlat.new(); psb.bg_color = Color(0.05, 0.06, 0.10, 1); psb.set_corner_radius_all(18); psb.border_color = accent; psb.set_border_width_all(2)
+	phone.add_theme_stylebox_override("panel", psb)
+	phone.position = Vector2(W * 0.5 - 200, 130); phone.custom_minimum_size = Vector2(400, 620); phone.size = Vector2(400, 620)
+	panel.add_child(phone)
+	var col := VBoxContainer.new(); col.add_theme_constant_override("separation", 0); phone.add_child(col)
+	var head := PanelContainer.new()
+	var hsb := StyleBoxFlat.new(); hsb.bg_color = Color(accent.r * 0.28, accent.g * 0.28, accent.b * 0.28, 1); hsb.set_corner_radius_all(16); hsb.set_content_margin_all(10)
+	head.add_theme_stylebox_override("panel", hsb)
+	var hl := Label.new(); hl.text = "📱 " + contact + "    🟢 в сети"; hl.add_theme_font_size_override("font_size", 16); hl.add_theme_color_override("font_color", accent.lightened(0.35))
+	head.add_child(hl); col.add_child(head)
+	var scr := ScrollContainer.new(); scr.custom_minimum_size = Vector2(400, 556); scr.size = Vector2(400, 556)
+	col.add_child(scr)
+	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 8); box.custom_minimum_size = Vector2(376, 0)
+	var pad := MarginContainer.new(); pad.add_theme_constant_override("margin_left", 10); pad.add_theme_constant_override("margin_right", 10); pad.add_theme_constant_override("margin_top", 10); pad.add_theme_constant_override("margin_bottom", 10)
+	pad.add_child(box); scr.add_child(pad)
+	# сообщения по очереди: «печатает...» → облачко
+	for m in msgs:
+		var typing := _chat_bubble("• • •", true, accent)
+		box.add_child(typing)
+		await get_tree().create_timer(0.75).timeout
+		if not is_instance_valid(panel): return
+		typing.queue_free()
+		box.add_child(_chat_bubble(str(m), true, accent))
+		await get_tree().create_timer(0.4).timeout
+		if not is_instance_valid(panel): return
+	box.add_child(_chat_bubble("✓ Принято. Сделаю.", false, accent))
+	box.add_child(_chat_bubble("🎯 Цель: «%s» с босса «%s» · 🎁 пушка на выбор" % [str(q["item"]), str(q["boss"])], true, accent))
+
+func _open_messages() -> void:
+	if not (str(_loc()["id"]) in quest_done):
+		_open_quest_chat(cur_location)
+	else:
+		_popup_center("📭 Нет новых сообщений. Открой район на 🗺 карте.", Color("#9aa0b5"), 2.0)
+
 # UI-редизайн: «☰ Ещё» — свёрнутые пункты (батлпас/ачивки/карта/настройки) в досягаемой нижней зоне
 func _open_more() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -3048,7 +3114,9 @@ func _open_more() -> void:
 	var acn := _ach_claimable()
 	_dq_refresh()
 	var dqn := _dq_ready_count()
+	var msg_new: bool = not (str(_loc()["id"]) in quest_done)
 	var items := [
+		["📱  Сообщения / квест" + ("   📨" if msg_new else ""), Callable(self, "_open_messages")],
 		["📋  Ежедневные квесты" + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
 		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
 		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
