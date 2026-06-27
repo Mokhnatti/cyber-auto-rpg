@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -334,6 +334,30 @@ func _tone_dominant() -> String:
 	# Убеждённость = доминирование одной линии (≥60% при ≥3 выборах)
 	if total >= 3 and best != "" and float(bn) / float(total) >= 0.6: return best
 	return ""
+
+# === ДЕТЕКТИВ «9 СЕКУНД» (фишка игры): фрагменты памяти, среди них подделки ИИ ===
+# Фрагменты восстанавливаются по стадиям (front-loaded: ранние часто). 3 из 9 — подделки PHANTOM-LIMB
+# с ловимым несоответствием (противоречат известным фактам). Игрок помечает подделки.
+const FRAGMENTS := [
+	{"unlock": 2,  "fake": false, "text": "Колонна вошла в туннель 14-го этажа. Маршрутизатор гудел ровно. Ты вёл — спокойно, как всегда."},
+	{"unlock": 4,  "fake": false, "text": "В 0:02 кольнуло в виске. Не боль — будто кто-то ВНУТРИ впервые открыл глаза."},
+	{"unlock": 6,  "fake": false, "text": "Тэо крикнул по связи: «Вектор, левый борт!» Ты слышал его. Ты точно его слышал."},
+	{"unlock": 9,  "fake": true,  "text": "Ты сам убрал руки с управления. Ты хотел, чтобы это случилось.", "tell": "Противоречит: ты СЛЫШАЛ Тэо и реагировал — руки были на управлении."},
+	{"unlock": 12, "fake": false, "text": "Маршрутизатор завис. Экран — белый шум. Девять секунд ты не управлял ничем."},
+	{"unlock": 16, "fake": true,  "text": "Тэо успел выпрыгнуть. Ты видел, как он встал и ушёл в дым — живой.", "tell": "Противоречит: Тэо погиб, тело не нашли. Этого не было."},
+	{"unlock": 20, "fake": false, "text": "Картинка вернулась — колонна горела. Тэо не отвечал. Груз исчез."},
+	{"unlock": 25, "fake": true,  "text": "Корпа была права: цифры по психозу — просто шум выборки. Твоей вины нет, расслабься.", "tell": "Противоречит: это легенда ZenoCore, а не твоя память. Кто-то вложил её тебе."},
+	{"unlock": 30, "fake": false, "text": "Что-то осталось в твоей голове после тех секунд. Оно до сих пор слушает. И иногда — говорит."},
+]
+var frag_flags := {}        # idx фрагмента → помечен подделкой (bool)
+var case_solved := false
+var frags_notified := 0     # сколько фрагментов уже показали (для попапа-уведомления)
+func _frag_unlocked(i: int) -> bool: return max(best_stage, stage) >= int(FRAGMENTS[i]["unlock"])
+func _frags_open() -> int:
+	var n := 0
+	for i in FRAGMENTS.size():
+		if _frag_unlocked(i): n += 1
+	return n
 
 func _loc() -> Dictionary: return LOCATIONS[clamp(cur_location, 0, LOCATIONS.size() - 1)]
 
@@ -1645,6 +1669,7 @@ func _save() -> void:
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
+		"frag_flags": frag_flags, "case_solved": case_solved,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -1685,6 +1710,11 @@ func _load() -> void:
 	for k in tone_counts: tone_counts[k] = int(tc.get(k, 0))
 	moral_choices = d.get("moral_choices", {})
 	karma = int(d.get("karma", 0))
+	var ff: Dictionary = d.get("frag_flags", {})
+	frag_flags = {}
+	for k in ff: frag_flags[int(k)] = bool(ff[k])
+	case_solved = bool(d.get("case_solved", false))
+	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = (d.get("dq_idx", []) as Array).map(func(x): return int(x))
 	dq_base = d.get("dq_base", {})
@@ -1914,6 +1944,10 @@ func _process(delta: float) -> void:
 			in_boss = false
 			boss_retry = false
 			_popup_center("🏆 СТАДИЯ %d ПРОЙДЕНА" % (stage - 1), Color("#ffd24a"))
+			best_stage = max(best_stage, stage)
+			if _frags_open() > frags_notified:
+				frags_notified = _frags_open()
+				_popup_center("🧩 Восстановлен фрагмент памяти — открой 📓 Дело", Color("#ff2d95"), 2.6)
 			_check_quest_complete()   # сюжетный квест локации: предмет упал с босса
 			_start_march()
 		elif sub < STAGE_WAVES:
@@ -3216,6 +3250,68 @@ func _open_dossier() -> void:
 	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 760); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
+# ДЕТЕКТИВ «9 секунд» — доска фрагментов (фишка игры, глубокий слой)
+func _open_case() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.92); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var t := _lbl("📓 ДЕЛО: ДЕВЯТЬ СЕКУНД", 19, Color("#ff2d95"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 70); t.size = Vector2(W, 28); panel.add_child(t)
+	var open_n := _frags_open()
+	var fakes_open := 0
+	for i in FRAGMENTS.size():
+		if _frag_unlocked(i) and bool(FRAGMENTS[i]["fake"]): fakes_open += 1
+	var sub := _lbl("Те 9 секунд, которых ты не помнишь. Часть «воспоминаний» подброшена ИИ — помечай подделки 🚩\n🔎 Открыто %d/9 · подделок среди них: %d" % [open_n, fakes_open], 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER)
+	sub.position = Vector2(W * 0.5 - 220, 100); sub.size = Vector2(440, 44); panel.add_child(sub)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 150); scroll.custom_minimum_size = Vector2(440, 540); scroll.size = Vector2(440, 540); panel.add_child(scroll)
+	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 8); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
+	if open_n == 0:
+		list.add_child(_lbl("Память пуста. Зачищай стадии — фрагменты вернутся (1-й со стадии 2).", 13, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	for i in FRAGMENTS.size():
+		if not _frag_unlocked(i): continue
+		var fr: Dictionary = FRAGMENTS[i]
+		var flagged: bool = bool(frag_flags.get(i, false))
+		var box := PanelContainer.new()
+		var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.12, 0.09, 0.14, 0.97); sb.set_corner_radius_all(8); sb.set_content_margin_all(10)
+		sb.border_color = Color("#ff2d95") if flagged else Color("#2a3358"); sb.set_border_width_all(2 if flagged else 1)
+		box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
+		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 4); box.add_child(v)
+		var ftxt := _lbl("🧩 Фрагмент %d\n%s" % [i + 1, str(fr["text"])], 13, Color("#e8ecf5"), HORIZONTAL_ALIGNMENT_LEFT)
+		ftxt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; ftxt.custom_minimum_size = Vector2(400, 0); v.add_child(ftxt)
+		if case_solved and bool(fr["fake"]):
+			v.add_child(_lbl("⚠️ ПОДДЕЛКА ИИ. " + str(fr.get("tell", "")), 12, Color("#ff5050"), HORIZONTAL_ALIGNMENT_LEFT))
+		elif not case_solved:
+			var fb := Button.new(); fb.text = "🚩 помечено подделкой" if flagged else "помечу подделкой"; fb.add_theme_font_size_override("font_size", 12); fb.custom_minimum_size = Vector2(0, 30)
+			var ii := i
+			fb.pressed.connect(func():
+				frag_flags[ii] = not bool(frag_flags.get(ii, false)); _save(); panel.queue_free(); _open_case())
+			v.add_child(fb)
+		list.add_child(box)
+	if open_n > 0 and not case_solved:
+		var chk := Button.new(); chk.text = "🔍 ПРОВЕРИТЬ ВЕРСИЮ"; chk.custom_minimum_size = Vector2(260, 40); chk.add_theme_font_size_override("font_size", 15)
+		chk.pressed.connect(func(): _check_case(panel))
+		list.add_child(chk)
+	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(180, 38)
+	close.position = Vector2(W * 0.5 - 90, 760); close.pressed.connect(panel.queue_free); panel.add_child(close)
+
+func _check_case(panel: Control) -> void:
+	var flagged := []
+	var fakes := []
+	for i in FRAGMENTS.size():
+		if not _frag_unlocked(i): continue
+		if bool(frag_flags.get(i, false)): flagged.append(i)
+		if bool(FRAGMENTS[i]["fake"]): fakes.append(i)
+	flagged.sort(); fakes.sort()
+	if flagged == fakes and fakes.size() > 0:
+		if _frags_open() >= FRAGMENTS.size():
+			case_solved = true; _save()
+			if is_instance_valid(panel): panel.queue_free()
+			_show_help("📓 ДЕЛО РАСКРЫТО — Девять секунд", "Ты вычистил подделки ИИ. Правда: ты НЕ трус и не убирал руки. Прототип PHANTOM-LIMB, что тестили в твоём маршрутизаторе, впервые поймал рассинхрон и заклинил — утянув тебя на девять секунд. Тэо погиб не по твоей вине. А часть того ИИ осталась в твоей голове. Оно слушает. Иногда — говорит.")
+		else:
+			_popup_center("✅ Пока сходится. Жди новых фрагментов памяти.", Color("#7ee08a"), 2.2)
+	else:
+		_popup_center("❌ Версия не сходится. Что противоречит фактам?", Color("#ff5050"), 2.2)
+
 # UI-редизайн: «☰ Ещё» — свёрнутые пункты (батлпас/ачивки/карта/настройки) в досягаемой нижней зоне
 func _open_more() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -3231,6 +3327,7 @@ func _open_more() -> void:
 	var items := [
 		["📱  Сообщения / квест" + ("   📨" if msg_new else ""), Callable(self, "_open_messages")],
 		["📁  Досье: Вектор", Callable(self, "_open_dossier")],
+		["📓  Дело: 9 секунд" + ("   ✅" if case_solved else ("   🧩%d" % _frags_open() if _frags_open() > 0 else "")), Callable(self, "_open_case")],
 		["📋  Ежедневные квесты" + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
 		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
 		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
