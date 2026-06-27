@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.4"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1739,7 +1739,9 @@ func _load() -> void:
 	bp_claimed = (d.get("bp_claimed", []) as Array).map(func(x): return int(x))
 	bp_claimed_prem = (d.get("bp_claimed_prem", []) as Array).map(func(x): return int(x))
 	bp_premium = bool(d.get("bp_premium", false))
-	ach_claimed = d.get("ach_claimed", {})
+	var ach_raw: Dictionary = d.get("ach_claimed", {})   # защита от JSON int→float (как bp_claimed): тиры строго int
+	ach_claimed = {}
+	for k in ach_raw: ach_claimed[str(k)] = int(ach_raw[k])
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
 	quest_done = (d.get("quest_done", []) as Array).map(func(x): return str(x))
