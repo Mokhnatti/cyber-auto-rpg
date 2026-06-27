@@ -1395,12 +1395,17 @@ func _bot_tick(delta: float) -> void:
 			_qte_marker_hit(m)
 	# прокачка уровней за золото
 	var skiptank: bool = bool(_cfg("skiptank", false))   # тест: бот игнорит танка → отряд хрупкий (стекляшка)
+	# КАЗУАЛ-симуляция: lvl_cap = потолок уровня относительно стадии (казуал отстаёт), lvl_eff = доля прокачки
+	var lvl_cap_mult: float = float(_cfg("lvl_cap", 0.0))   # >0: не качать выше stage*lvl_cap (казуал не доинвестит)
+	var lvl_eff: float = float(_cfg("lvl_eff", 1.0))         # <1: пропускает часть прокачки
 	for i in heroes.size():
 		if skiptank and heroes[i]["data"]["atk_type"] == "tank": continue
-		if heroes[i]["alive"] and gold >= heroes[i]["lvl_cost"]:
+		if lvl_cap_mult > 0.0 and heroes[i]["level"] >= int(max(best_stage, stage) * lvl_cap_mult): continue
+		if heroes[i]["alive"] and gold >= heroes[i]["lvl_cost"] and randf() < lvl_eff:
 			_upgrade_level(i)
-	# авто-экип лучшего лута (иначе шмот/оружие не тестируется) — БОТ-ОНЛИ
-	_bot_equip_best()
+	# авто-экип лучшего лута (казуал может не оптимизировать шмот: equip=false)
+	if bool(_cfg("equip", true)):
+		_bot_equip_best()
 	# аугменты: экип владеемых в свободные слоты + купить дешёвый уровень
 	if cores > 0 or equipped_augs.size() < _slot_total():
 		_bot_augments()
@@ -1887,7 +1892,7 @@ func _spawn_wave() -> void:
 		var ey: float = GROUND_Y + 62.0 - ((0.0 if iboss else 20.0 + j * 12.0) if boss else j * 20.0)
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
-		var hp_stage := pow(ENEMY_HP_PER_STAGE, stage - 1)
+		var hp_stage := pow(float(_cfg("ehp", ENEMY_HP_PER_STAGE)) if bot else ENEMY_HP_PER_STAGE, stage - 1)   # бот может свипать HP-экспоненту через /tmp/bot_tactics.json (поиск sweet-spot стены)
 		var boss_mult: float = BOSS_HP_CYCLE[(stage - 1) % BOSS_HP_CYCLE.size()]
 		var ehp := int(min(ENEMY_HP_BASE * hp_stage * (boss_mult if iboss else et["hp"]) * aug_density, STAT_CAP))
 		enemies.append({
