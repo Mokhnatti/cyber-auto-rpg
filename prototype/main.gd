@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.8.8"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.8.9"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -307,6 +307,25 @@ const LOCATIONS := [
 ]
 var cur_location := 0       # индекс активной локации
 var quest_done := []        # id локаций с закрытым сюжетным квестом
+# ТОН ВЕКТОРА — чисто НАРРАТИВНЫЙ выбор реплики (БЕЗ эконом-силы → нет мин-макса, фикс критиков).
+# Награда — «Убеждённость»: консистентность одной линии даёт титул-характер, не бафф.
+var tone_counts := {"empathy": 0, "anger": 0, "cold": 0}
+const TONES := {
+	"empathy": {"icon": "🫶", "name": "Эмпатия", "title": "Сострадающий",
+	            "lines": ["...Ладно. Но без лишней крови, если выйдет.", "Сделаю. Только эти люди — тоже жертвы, не забывай.", "Хорошо. Кто-то же должен ещё оставаться человеком."]},
+	"anger":   {"icon": "😡", "name": "Злость", "title": "Яростный",
+	            "lines": ["Хорошо. Кто-то за это ответит.", "Сделаю. И с удовольствием.", "Давно пора кому-то выставить счёт."]},
+	"cold":    {"icon": "🧊", "name": "Холод", "title": "Холодный",
+	            "lines": ["Цена?", "Просто работа. Сделаю.", "Без сантиментов. Где цель."]},
+}
+func _tone_dominant() -> String:
+	var best := ""; var bn := 0; var total := 0
+	for k in tone_counts: total += int(tone_counts[k])
+	for k in tone_counts:
+		if int(tone_counts[k]) > bn: bn = int(tone_counts[k]); best = k
+	# Убеждённость = доминирование одной линии (≥60% при ≥3 выборах)
+	if total >= 3 and best != "" and float(bn) / float(total) >= 0.6: return best
+	return ""
 
 func _loc() -> Dictionary: return LOCATIONS[clamp(cur_location, 0, LOCATIONS.size() - 1)]
 
@@ -1617,7 +1636,7 @@ func _save() -> void:
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
-		"cur_location": cur_location, "quest_done": quest_done,
+		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -1654,6 +1673,8 @@ func _load() -> void:
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
 	quest_done = (d.get("quest_done", []) as Array).map(func(x): return str(x))
+	var tc: Dictionary = d.get("tone_counts", {})
+	for k in tone_counts: tone_counts[k] = int(tc.get(k, 0))
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = (d.get("dq_idx", []) as Array).map(func(x): return int(x))
 	dq_base = d.get("dq_base", {})
@@ -3094,8 +3115,26 @@ func _open_quest_chat(li: int) -> void:
 		box.add_child(_chat_bubble(str(m), true, accent))
 		await get_tree().create_timer(0.4).timeout
 		if not is_instance_valid(panel): return
-	box.add_child(_chat_bubble("✓ Принято. Сделаю.", false, accent))
-	box.add_child(_chat_bubble("🎯 Цель: «%s» с босса «%s» · 🎁 пушка на выбор" % [str(q["item"]), str(q["boss"])], true, accent))
+	# ВЫБОР ТОНА реплики Вектора (нарративный — окрашивает характер, без эконом-силы)
+	var goal_txt := "🎯 Цель: «%s» с босса «%s» · 🎁 пушка на выбор" % [str(q["item"]), str(q["boss"])]
+	var trow := HBoxContainer.new(); trow.alignment = BoxContainer.ALIGNMENT_END; trow.add_theme_constant_override("separation", 6)
+	for tk in ["empathy", "anger", "cold"]:
+		var t: Dictionary = TONES[tk]
+		var tb := Button.new(); tb.text = "%s %s" % [t["icon"], t["name"]]; tb.add_theme_font_size_override("font_size", 13); tb.custom_minimum_size = Vector2(0, 36)
+		var key: String = tk
+		tb.pressed.connect(func():
+			if is_instance_valid(trow): trow.queue_free()
+			tone_counts[key] = int(tone_counts[key]) + 1
+			var lines: Array = TONES[key]["lines"]
+			box.add_child(_chat_bubble(str(lines[(int(tone_counts[key]) - 1) % lines.size()]), false, accent))
+			box.add_child(_chat_bubble(goal_txt, true, accent))
+			var dom := _tone_dominant()
+			if dom != "":
+				box.add_child(_chat_bubble("〔 Убеждённость: ты — %s %s 〕" % [TONES[dom]["icon"], TONES[dom]["title"]], true, Color("#ffd24a")))
+			_save())
+		trow.add_child(tb)
+	box.add_child(_lbl("— как ответишь? —", 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(trow)
 
 func _open_messages() -> void:
 	if not (str(_loc()["id"]) in quest_done):
