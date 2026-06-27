@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.6"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.7"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1721,6 +1721,12 @@ func _save() -> void:
 	if f:
 		f.store_string(JSON.stringify(d)); f.close()
 
+func _arr(v) -> Array:   # хардениг: безопасный каст в Array (битый сейв с не-массивом → [], не краш)
+	return v if v is Array else []
+
+func _dct(v) -> Dictionary:   # хардениг: безопасный каст в Dictionary (битый сейв с не-словарём → {}, не краш)
+	return v if v is Dictionary else {}
+
 func _load() -> void:
 	if not FileAccess.file_exists(_save_path()):
 		return
@@ -1731,6 +1737,9 @@ func _load() -> void:
 	var d = JSON.parse_string(txt)
 	if typeof(d) != TYPE_DICTIONARY:
 		return
+	# хардениг (save-фаззер): убрать null-значения (тампер/битый сейв) → d.get вернёт дефолт, не null → нет int(null)-краша
+	for k in d.keys():
+		if d[k] == null: d.erase(k)
 	nick = str(d.get("nick", ""))
 	show_dmg = bool(d.get("show_dmg", true))
 	show_cd = bool(d.get("show_cd", true))
@@ -1742,20 +1751,20 @@ func _load() -> void:
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
 	# ВАЖНО: JSON грузит числа как float → "5 in [5.0]" = false → тиры рекламировались как незабранные (Диана: реклейм каждый заход). Коэрсим в int.
-	bp_claimed = (d.get("bp_claimed", []) as Array).map(func(x): return int(x))
-	bp_claimed_prem = (d.get("bp_claimed_prem", []) as Array).map(func(x): return int(x))
+	bp_claimed = _arr(d.get("bp_claimed", [])).map(func(x): return int(x))
+	bp_claimed_prem = _arr(d.get("bp_claimed_prem", [])).map(func(x): return int(x))
 	bp_premium = bool(d.get("bp_premium", false))
-	var ach_raw: Dictionary = d.get("ach_claimed", {})   # защита от JSON int→float (как bp_claimed): тиры строго int
+	var ach_raw: Dictionary = _dct(d.get("ach_claimed", {}))   # защита от JSON int→float (как bp_claimed): тиры строго int
 	ach_claimed = {}
 	for k in ach_raw: ach_claimed[str(k)] = int(ach_raw[k])
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
-	quest_done = (d.get("quest_done", []) as Array).map(func(x): return str(x))
-	var tc: Dictionary = d.get("tone_counts", {})
+	quest_done = _arr(d.get("quest_done", [])).map(func(x): return str(x))
+	var tc: Dictionary = _dct(d.get("tone_counts", {}))
 	for k in tone_counts: tone_counts[k] = int(tc.get(k, 0))
-	moral_choices = d.get("moral_choices", {})
+	moral_choices = _dct(d.get("moral_choices", {}))
 	karma = int(d.get("karma", 0))
-	var ff: Dictionary = d.get("frag_flags", {})
+	var ff: Dictionary = _dct(d.get("frag_flags", {}))
 	frag_flags = {}
 	for k in ff: frag_flags[int(k)] = bool(ff[k])
 	case_solved = bool(d.get("case_solved", false))
@@ -1763,9 +1772,9 @@ func _load() -> void:
 	milestones_hit = int(d.get("milestones_hit", 0))
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
-	dq_idx = (d.get("dq_idx", []) as Array).map(func(x): return int(x))
-	dq_base = d.get("dq_base", {})
-	dq_claimed = (d.get("dq_claimed", []) as Array).map(func(x): return str(x))
+	dq_idx = _arr(d.get("dq_idx", [])).map(func(x): return int(x))
+	dq_base = _dct(d.get("dq_base", {}))
+	dq_claimed = _arr(d.get("dq_claimed", [])).map(func(x): return str(x))
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
