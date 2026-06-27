@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.7.8"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.8.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -273,15 +273,45 @@ func _can_prestige() -> bool:
 	var advanced: bool = stage > int(floor(float(best_stage) * 0.5))
 	return advanced and (_total_levels() >= PRESTIGE_TOTAL_LVL or stage >= PRESTIGE_STAGE)
 
+# === ЛОКАЦИИ (Рамиль): карта → выбор локации → свои враги, фон-палитра, сюжетный квест ===
+const LOCATIONS := [
+	{"id": "slums",  "name": "Трущобы",     "icon": "🏚", "unlock": 1,
+	 "pool": ["grunt", "swift", "swarm", "bomber"],
+	 "neon": ["#ff2d95", "#b400ff", "#00f0ff"], "ground": "#ffb02e",
+	 "desc": "Кибернетические трущобы — маньяки и импланты-чудовища.",
+	 "quest": {"item": "🔪 Бритва-бандита", "boss": "Главарь трущоб", "reward": "weapon",
+	           "dialog": "Связной: «Главарь трущоб носит фирменную бритву. Достань её — заказчик отвалит ствол на выбор.»"}},
+	{"id": "corp",   "name": "Корп-район",   "icon": "🏢", "unlock": 8,
+	 "pool": ["grunt", "armor", "shield", "archer", "healer"],
+	 "neon": ["#00f0ff", "#0077ff", "#7ee08a"], "ground": "#00f0ff",
+	 "desc": "Корпоративный район — лощёные костюмчики с топ-имплантами.",
+	 "quest": {"item": "💳 Корп-КПК", "boss": "Корп-директор", "reward": "weapon",
+	           "dialog": "Связной: «В сейфе директора — КПК с компроматом. Выбей его на боссе района.»"}},
+	{"id": "docks",  "name": "Доки",         "icon": "⚓", "unlock": 16,
+	 "pool": ["grunt", "swift", "armor", "bomber", "archer"],
+	 "neon": ["#ffb02e", "#00f0ff", "#ff5050"], "ground": "#ffb02e",
+	 "desc": "Грузовые доки — контрабанда, дроны, тяжёлая броня.",
+	 "quest": {"item": "📦 Чёрный груз", "boss": "Босс доков", "reward": "weapon",
+	           "dialog": "Связной: «На доках застрял груз. Зачисти причал и забери ящик с босса.»"}},
+	{"id": "core",   "name": "Нео-Ядро",     "icon": "🌐", "unlock": 26,
+	 "pool": ["grunt", "swift", "armor", "swarm", "archer", "bomber", "healer", "shield"],
+	 "neon": ["#ffffff", "#ff2d95", "#00f0ff"], "ground": "#ff2d95",
+	 "desc": "Ядро мегаполиса — все угрозы сразу, элита врагов.",
+	 "quest": {"item": "🧠 Ядро-ИИ", "boss": "Страж Ядра", "reward": "weapon",
+	           "dialog": "Связной: «В Ядре спрятан ИИ-чип. Дойди до Стража и вырви чип.»"}},
+]
+var cur_location := 0       # индекс активной локации
+var quest_done := []        # id локаций с закрытым сюжетным квестом
+
+func _loc() -> Dictionary: return LOCATIONS[clamp(cur_location, 0, LOCATIONS.size() - 1)]
+
 func _enemy_pool() -> Array:
-	var pool := ["grunt"]
-	if stage >= 2: pool.append("swift")
-	if stage >= 4: pool.append("armor")
-	if stage >= 6: pool.append("swarm")     # 🐝 рой — AoE-контр (хакер)
-	if stage >= 7: pool.append("archer")
-	if stage >= 9: pool.append("bomber")    # 💥 взрывной — танк/HP-контр
-	if stage >= 11: pool.append("healer")
-	if stage >= 14: pool.append("shield")   # 🛡 щитоносец — бурст-контр (снайпер)
+	# враги = типы локации, гейтнутые по стадии (чтоб на ранней не вылезли все сразу)
+	var gate := {"grunt": 1, "swift": 2, "armor": 4, "swarm": 6, "archer": 7, "bomber": 9, "healer": 11, "shield": 14}
+	var pool := []
+	for t in _loc()["pool"]:
+		if stage >= int(gate.get(t, 1)): pool.append(t)
+	if pool.is_empty(): pool.append("grunt")
 	return pool
 # === ПРЕСТИЖ-АУГМЕНТЫ (LOOT-RULES §12): детерминированный выбор, перма-множители ===
 const AUGMENTS := [
@@ -1109,6 +1139,7 @@ func _ready() -> void:
 	_build_nick_prompt()
 	_reset()
 	_load()   # подхватить сейв (по слоту)
+	_apply_location_theme()   # тема фона под активную локацию
 	if bot:
 		auto_battle = true
 		Engine.max_fps = 0          # снять кап fps → CPU свободен, рисует больше кадров → шаг кадра мелкий даже на высоком time_scale (легитимно)
@@ -1568,6 +1599,7 @@ func _save() -> void:
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
+		"cur_location": cur_location, "quest_done": quest_done,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 	}
@@ -1601,6 +1633,8 @@ func _load() -> void:
 	bp_premium = bool(d.get("bp_premium", false))
 	ach_claimed = d.get("ach_claimed", {})
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
+	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
+	quest_done = (d.get("quest_done", []) as Array).map(func(x): return str(x))
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
@@ -1826,6 +1860,7 @@ func _process(delta: float) -> void:
 			in_boss = false
 			boss_retry = false
 			_popup_center("🏆 СТАДИЯ %d ПРОЙДЕНА" % (stage - 1), Color("#ffd24a"))
+			_check_quest_complete()   # сюжетный квест локации: предмет упал с босса
 			_start_march()
 		elif sub < STAGE_WAVES:
 			sub += 1                          # идём по волнам стадии
@@ -2544,6 +2579,12 @@ func _build() -> void:
 	ach_btn.custom_minimum_size = Vector2(44, 42)
 	ach_btn.pressed.connect(_open_achievements)
 	menubar.add_child(ach_btn)
+	var map_btn := Button.new()
+	map_btn.text = "🗺"
+	map_btn.add_theme_font_size_override("font_size", 17)
+	map_btn.custom_minimum_size = Vector2(44, 42)
+	map_btn.pressed.connect(_open_map)
+	menubar.add_child(map_btn)
 	var settings_btn := Button.new()
 	settings_btn.text = "⚙"
 	settings_btn.add_theme_font_size_override("font_size", 17)
@@ -2814,6 +2855,115 @@ func _bp_unclaimed_count() -> int:
 		if bp_premium and not (m in bp_claimed_prem): n += 1
 		m += BP_STEP
 	return n
+
+# === КАРТА ЛОКАЦИЙ (Рамиль) ===
+func _open_map() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.88); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var title := _lbl("🗺 КАРТА — ЛОКАЦИИ", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 30); title.size = Vector2(W, 30); panel.add_child(title)
+	var sub := _lbl("Выбери район — свои враги, свой вид, свой сюжетный квест", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 60); sub.size = Vector2(W, 20); panel.add_child(sub)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 96); scroll.custom_minimum_size = Vector2(440, 600); scroll.size = Vector2(440, 600); panel.add_child(scroll)
+	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 8); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
+	for i in LOCATIONS.size():
+		list.add_child(_map_card(i, panel))
+	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	close.position = Vector2(W * 0.5 - 100, 712); close.pressed.connect(panel.queue_free); panel.add_child(close)
+
+func _map_card(i: int, panel: Control) -> Control:
+	var loc: Dictionary = LOCATIONS[i]
+	var unlocked: bool = best_stage >= int(loc["unlock"])
+	var active: bool = i == cur_location
+	var qdone: bool = loc["id"] in quest_done
+	var box := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.10, 0.13, 0.20, 0.97) if unlocked else Color(0.06, 0.06, 0.09, 0.9)
+	sb.set_corner_radius_all(10); sb.set_content_margin_all(10)
+	sb.border_color = Color(loc["neon"][0]) if active else (Color("#2a3358") if unlocked else Color("#1a1d2e"))
+	sb.set_border_width_all(3 if active else 1)
+	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
+	var head := "%s %s" % [loc["icon"], loc["name"]]
+	if active: head += "  ◀ ЗДЕСЬ"
+	if not unlocked: head += "  🔒 со стадии %d" % int(loc["unlock"])
+	v.add_child(_lbl(head, 16, Color(loc["neon"][0]) if unlocked else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT))
+	v.add_child(_lbl(loc["desc"], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
+	var names := []
+	for t in loc["pool"]: names.append(str(ENEMY_TYPES[t]["name"]))
+	v.add_child(_lbl("Враги: " + ", ".join(names), 11, Color("#7a8095"), HORIZONTAL_ALIGNMENT_LEFT))
+	var q: Dictionary = loc["quest"]
+	var qline := ("✅ Квест закрыт: " + str(q["item"])) if qdone else ("📜 Квест: добыть " + str(q["item"]) + " с босса")
+	v.add_child(_lbl(qline, 11, Color("#7ee08a") if qdone else Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
+	if unlocked and not active:
+		var b := Button.new(); b.text = "▶ ОТПРАВИТЬСЯ"; b.custom_minimum_size = Vector2(0, 34); b.add_theme_font_size_override("font_size", 13)
+		var ii := i
+		b.pressed.connect(func(): _go_location(ii); panel.queue_free())
+		v.add_child(b)
+	return box
+
+func _go_location(i: int) -> void:
+	cur_location = clamp(i, 0, LOCATIONS.size() - 1)
+	_apply_location_theme()
+	_save(); _refresh_hud()
+	var loc := _loc()
+	_popup_center("%s %s" % [loc["icon"], loc["name"]], Color(loc["neon"][0]), 1.6)
+	# показать диалог сюжетного квеста если ещё не закрыт
+	if not (loc["id"] in quest_done):
+		var q: Dictionary = loc["quest"]
+		_show_help("📜 " + str(loc["name"]) + " — задание", str(q["dialog"]) + "\n\nЦель: добыть «%s» с босса локации (упадёт по ходу зачистки). Награда: ПУШКА на выбор + алмазы." % str(q["item"]))
+
+func _apply_location_theme() -> void:
+	if is_instance_valid(bg) and bg.has_method("set_palette"):
+		bg.set_palette(_loc()["neon"], _loc()["ground"])
+		# рисованные фон+дорога локации (если есть ассеты) — иначе процедурный фолбэк
+		var lid: String = _loc()["id"]
+		var bgp := "res://bg/%s_bg.png" % lid
+		var rdp := "res://bg/%s_road.png" % lid
+		var bt: Texture2D = load(bgp) if ResourceLoader.exists(bgp) else null
+		var rt: Texture2D = load(rdp) if ResourceLoader.exists(rdp) else null
+		if bg.has_method("set_textures"):
+			bg.set_textures(bt, rt)
+
+# сюжетный квест локации закрывается на боссе → награда (пушка на выбор + алмазы)
+func _check_quest_complete() -> void:
+	var loc := _loc()
+	if str(loc["id"]) in quest_done: return
+	quest_done.append(str(loc["id"]))
+	_save()
+	_quest_reward(loc)
+
+func _grant_quest_weapon(i: int) -> void:
+	var hh = heroes[i]
+	var cls: int = hh["cls"]
+	var variants := _slot_variants("weapon", cls)
+	var v = variants[randi() % variants.size()]
+	var rar: int = RARITY.size() - 1   # топ-редкость (эпик)
+	var it := _make_item(cls, v["id"], rar, "weapon"); it["lvl"] = max(1, stage)
+	var key := _ik(v["id"], rar); var g = hh["gear"]["weapon"]
+	if not g.has(key) or _item_power(it) > _item_power(g[key]):
+		g[key] = it
+		new_gear["%d:weapon" % i] = int(new_gear.get("%d:weapon" % i, 0)) + 1
+	_recalc_hero(hh); _save(); _refresh_hud()
+
+func _quest_reward(loc: Dictionary) -> void:
+	if bot: return
+	diamonds += 150; scrap += 500
+	var q: Dictionary = loc["quest"]
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.92); dim.set_anchors_preset(Control.PRESET_FULL_RECT); panel.add_child(dim)
+	var t := _lbl("✅ КВЕСТ ВЫПОЛНЕН", 22, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 180); t.size = Vector2(W, 30); panel.add_child(t)
+	var it := _lbl("Добыто: " + str(q["item"]) + "  (с босса «%s»)" % str(q["boss"]), 14, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); it.position = Vector2(0, 216); it.size = Vector2(W, 22); panel.add_child(it)
+	var rw := _lbl("Награда: +150 💎  +500 🔩  +  ПУШКА НА ВЫБОР ↓", 14, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); rw.position = Vector2(0, 250); rw.size = Vector2(W, 22); panel.add_child(rw)
+	var pick := _lbl("🔫 Выбери эпик-оружие одному бойцу:", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); pick.position = Vector2(0, 286); pick.size = Vector2(W, 20); panel.add_child(pick)
+	for i in heroes.size():
+		var hh = heroes[i]
+		var b := Button.new(); b.text = "%s  %s — эпик-пушка" % [HEROES[hh["cls"]]["icon"], HEROES[hh["cls"]]["name"]]
+		b.custom_minimum_size = Vector2(360, 46); b.add_theme_font_size_override("font_size", 15)
+		b.position = Vector2(W * 0.5 - 180, 320 + i * 54)
+		var ii := i
+		b.pressed.connect(func(): _grant_quest_weapon(ii); _popup_center("🔫 Эпик-пушка выдана!", Color("#ff2d95"), 1.6); panel.queue_free())
+		panel.add_child(b)
 
 func _open_battlepass() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)

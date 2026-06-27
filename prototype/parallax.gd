@@ -7,6 +7,30 @@ var speed := 0.0
 const W := 600.0
 const H := 960.0
 const GROUND_Y := 0.55 * H   # горизонт выше → дорога ещё шире
+# палитра локации (неон 3 слоёв + цвет дороги) — ставится через set_palette
+var pal := [Color("#ff2d95"), Color("#00f0ff"), Color("#2a3358")]
+var ground_col := Color("#ffb02e")
+var bg_tex: Texture2D = null      # рисованный фон локации (скролл медленно)
+var road_tex: Texture2D = null    # рисованная дорога (скролл быстрее)
+
+func set_palette(neon_arr, ground) -> void:   # neon_arr — массив из 3 hex-строк, ground — hex-строка
+	if neon_arr is Array and neon_arr.size() >= 3:
+		pal = [Color(neon_arr[0]), Color(neon_arr[1]), Color(neon_arr[2])]
+	ground_col = Color(ground)
+	queue_redraw()
+
+func set_textures(bg: Texture2D, road: Texture2D) -> void:
+	bg_tex = bg; road_tex = road
+	queue_redraw()
+
+func _scroll_tex(tex: Texture2D, y0: float, h: float, factor: float) -> void:
+	# тайлим текстуру по горизонтали со скроллом, масштаб под высоту полосы
+	var tw := tex.get_width() * (h / tex.get_height())
+	var off := fmod(scroll * factor, tw)
+	var x := -off
+	while x < W:
+		draw_texture_rect(tex, Rect2(x, y0, tw, h), false)
+		x += tw
 
 func _process(delta: float) -> void:
 	scroll += speed * delta
@@ -15,20 +39,23 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	# небо
 	draw_rect(Rect2(0, 0, W, GROUND_Y), Color("#0b0d18"))
-	# дальние здания (медленно)
-	_buildings(0.25, 150.0, 0.34 * H, Color("#11152a"), 7, Color("#2a3358"))
-	# средние здания (быстрее, с неон-окнами)
-	_buildings(0.5, 110.0, 0.5 * H, Color("#171a30"), 13, Color("#00f0ff"))
-	# ближние силуэты (ещё быстрее)
-	_buildings(1.0, 90.0, 0.62 * H, Color("#0d1018"), 5, Color("#ff2d95"))
+	if bg_tex != null:
+		_scroll_tex(bg_tex, 0, GROUND_Y, 0.3)   # рисованный фон-сцена (медленно)
+	else:
+		# процедурные здания (фолбэк)
+		_buildings(0.25, 150.0, 0.34 * H, Color("#11152a"), 7, pal[2])
+		_buildings(0.5, 110.0, 0.5 * H, Color("#171a30"), 13, pal[1])
+		_buildings(1.0, 90.0, 0.62 * H, Color("#0d1018"), 5, pal[0])
 	# дорога
 	draw_rect(Rect2(0, GROUND_Y, W, H - GROUND_Y), Color("#070709"))
-	draw_line(Vector2(0, GROUND_Y), Vector2(W, GROUND_Y), Color("#ffb02e"), 2.0)
-	# бегущие неон-штрихи на дороге (ощущение скорости)
-	var dash_off := fmod(scroll * 1.6, 80.0)
-	for i in range(-1, int(W / 80.0) + 2):
-		var x := i * 80.0 - dash_off
-		draw_rect(Rect2(x, GROUND_Y + 30, 40, 4), Color(0, 0.94, 1, 0.25))
+	if road_tex != null:
+		_scroll_tex(road_tex, GROUND_Y, H - GROUND_Y, 1.0)   # рисованная дорога (быстрее)
+	draw_line(Vector2(0, GROUND_Y), Vector2(W, GROUND_Y), ground_col, 2.0)
+	if road_tex == null:
+		var dash_off := fmod(scroll * 1.6, 80.0)
+		for i in range(-1, int(W / 80.0) + 2):
+			var x := i * 80.0 - dash_off
+			draw_rect(Rect2(x, GROUND_Y + 30, 40, 4), Color(pal[1].r, pal[1].g, pal[1].b, 0.25))
 
 func _buildings(factor: float, bw: float, base_y: float, col: Color, neon_seed: int, neon: Color) -> void:
 	var off := fmod(scroll * factor, bw)
