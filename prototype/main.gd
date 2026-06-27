@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.7.7"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.7.8"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -2175,7 +2175,18 @@ func _anim_doll(o: Dictionary, t: float, marching: bool, delta: float) -> void:
 		o["atk_anim"] = max(0.0, o["atk_anim"] - delta)
 	var spr: AnimatedSprite2D = d.get_node("Spr")
 	if o["alive"]:
-		var want := "hit" if o["atk_anim"] > 0.0 else ("walk" if marching else "idle")
+		# 4 состояния (Рамиль): атака → ходьба → боевая-стойка (бой идёт) → спокойный idle
+		var has_stance: bool = spr.sprite_frames.has_animation("stance")
+		var in_fight: bool = not _all_dead(enemies) and not _all_dead(heroes)
+		var want: String
+		if o["atk_anim"] > 0.0:
+			want = "hit"
+		elif marching:
+			want = "walk"
+		elif has_stance and in_fight:
+			want = "stance"
+		else:
+			want = "idle"
 		if spr.animation != want:
 			spr.play(want)
 		spr.speed_scale = 1.0
@@ -2260,7 +2271,7 @@ func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2
 
 func _frames(folder: String) -> SpriteFrames:
 	var sf := SpriteFrames.new()
-	for spec in [["walk", 16.0, true], ["idle", 16.0, true], ["hit", 45.0, false]]:   # hit=45fps: 9 кадров быстрого выстрела за ~0.2с (схема Рамиля: стойка→чик→стойка)
+	for spec in [["walk", 16.0, true], ["idle", 16.0, true], ["stance", 7.0, true], ["hit", 45.0, false]]:   # 4 состояния (Рамиль): idle/walk/боевая-стойка(прицел)/быстрый-выстрел
 		var anim: String = spec[0]
 		sf.add_animation(anim)
 		sf.set_animation_speed(anim, spec[1])
