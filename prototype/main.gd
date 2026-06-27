@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -292,6 +292,9 @@ const LOCATIONS := [
 	 "desc": "Корп-район ZenoCore — где «доступная аугментация» живёт в цифрах.",
 	 "quest": {"item": "💳 КПК Холта", "boss": "Менеджер Холт", "reward": "weapon", "contact": "💼 Агент Ким",
 	           "chat": ["Вектор. У меня контракт под тебя 💼", "Я аналитик ZenoCore. Та программа субсидий, что плодит психоз... я визировала отгрузки. Я знала.", "В КПК менеджера Холта — тред «откат партии». Доказательство, что не остановили нарочно.", "Выбей КПК с него. Пушка на выбор твоя.", "И... спасибо, что не спрашиваешь, почему я это сливаю."],
+	           "moral": {"id": "holt", "prompt": "Холт на коленях: «У меня дети. Я подписал «ещё один цикл наблюдений». Один. Дай уйти — я исчезну.» Сдать его публике как лицо скандала — или отпустить?",
+	                     "a": {"label": "🤝 Отпустить", "result": "Ты дал ему уйти. Не монстр — просто человек, что не нажал «стоп». Скандал останется без лица.", "karma": 1, "scrap": 0},
+	                     "b": {"label": "📢 Сдать публике", "result": "Холт — теперь лицо скандала ZenoCore (+500 лом за слив). Но корпа запомнила твоё лицо. ⚠️", "karma": -1, "scrap": 500}},
 	           "dialog": "Ким: «В КПК Холта — доказательство, что партию психозных имплантов не отозвали ради премии. Выбей его. Я знала и молчала — хватит.»"}},
 	{"id": "docks",  "name": "Доки",         "icon": "⚓", "unlock": 16,
 	 "pool": ["grunt", "swift", "armor", "bomber", "archer"],
@@ -299,6 +302,9 @@ const LOCATIONS := [
 	 "desc": "Доки — контрабанда психозных партий, дроны, тяжёлая броня.",
 	 "quest": {"item": "📦 Чёрный груз", "boss": "Босс доков", "reward": "weapon", "contact": "⚓ Боцман",
 	           "chat": ["Слышь, курьер. Боцман на связи ⚓", "На причале — ящик ZenoCore. Та самая партия. Психозная.", "Вожу и для них, и для тебя. Лояльность у меня по прайсу — не обижайся.", "Вышиби ящик с босса доков. Пушка твоя.", "Мне бабки очень нужны. Не спрашивай зачем."],
+	           "moral": {"id": "bosun", "prompt": "Боцман палится: он слил твой маршрут ZenoCore — за долг дочери в кабале. Прижать его — или понять?",
+	                     "a": {"label": "🫂 Понять", "result": "Ты понял Боцмана. Он сломался от того, что его не убили — теперь он твой, без прайса.", "karma": 1, "scrap": 0},
+	                     "b": {"label": "🔫 Прижать к стене", "result": "Ты выбил из Боцмана компенсацию (+500 лом). Но доверие сожжено — он больше не прикроет.", "karma": -1, "scrap": 500}},
 	           "dialog": "Боцман: «Ящик ZenoCore застрял на причале. Вышиби с босса. Я вожу для всех — кто платит. Не суди.»"}},
 	{"id": "core",   "name": "Нео-Ядро",     "icon": "🌐", "unlock": 26,
 	 "pool": ["grunt", "swift", "armor", "swarm", "archer", "bomber", "healer", "shield"],
@@ -3177,6 +3183,39 @@ func _open_messages() -> void:
 	else:
 		_popup_center("📭 Нет новых сообщений. Открой район на 🗺 карте.", Color("#9aa0b5"), 2.0)
 
+# ДОСЬЕ ВЕКТОРА — глубокий слой (характер/совесть/решения). Опционально, казуала не грузит.
+func _open_dossier() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var t := _lbl("📁 ДОСЬЕ: ВЕКТОР", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 86); t.size = Vector2(W, 30); panel.add_child(t)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 215, 128); scroll.custom_minimum_size = Vector2(430, 600); scroll.size = Vector2(430, 600); panel.add_child(scroll)
+	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 10); list.custom_minimum_size = Vector2(430, 0); scroll.add_child(list)
+	var bio := _lbl("Экс-курьер ZenoCore. Списан после «инцидента на 14-м этаже»: боевой маршрутизатор-имплант завис на 9 секунд, погиб напарник Тэо. Этих девяти секунд Вектор не помнит — и не знает, виноват ли.", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT)
+	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; bio.custom_minimum_size = Vector2(410, 0); list.add_child(bio)
+	list.add_child(_lbl("— ХАРАКТЕР —", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	var dom := _tone_dominant()
+	var char_txt := ("%s %s" % [TONES[dom]["icon"], TONES[dom]["title"]]) if dom != "" else "❓ Ещё не определился"
+	list.add_child(_lbl(char_txt, 16, Color("#e8ecf5"), HORIZONTAL_ALIGNMENT_CENTER))
+	list.add_child(_lbl("— СОВЕСТЬ —", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	var ktxt := "⚖️ Прагматик"
+	if karma > 0: ktxt = "🕊 Милосердный (+%d)" % karma
+	elif karma < 0: ktxt = "💀 Безжалостный (%d)" % karma
+	list.add_child(_lbl(ktxt, 16, Color("#7ee08a") if karma > 0 else (Color("#ff5050") if karma < 0 else Color("#9aa0b5")), HORIZONTAL_ALIGNMENT_CENTER))
+	list.add_child(_lbl("— РЕШЕНИЯ —", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	var any := false
+	for loc in LOCATIONS:
+		var qq: Dictionary = loc["quest"]
+		if qq.has("moral") and str(qq["moral"]["id"]) in moral_choices:
+			any = true
+			var ch: String = str(moral_choices[str(qq["moral"]["id"])])
+			var ml := _lbl("%s %s — %s" % [loc["icon"], loc["name"], str(qq["moral"][ch]["label"])], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT)
+			ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; ml.custom_minimum_size = Vector2(410, 0); list.add_child(ml)
+	if not any: list.add_child(_lbl("Пока ни одного выбора. Иди по сюжету.", 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	close.position = Vector2(W * 0.5 - 100, 760); close.pressed.connect(panel.queue_free); panel.add_child(close)
+
 # UI-редизайн: «☰ Ещё» — свёрнутые пункты (батлпас/ачивки/карта/настройки) в досягаемой нижней зоне
 func _open_more() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -3191,6 +3230,7 @@ func _open_more() -> void:
 	var msg_new: bool = not (str(_loc()["id"]) in quest_done)
 	var items := [
 		["📱  Сообщения / квест" + ("   📨" if msg_new else ""), Callable(self, "_open_messages")],
+		["📁  Досье: Вектор", Callable(self, "_open_dossier")],
 		["📋  Ежедневные квесты" + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
 		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
 		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
