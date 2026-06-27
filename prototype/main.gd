@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -352,7 +352,44 @@ const FRAGMENTS := [
 var frag_flags := {}        # idx фрагмента → помечен подделкой (bool)
 var case_solved := false
 var frags_notified := 0     # сколько фрагментов уже показали (для попапа-уведомления)
+# нарративный пульс фарма (анти-выгорание): редкие реплики мира/Сигнала во время гринда
+const PULSE_LINES := [
+	"📡 Сигнал: «…всё ещё слышу тебя. Не оборачивайся.»",
+	"🗞 Сеть: «ZenoCore отрицает связь субсидий с волной психоза.»",
+	"🐀 Крыс: «Ты там живой? В трущобах опять психи буянят.»",
+	"📡 Сигнал: «Эти девять секунд… я тоже в них застрял. С тобой.»",
+	"🗞 Сеть: «Ещё один киберпсихоз в районе. Власти молчат.»",
+	"📡 Сигнал: «Чем глубже идёшь — тем громче я. Тебе не страшно?»",
+]
+const PULSE_SOLVED := [
+	"📡 Сигнал: «Теперь ты знаешь. И всё равно слушаешь меня. Почему?»",
+	"📡 Сигнал: «Я — не Тэо. Я half of you. Половина, которую вырезали.»",
+	"🗞 Сеть: «Утечка: прототип PHANTOM-LIMB тестили на курьерах ZenoCore.»",
+]
+var pulse_t := 0.0
+var pulse_idx := 0
+# === 3 ФИНАЛА (эндгейм-режимы) — по карме после прохождения всех 4 актов ===
+const ENDINGS := {
+	"quiet": {"name": "Тихий протокол", "icon": "🕊", "text": "Ты щадил тех, кого мог. ZenoCore замяла скандал, но трущобы дышат свободнее. Ты выбираешь тишину — фарм без войны. PHANTOM-LIMB молчит… почти.",
+	          "pulse": ["🕊 Тихо. Слишком тихо. Сигнал почти не говорит.", "🗞 Ева Кван: «Прогресс не остановить. Но сегодня — меньше крови.»"]},
+	"wild":  {"name": "Открытый канал", "icon": "🔥", "text": "Ты сжёг мосты и выставил счёт. Сеть знает твоё имя — на тебя открыта охота. Дикий эндшпиль: баунти, перехваты, никакой пощады.",
+	          "pulse": ["🔥 Перехват: за твою голову подняли цену.", "📡 Сеть кипит. Все хотят кусок Вектора."]},
+	"grey":  {"name": "Серый путь", "icon": "🧠", "text": "Ты не уничтожил и не освободил — ты впустил. PHANTOM-LIMB остаётся в голове: комментирует, иногда врёт, иногда помогает. Кооп-в-голове — вы двое, навсегда.",
+	          "pulse": ["🧠 PHANTOM-LIMB: «Левее. Доверься. …или нет. Решай.»", "🧠 PHANTOM-LIMB: «Мы половинки. Я не уйду — и ты это знаешь.»"]},
+}
+var endgame_mode := ""
+func _all_quests_done() -> bool:
+	for loc in LOCATIONS:
+		if not (str(loc["id"]) in quest_done): return false
+	return true
 func _frag_unlocked(i: int) -> bool: return max(best_stage, stage) >= int(FRAGMENTS[i]["unlock"])
+func _farm_pulse() -> void:
+	var pool: Array
+	if endgame_mode != "" and ENDINGS.has(endgame_mode): pool = ENDINGS[endgame_mode]["pulse"]
+	elif case_solved: pool = PULSE_SOLVED
+	else: pool = PULSE_LINES
+	_popup_center(str(pool[pulse_idx % pool.size()]), Color("#9ad0ff"), 3.0)
+	pulse_idx += 1
 func _frags_open() -> int:
 	var n := 0
 	for i in FRAGMENTS.size():
@@ -1669,7 +1706,7 @@ func _save() -> void:
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
-		"frag_flags": frag_flags, "case_solved": case_solved,
+		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -1714,6 +1751,7 @@ func _load() -> void:
 	frag_flags = {}
 	for k in ff: frag_flags[int(k)] = bool(ff[k])
 	case_solved = bool(d.get("case_solved", false))
+	endgame_mode = str(d.get("endgame_mode", ""))
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = (d.get("dq_idx", []) as Array).map(func(x): return int(x))
@@ -1866,6 +1904,12 @@ func _process(delta: float) -> void:
 	# игрок: x2-ускорение по таймеру рекламы истекло → откат на x1 (ботов не трогаем — у них x16)
 	if not bot and Engine.time_scale >= 2.0 and Engine.time_scale < 3.0 and not _x2_active():
 		_set_speed(1.0)
+	# нарративный пульс фарма (анти-выгорание): редкая сюжетная реплика во время гринда
+	if not bot:
+		pulse_t += delta
+		if pulse_t >= 65.0:
+			pulse_t = 0.0
+			_farm_pulse()
 	# реклама-бусты урона/скорости истекли → пересчитать героев (золото считается живьём)
 	var _adon: bool = _ad_active("dmg") or _ad_active("atk")
 	if _adon != _ad_buff_on:
@@ -2979,6 +3023,17 @@ func _go_location(i: int) -> void:
 	if not (str(loc["id"]) in quest_done):
 		_popup_center("📨 Новое сообщение от %s" % str(loc["quest"].get("contact", "Связной")), Color("#3ad97a"), 1.8)
 		_open_quest_chat(cur_location)
+	else:
+		# farm-эхо: район реагирует на твои прошлые решения
+		var lid := str(loc["id"])
+		if lid == "slums" and str(moral_choices.get("batch", "")) == "b":
+			_popup_center("⚠️ Импланты, что ты толкнул, вернулись психами. Твоя работа.", Color("#ff7050"), 2.4)
+		elif lid == "slums" and str(moral_choices.get("batch", "")) == "a":
+			_popup_center("Психов в трущобах поубавилось. Крыс всё ещё дуется.", Color("#7ee08a"), 2.4)
+		elif lid == "corp" and str(moral_choices.get("holt", "")) == "b":
+			_popup_center("Корпа узнаёт твоё лицо. Охраны больше.", Color("#ff7050"), 2.4)
+		elif lid == "docks" and str(moral_choices.get("bosun", "")) == "a":
+			_popup_center("⚓ Боцман кивает тебе как своему. Лояльность бесплатно.", Color("#7ee08a"), 2.4)
 
 func _apply_location_theme() -> void:
 	if is_instance_valid(bg) and bg.has_method("set_palette"):
@@ -3312,6 +3367,25 @@ func _check_case(panel: Control) -> void:
 	else:
 		_popup_center("❌ Версия не сходится. Что противоречит фактам?", Color("#ff5050"), 2.2)
 
+# ФИНАЛ — 3 эндгейм-режима по карме после всех 4 актов
+func _open_finale() -> void:
+	if not _all_quests_done():
+		var dn := 0
+		for loc in LOCATIONS:
+			if str(loc["id"]) in quest_done: dn += 1
+		_popup_center("🏁 Финал откроется после всех 4 актов (%d/4). Иди по сюжету." % dn, Color("#9aa0b5"), 2.6)
+		return
+	if endgame_mode == "":
+		if karma >= 2: endgame_mode = "quiet"
+		elif karma <= -2: endgame_mode = "wild"
+		else: endgame_mode = "grey"
+		_save()
+	var e: Dictionary = ENDINGS[endgame_mode]
+	var body := str(e["text"])
+	if case_solved: body += "\n\n📓 А девять секунд ты раскрыл: ты не был трусом. И часть его — навсегда с тобой."
+	else: body += "\n\n(Тайна девяти секунд так и не раскрыта — собери фрагменты в 📓 Деле.)"
+	_show_help("%s ФИНАЛ: %s" % [str(e["icon"]), str(e["name"])], body)
+
 # UI-редизайн: «☰ Ещё» — свёрнутые пункты (батлпас/ачивки/карта/настройки) в досягаемой нижней зоне
 func _open_more() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -3328,6 +3402,7 @@ func _open_more() -> void:
 		["📱  Сообщения / квест" + ("   📨" if msg_new else ""), Callable(self, "_open_messages")],
 		["📁  Досье: Вектор", Callable(self, "_open_dossier")],
 		["📓  Дело: 9 секунд" + ("   ✅" if case_solved else ("   🧩%d" % _frags_open() if _frags_open() > 0 else "")), Callable(self, "_open_case")],
+		["🏁  Финал" + ("   %s" % str(ENDINGS[endgame_mode]["icon"]) if endgame_mode != "" else ("   ✦" if _all_quests_done() else "   🔒")), Callable(self, "_open_finale")],
 		["📋  Ежедневные квесты" + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
 		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
 		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
