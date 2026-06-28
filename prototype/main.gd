@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.0.5"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.1.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -358,6 +358,38 @@ func _power_now() -> int:   # текущая мощь отряда + бонус 
 	return int(_party_power() * (1.0 + best_stage * 0.04))
 func _update_power_peak() -> void:
 	power_peak = max(power_peak, _power_now())
+
+# === FIREBASE / КЛАНЫ (мультиплеер) — анонимный auth → #ID игрока ===
+const FB_DB_URL := "https://cyber-auto-rpg-default-rtdb.europe-west1.firebasedatabase.app"   # реальный databaseURL (Рамиль, europe-west1)
+var fb_uid := ""
+var fb_id := ""             # короткий #ID (из uid)
+var fb_ready := false
+var fb_t := 0.0
+func _fb_init() -> void:
+	if not OS.has_feature("web"): return
+	var js := """
+	if(!window._fbStart){window._fbStart=true;window._fbUid='';window._fbErr='';
+	var c={apiKey:'AIzaSyBPwusg9hSB8k76Uox5DeRLJ6Sb6M3Y3mk',authDomain:'cyber-auto-rpg.firebaseapp.com',databaseURL:'%s',projectId:'cyber-auto-rpg',storageBucket:'cyber-auto-rpg.firebasestorage.app',messagingSenderId:'448585153975',appId:'1:448585153975:web:b699058f1413a61aa63c32'};
+	function L(u,cb){var s=document.createElement('script');s.src=u;s.onload=cb;s.onerror=function(){window._fbErr='load '+u;};document.head.appendChild(s);}
+	L('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',function(){
+	 L('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js',function(){
+	  L('https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js',function(){
+	   try{firebase.initializeApp(c);firebase.auth().signInAnonymously().then(function(r){window._fbUid=r.user.uid;}).catch(function(e){window._fbErr=String(e);});}catch(e){window._fbErr=String(e);}
+	  });});});}
+	""" % FB_DB_URL
+	JavaScriptBridge.eval(js, true)
+
+func _fb_poll(delta: float) -> void:
+	if fb_ready or bot or not OS.has_feature("web"): return
+	fb_t -= delta
+	if fb_t > 0.0: return
+	fb_t = 1.0
+	var uid = JavaScriptBridge.eval("window._fbUid||''", true)
+	if typeof(uid) == TYPE_STRING and uid != "":
+		fb_uid = uid
+		fb_id = "#%06d" % (abs(hash(uid)) % 1000000)
+		fb_ready = true
+		print("FB ready uid=%s id=%s" % [fb_uid, fb_id])
 # нарративный пульс фарма (анти-выгорание): редкие реплики мира/Сигнала во время гринда
 const PULSE_LINES := [
 	"📡 Сигнал: «…всё ещё слышу тебя. Не оборачивайся.»",
@@ -1238,6 +1270,7 @@ func _ready() -> void:
 	randomize()
 	_setup_font()
 	_build()
+	_fb_init()   # Firebase: анонимный вход (web), даёт #ID для кланов
 	for a in OS.get_cmdline_user_args():   # парсинг флагов ДО загрузки
 		if a == "--bot":
 			bot = true
@@ -1943,6 +1976,7 @@ func _process(delta: float) -> void:
 		if pulse_t >= 65.0:
 			pulse_t = 0.0
 			_farm_pulse()
+	_fb_poll(delta)   # Firebase: дождаться анонимного uid → #ID
 	# реклама-бусты урона/скорости истекли → пересчитать героев (золото считается живьём)
 	var _adon: bool = _ad_active("dmg") or _ad_active("atk")
 	if _adon != _ad_buff_on:
