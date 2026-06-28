@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.6" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.7" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -496,6 +496,18 @@ const TR := {
 	"set_nick_lbl": {"ru": "Твой ник (для теста):", "en": "Your nickname (for testing):"},
 	"set_nick_btn": {"ru": "✏ Сменить ник", "en": "✏ Change nickname"},
 	"set_nick_saved": {"ru": "Ник: %s", "en": "Nickname: %s"},
+	# экран ввода ника (онбординг)
+	"nick_title": {"ru": "ВВЕДИ НИК", "en": "ENTER NICKNAME"},
+	"nick_sub": {"ru": "для теста (прогресс сохраняется по нику)", "en": "for testing (progress is saved per nickname)"},
+	"nick_unset": {"ru": "ник не задан", "en": "nickname not set"},
+	"nick_enter_btn": {"ru": "✏ ВВЕСТИ НИК", "en": "✏ ENTER NICKNAME"},
+	"nick_play_btn": {"ru": "▶ ИГРАТЬ", "en": "▶ PLAY"},
+	"nick_refresh_btn": {"ru": "🔄 обновить версию", "en": "🔄 update version"},
+	# подтверждение полного сброса
+	"reset_title": {"ru": "♻ СБРОСИТЬ ВЕСЬ ПРОГРЕСС?", "en": "♻ RESET ALL PROGRESS?"},
+	"reset_body": {"ru": "Сотрёт уровни, шмот, ядра, усиления, стадию.\nЭто новая игра с нуля.", "en": "Wipes levels, gear, cores, augments, stage.\nA brand-new game from scratch."},
+	"reset_yes": {"ru": "ДА, СБРОСИТЬ", "en": "YES, RESET"},
+	"reset_no": {"ru": "ОТМЕНА", "en": "CANCEL"},
 	# панель статистики
 	"st_panel_title": {"ru": "🏆 РЕКОРДЫ И СТАТИСТИКА", "en": "🏆 RECORDS AND STATS"},
 	"st_power_title": {"ru": "💪 СИЛА ОТРЯДА (сейчас)", "en": "💪 SQUAD POWER (now)"},
@@ -1776,15 +1788,15 @@ func _build_nick_prompt() -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 16)
 	v.position = Vector2(W * 0.5 - 200, 360); v.size = Vector2(400, 0)
 	nick_panel.add_child(v)
-	var t := Label.new(); t.text = "ВВЕДИ НИК"; t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
-	var ver := Label.new(); ver.text = "версия " + VERSION; ver.add_theme_font_size_override("font_size", 13); ver.add_theme_color_override("font_color", Color("#5a6a8a")); ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(ver)
-	var sub2 := Label.new(); sub2.text = "для теста (прогресс сохраняется по нику)"; sub2.add_theme_font_size_override("font_size", 13); sub2.add_theme_color_override("font_color", Color("#7a7f99")); sub2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(sub2)
-	nick_show = Label.new(); nick_show.text = "ник не задан"; nick_show.add_theme_font_size_override("font_size", 20); nick_show.add_theme_color_override("font_color", Color("#ffd24a")); nick_show.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; nick_show.custom_minimum_size = Vector2(0, 40); v.add_child(nick_show)
-	var enter := Button.new(); enter.text = "✏ ВВЕСТИ НИК"; enter.add_theme_font_size_override("font_size", 18); enter.custom_minimum_size = Vector2(0, 50); v.add_child(enter)
+	var t := Label.new(); t.text = _t("nick_title"); t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var ver := Label.new(); ver.text = _t("set_version") + " " + VERSION; ver.add_theme_font_size_override("font_size", 13); ver.add_theme_color_override("font_color", Color("#5a6a8a")); ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(ver)
+	var sub2 := Label.new(); sub2.text = _t("nick_sub"); sub2.add_theme_font_size_override("font_size", 13); sub2.add_theme_color_override("font_color", Color("#7a7f99")); sub2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(sub2)
+	nick_show = Label.new(); nick_show.text = _t("nick_unset"); nick_show.add_theme_font_size_override("font_size", 20); nick_show.add_theme_color_override("font_color", Color("#ffd24a")); nick_show.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; nick_show.custom_minimum_size = Vector2(0, 40); v.add_child(nick_show)
+	var enter := Button.new(); enter.text = _t("nick_enter_btn"); enter.add_theme_font_size_override("font_size", 18); enter.custom_minimum_size = Vector2(0, 50); v.add_child(enter)
 	enter.pressed.connect(func():
 		_prompt_nick()
-		nick_show.text = nick if nick != "" else "ник не задан")
-	var b := Button.new(); b.text = "▶ ИГРАТЬ"; b.add_theme_font_size_override("font_size", 20); b.custom_minimum_size = Vector2(0, 54); v.add_child(b)
+		nick_show.text = nick if nick != "" else _t("nick_unset"))
+	var b := Button.new(); b.text = _t("nick_play_btn"); b.add_theme_font_size_override("font_size", 20); b.custom_minimum_size = Vector2(0, 54); v.add_child(b)
 	b.pressed.connect(func():
 		if nick == "": nick = "гость"
 		nick_panel.visible = false
@@ -1792,7 +1804,7 @@ func _build_nick_prompt() -> void:
 		_send_telemetry("start")
 		if not seen_intro: _show_intro()   # первый запуск → интро-обучение
 		elif _daily_available(): _show_daily())
-	var upd := Button.new(); upd.text = "🔄 обновить версию"; upd.add_theme_font_size_override("font_size", 13); upd.custom_minimum_size = Vector2(0, 40); v.add_child(upd)
+	var upd := Button.new(); upd.text = _t("nick_refresh_btn"); upd.add_theme_font_size_override("font_size", 13); upd.custom_minimum_size = Vector2(0, 40); v.add_child(upd)
 	upd.pressed.connect(_clear_cache)
 
 func _clear_cache() -> void:   # очистка service worker + кэша → загрузка свежей версии (фикс «вижу старое»)
@@ -2484,12 +2496,12 @@ func _build_restart_confirm() -> void:
 	card.position = Vector2(W * 0.5 - 200, 380); card.custom_minimum_size = Vector2(400, 0)
 	restart_confirm.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14); card.add_child(v)
-	var t := Label.new(); t.text = "♻ СБРОСИТЬ ВЕСЬ ПРОГРЕСС?"; t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#ff6060")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
-	var d := Label.new(); d.text = "Сотрёт уровни, шмот, ядра, усиления, стадию.\nЭто новая игра с нуля."; d.add_theme_font_size_override("font_size", 13); d.add_theme_color_override("font_color", Color("#c9a0a0")); d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d)
-	var yes := Button.new(); yes.text = "ДА, СБРОСИТЬ"; yes.add_theme_font_size_override("font_size", 16); yes.custom_minimum_size = Vector2(0, 50)
+	var t := Label.new(); t.text = _t("reset_title"); t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#ff6060")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var d := Label.new(); d.text = _t("reset_body"); d.add_theme_font_size_override("font_size", 13); d.add_theme_color_override("font_color", Color("#c9a0a0")); d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d)
+	var yes := Button.new(); yes.text = _t("reset_yes"); yes.add_theme_font_size_override("font_size", 16); yes.custom_minimum_size = Vector2(0, 50)
 	yes.pressed.connect(func(): restart_confirm.visible = false; _hard_restart())
 	v.add_child(yes)
-	var no := Button.new(); no.text = "ОТМЕНА"; no.add_theme_font_size_override("font_size", 16); no.custom_minimum_size = Vector2(0, 46)
+	var no := Button.new(); no.text = _t("reset_no"); no.add_theme_font_size_override("font_size", 16); no.custom_minimum_size = Vector2(0, 46)
 	no.pressed.connect(func(): restart_confirm.visible = false)
 	v.add_child(no)
 
@@ -3599,7 +3611,7 @@ func _open_speed_menu() -> void:
 	bab.pressed.connect(func(): panel.queue_free(); _open_ad_boosts()); v.add_child(bab)
 	var bs := Button.new(); bs.text = "💎 МАГАЗИН АЛМАЗОВ"; bs.custom_minimum_size = Vector2(0, 44); bs.add_theme_font_size_override("font_size", 14); bs.add_theme_color_override("font_color", Color("#ffd24a"))
 	bs.pressed.connect(func(): panel.queue_free(); _open_shop()); v.add_child(bs)
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _watch_ad_x2() -> void:
 	# СТАБ рекламы (на платформе — реальный rewarded-ad SDK). Сейчас выдаём сразу.
@@ -3673,7 +3685,7 @@ func _open_ad_boosts() -> void:
 			row.text = "▶ %s — реклама → +%d%% на 30 мин (ур.%d)" % [AD_BOOST[b]["name"], nextpct, lvl + 1]
 		row.pressed.connect(func(): _watch_ad_boost(bb); panel.queue_free(); _open_ad_boosts())
 		v.add_child(row)
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _open_shop() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -3697,7 +3709,7 @@ func _open_shop() -> void:
 	bg.pressed.connect(func(): panel.queue_free(); _open_gacha()); v.add_child(bg)
 	var ba := Button.new(); ba.text = "📺 БОНУСЫ ЗА РЕКЛАМУ"; ba.custom_minimum_size = Vector2(0, 46); ba.add_theme_font_size_override("font_size", 15); ba.add_theme_color_override("font_color", Color("#3ad97a"))
 	ba.pressed.connect(func(): panel.queue_free(); _open_ad_boosts()); v.add_child(ba)
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 # === ГАЧА (Фаза Б): призыв шмота за алмазы, pity ≤90, прозрачные дропрейты ===
 func _gacha_rarity() -> int:
@@ -3756,7 +3768,7 @@ func _open_gacha() -> void:
 	p1.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(1)); _gacha_refresh_hdr(v)); v.add_child(p1)
 	var p10 := Button.new(); p10.text = "🎲 ПУЛЛ x10 — %d 💎" % GACHA_COST10; p10.custom_minimum_size = Vector2(0, 46); p10.add_theme_font_size_override("font_size", 15)
 	p10.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(10)); _gacha_refresh_hdr(v)); v.add_child(p10)
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _gacha_refresh_hdr(v: VBoxContainer) -> void:
 	# обновить строку алмазов/pity (2-й ребёнок) после пулла
