@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.9" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.10" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -795,8 +795,8 @@ const TR := {
 	# монетизация: панель скорости
 	"spd_title":         {"ru": "⏩ СКОРОСТЬ  (💎 %d)", "en": "⏩ SPEED  (💎 %d)"},
 	"spd_x1":            {"ru": "⏩ x1 — обычная (беспл)", "en": "⏩ x1 — normal (free)"},
-	"spd_x2_active":     {"ru": "⏩⏩ x2 — активна (%dмин)", "en": "⏩⏩ x2 — active (%dmin)"},
-	"spd_x2_ad":         {"ru": "▶ x2 на 30 мин — посмотреть рекламу", "en": "▶ x2 for 30 min — watch ad"},
+	"spd_x2_active":     {"ru": "⏩⏩ x2 — активна (%dмин)", "en": "⏩⏩ x2 — active (%d min)"},
+	"spd_x2_ad":         {"ru": "▶ x2 на 30 мин — посмотреть рекламу", "en": "▶ x2 for 30 min — watch an ad"},
 	"spd_x3_bought":     {"ru": "⏩⏩⏩ x3 — куплена", "en": "⏩⏩⏩ x3 — purchased"},
 	"spd_x3_buy":        {"ru": "💎 x3 НАВСЕГДА — 100 алмазов", "en": "💎 x3 FOREVER — 100 diamonds"},
 	"spd_pop_x2":        {"ru": "▶ Реклама → x2 на 30 минут!", "en": "▶ Ad → x2 for 30 minutes!"},
@@ -805,7 +805,7 @@ const TR := {
 	"diamond_shop":      {"ru": "💎 МАГАЗИН АЛМАЗОВ", "en": "💎 DIAMOND SHOP"},
 	# панель реклама-бустов
 	"ad_subtitle":       {"ru": "Добровольно · 30 мин · чем больше смотришь — тем выше %", "en": "Optional · 30 min · the more you watch, the higher the %"},
-	"ad_row_active":     {"ru": "▶ %s: +%d%% активен (%dмин, ур.%d) — ещё реклама → +%d%%", "en": "▶ %s: +%d%% active (%dmin, lv.%d) — another ad → +%d%%"},
+	"ad_row_active":     {"ru": "▶ %s: +%d%% активен (%dмин, ур.%d) — ещё реклама → +%d%%", "en": "▶ %s: +%d%% active (%d min, lv.%d) — another ad → +%d%%"},
 	"ad_row_idle":       {"ru": "▶ %s — реклама → +%d%% на 30 мин (ур.%d)", "en": "▶ %s — ad → +%d%% for 30 min (lv.%d)"},
 	"ad_apply_pop":      {"ru": "📺 %s +%d%% на 30 мин!\n(уровень буста %d)", "en": "📺 %s +%d%% for 30 min!\n(boost level %d)"},
 	# магазин алмазов
@@ -815,7 +815,7 @@ const TR := {
 	"shop_gacha_btn":    {"ru": "🎰 ГАЧА — призыв шмота", "en": "🎰 GACHA — summon gear"},
 	# гача
 	"gacha_title":       {"ru": "🎰 ГАЧА — призыв снаряжения", "en": "🎰 GACHA — summon equipment"},
-	"gacha_pity":        {"ru": "💎 %d   ·   до гаранта Эпического: %d пуллов", "en": "💎 %d   ·   to Epic pity: %d pulls"},
+	"gacha_pity":        {"ru": "💎 %d   ·   до гаранта Эпического: %d пуллов", "en": "💎 %d   ·   to guaranteed Epic: %d pulls"},
 	"gacha_rates":       {"ru": "Шансы: Обычный 50% · Необычный 30% · Редкий 15% · Эпический 5%\n(с 74-го пулла шанс Эпического растёт, на 90-м — гарант)", "en": "Rates: Common 50% · Uncommon 30% · Rare 15% · Epic 5%\n(from pull 74 the Epic chance rises, at 90 — guaranteed)"},
 	"gacha_pull1":       {"ru": "🎲 ПУЛЛ x1 — %d 💎", "en": "🎲 PULL x1 — %d 💎"},
 	"gacha_pull10":      {"ru": "🎲 ПУЛЛ x10 — %d 💎", "en": "🎲 PULL x10 — %d 💎"},
