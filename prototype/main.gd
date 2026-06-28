@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.0.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.0.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1773,6 +1773,11 @@ func _load() -> void:
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = _arr(d.get("dq_idx", [])).map(func(x): return int(x))
+	# отбросить невалидные индексы (старый сейв) → _dq_refresh перезаполнит, не крашит DAILY_QUESTS[qi] (фикс пустых дейли — Диана)
+	for qi in dq_idx:
+		if qi < 0 or qi >= DAILY_QUESTS.size():
+			dq_idx = []
+			break
 	dq_base = _dct(d.get("dq_base", {}))
 	dq_claimed = _arr(d.get("dq_claimed", [])).map(func(x): return str(x))
 	_apply_meta()
@@ -3123,9 +3128,14 @@ func _dq_stat(s) -> float: return float(stats_all.get(s, 0))
 
 func _dq_refresh() -> void:
 	var today := _today_num()
-	if dq_day == today and dq_idx.size() == 3: return
-	dq_day = today
 	var n := DAILY_QUESTS.size()
+	# валидны ли dq_idx (ровно 3 + в диапазоне) — фикс ПУСТЫХ дейли (Диана: старый сейв, индексы вне диапазона → краш рендера → пусто)
+	var valid := dq_idx.size() == 3
+	if valid:
+		for qi in dq_idx:
+			if int(qi) < 0 or int(qi) >= n: valid = false; break
+	if dq_day == today and valid: return
+	dq_day = today
 	dq_idx = []
 	for k in 3: dq_idx.append((today + k * 2) % n)
 	dq_base = {}
