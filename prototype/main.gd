@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -416,6 +416,14 @@ const TR := {
 	"m_map": {"ru": "🗺 Карта локаций", "en": "🗺 Locations map"},
 	"m_clans": {"ru": "🛡 Кланы", "en": "🛡 Clans"},
 	"m_settings": {"ru": "⚙ Настройки", "en": "⚙ Settings"},
+	# панель ПРОКАЧКА
+	"u_level": {"ru": "УРОВЕНЬ", "en": "LEVEL"},
+	"u_lvl_short": {"ru": "ур", "en": "lv"},
+	"u_for": {"ru": "за", "en": "for"},
+	"u_need": {"ru": "нужно", "en": "need"},
+	"u_need_for": {"ru": "на", "en": "for"},
+	"power": {"ru": "Мощь", "en": "Power"},
+	"per_sec": {"ru": "/с", "en": "/s"},
 	# настройки
 	"set_lang": {"ru": "🌐 Язык", "en": "🌐 Language"},
 	"set_sci": {"ru": "Научные числа", "en": "Scientific numbers"},
@@ -2930,7 +2938,7 @@ func _refresh_hud() -> void:
 	# золото + прокачка урона
 	gold_label.text = "💰 %s  +%s/с   ♻ %s   🧬 %s   💎 %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(scrap), _gsep(cores), _gsep(diamonds)]
 	if inv_open and inv_gold:
-		inv_gold.text = "💰 %s   +%s/с    💪 Мощь: %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(_party_power())]
+		inv_gold.text = "💰 %s   +%s%s    💪 %s: %s" % [_gsep(gold), _gsep(_passive_rate()), _t("per_sec"), _t("power"), _gsep(_party_power())]
 	if inv_open: _refresh_inv()
 	if impl_open: _refresh_impl()
 
@@ -4215,7 +4223,7 @@ func _build_inventory() -> void:
 		hero_rows.append({"lvl_btn": lb})
 
 	var close := Button.new()
-	close.text = "✕ ЗАКРЫТЬ"
+	close.text = _t("close")
 	close.add_theme_font_size_override("font_size", 16)
 	close.custom_minimum_size = Vector2(200, 50)
 	close.position = Vector2(W * 0.5 - 100, H - 150)   # выше рестарта (не перекрываются)
@@ -4224,7 +4232,7 @@ func _build_inventory() -> void:
 
 func _refresh_inv() -> void:
 	if inv_gold:
-		inv_gold.text = "💰 %s   +%s/с    💪 Мощь: %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(_party_power())]
+		inv_gold.text = "💰 %s   +%s%s    💪 %s: %s" % [_gsep(gold), _gsep(_passive_rate()), _t("per_sec"), _t("power"), _gsep(_party_power())]
 	for pair in buy_btns:   # подсветка выбранного множителя
 		pair[1].modulate = Color(1.4, 1.4, 0.6) if pair[0] == buy_mult else Color(0.7, 0.7, 0.7)
 	for i in heroes.size():
@@ -4232,16 +4240,16 @@ func _refresh_inv() -> void:
 		var r = hero_rows[i]
 		if buy_mult == 0:
 			var n0 := _affordable_levels(hh)
-			r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (MAX: %d ур)\nза %s 💰" % [hh["level"], n0, _gsep(_batch_cost(hh, n0))]
+			r["lvl_btn"].text = "⬆ %s %d  (MAX: %d %s)\n%s %s 💰" % [_t("u_level"), hh["level"], n0, _t("u_lvl_short"), _t("u_for"), _gsep(_batch_cost(hh, n0))]
 			r["lvl_btn"].disabled = n0 < 1
 		else:
 			var n: int = buy_mult
 			var bc := _batch_cost(hh, n)
 			if gold >= bc:
-				r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (x%d)\nза %s 💰" % [hh["level"], n, _gsep(bc)]
+				r["lvl_btn"].text = "⬆ %s %d  (x%d)\n%s %s 💰" % [_t("u_level"), hh["level"], n, _t("u_for"), _gsep(bc)]
 				r["lvl_btn"].disabled = false
 			else:
-				r["lvl_btn"].text = "⬆ УРОВЕНЬ %d  (x%d)\nнужно %s 💰 на %d ур" % [hh["level"], n, _gsep(bc), n]
+				r["lvl_btn"].text = "⬆ %s %d  (x%d)\n%s %s 💰 %s %d %s" % [_t("u_level"), hh["level"], n, _t("u_need"), _gsep(bc), _t("u_need_for"), n, _t("u_lvl_short")]
 				r["lvl_btn"].disabled = true   # не хватает на пачку → тусклая
 
 func _affordable_levels(hh: Dictionary) -> int:
