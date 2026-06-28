@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.6" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.7" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -535,6 +535,20 @@ const TR := {
 	"cl_chat_empty": {"ru": "Сообщений пока нет.\nНапиши первым 👋", "en": "No messages yet.\nBe the first 👋"},
 	"cl_chat_ph": {"ru": "сообщение…", "en": "message…"},
 	"cl_boss_default_name": {"ru": "Клан-босс", "en": "Clan Boss"},
+	# дейли-квесты + стрик-награда
+	"dq_title":     {"ru": "📋 ЕЖЕДНЕВНЫЕ КВЕСТЫ", "en": "📋 DAILY QUESTS"},
+	"dq_subtitle":  {"ru": "Обновляются каждый день. Прогресс — за сегодня.", "en": "Resets every day. Progress counted today."},
+	"dq_claimed":   {"ru": "✅ Забрано   ", "en": "✅ Claimed   "},
+	"dq_done_pop":  {"ru": "✅ Квест выполнен: ", "en": "✅ Quest complete: "},
+	"m_daily":      {"ru": "📋  Ежедневные квесты", "en": "📋  Daily quests"},
+	"m_battlepass": {"ru": "🎟  Батлпас", "en": "🎟  Battle pass"},
+	"m_achieve":    {"ru": "📖  Достижения", "en": "📖  Achievements"},
+	"m_rewards_hdr":{"ru": "🎁 НАГРАДЫ", "en": "🎁 REWARDS"},
+	"dr_title":     {"ru": "🎁 ЕЖЕДНЕВНАЯ НАГРАДА", "en": "🎁 DAILY REWARD"},
+	"dr_streak":    {"ru": "Стрик: день %d из 7   ·   заходи каждый день!", "en": "Streak: day %d of 7   ·   come back every day!"},
+	"dr_day_short": {"ru": "Д%d", "en": "D%d"},
+	"dr_claim_btn": {"ru": "🎁 ЗАБРАТЬ ДЕНЬ %d (+%s)", "en": "🎁 CLAIM DAY %d (+%s)"},
+	"dr_pop":       {"ru": "🎁 День %d: +%s!", "en": "🎁 Day %d: +%s!"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -973,11 +987,11 @@ var stats_run := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "
 var stats_all := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
 # === ЕЖЕДНЕВНЫЕ КВЕСТЫ (Рамиль): 3 задачи/день, прогресс = текущий стат − снимок на старте дня ===
 const DAILY_QUESTS := [
-	{"id": "kill",  "icon": "🗡", "name": "Зачистка",         "stat": "mobs",   "target": 200,    "rew": {"diamonds": 30}},
-	{"id": "boss",  "icon": "👑", "name": "Охота на боссов",   "stat": "bosses", "target": 6,      "rew": {"diamonds": 40}},
-	{"id": "crit",  "icon": "🎯", "name": "Криткарь",          "stat": "crits",  "target": 300,    "rew": {"diamonds": 25}},
-	{"id": "drops", "icon": "🎁", "name": "Лутер",             "stat": "drops",  "target": 12,     "rew": {"diamonds": 25}},
-	{"id": "gold",  "icon": "💰", "name": "Золотая лихорадка", "stat": "gold",   "target": 100000, "rew": {"scrap": 2000}},
+	{"id": "kill",  "icon": "🗡", "name": "Зачистка",         "name_en": "Sweep",           "stat": "mobs",   "target": 200,    "rew": {"diamonds": 30}},
+	{"id": "boss",  "icon": "👑", "name": "Охота на боссов",   "name_en": "Boss Hunt",       "stat": "bosses", "target": 6,      "rew": {"diamonds": 40}},
+	{"id": "crit",  "icon": "🎯", "name": "Криткарь",          "name_en": "Critical Strike", "stat": "crits",  "target": 300,    "rew": {"diamonds": 25}},
+	{"id": "drops", "icon": "🎁", "name": "Лутер",             "name_en": "Looter",          "stat": "drops",  "target": 12,     "rew": {"diamonds": 25}},
+	{"id": "gold",  "icon": "💰", "name": "Золотая лихорадка", "name_en": "Gold Rush",       "stat": "gold",   "target": 100000, "rew": {"scrap": 2000}},
 ]
 var dq_day := 0           # день, для которого выбраны квесты
 var dq_idx := []          # индексы 3 квестов на сегодня
@@ -3649,7 +3663,7 @@ func _dq_claim(qi: int) -> void:
 	if r.has("diamonds"): diamonds += int(r["diamonds"])
 	if r.has("scrap"): scrap += int(r["scrap"])
 	_save(); _refresh_hud()
-	_popup_center("✅ Квест выполнен: " + _dq_rew_text(q), Color("#3ad97a"), 1.6)
+	_popup_center(_t("dq_done_pop") + _dq_rew_text(q), Color("#3ad97a"), 1.6)
 
 func _open_daily_quests() -> void:
 	_dq_refresh()
@@ -3657,8 +3671,8 @@ func _open_daily_quests() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.88); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var t := _lbl("📋 ЕЖЕДНЕВНЫЕ КВЕСТЫ", 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 120); t.size = Vector2(W, 30); panel.add_child(t)
-	var s := _lbl("Обновляются каждый день. Прогресс — за сегодня.", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); s.position = Vector2(0, 152); s.size = Vector2(W, 20); panel.add_child(s)
+	var t := _lbl(_t("dq_title"), 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 120); t.size = Vector2(W, 30); panel.add_child(t)
+	var s := _lbl(_t("dq_subtitle"), 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); s.position = Vector2(0, 152); s.size = Vector2(W, 20); panel.add_child(s)
 	for n in dq_idx.size():
 		var qi: int = dq_idx[n]
 		var q = DAILY_QUESTS[qi]
@@ -3673,17 +3687,17 @@ func _open_daily_quests() -> void:
 		sb.border_color = Color("#ffd24a") if (ready and not claimed) else Color("#2a2f45"); sb.set_border_width_all(2 if (ready and not claimed) else 1)
 		box.add_theme_stylebox_override("panel", sb); box.position = Vector2(W * 0.5 - 210, 196 + n * 92); box.custom_minimum_size = Vector2(420, 84)
 		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
-		v.add_child(_lbl("%s %s" % [q["icon"], q["name"]], 15, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
+		v.add_child(_lbl("%s %s" % [q["icon"], _tloc(q, "name")], 15, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
 		var pr := "%s / %s   → %s" % [_gsep(int(prog)), _gsep(int(tgt)), _dq_rew_text(q)]
-		if claimed: pr = "✅ Забрано   " + _dq_rew_text(q)
+		if claimed: pr = _t("dq_claimed") + _dq_rew_text(q)
 		v.add_child(_lbl(pr, 13, Color("#7ee08a") if claimed else Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
 		if ready and not claimed:
-			var b := Button.new(); b.text = "ЗАБРАТЬ ✨"; b.custom_minimum_size = Vector2(0, 30); b.add_theme_font_size_override("font_size", 13)
+			var b := Button.new(); b.text = _t("claim"); b.custom_minimum_size = Vector2(0, 30); b.add_theme_font_size_override("font_size", 13)
 			var qii := qi
 			b.pressed.connect(func(): _dq_claim(qii); panel.queue_free(); _open_daily_quests())
 			v.add_child(b)
 		panel.add_child(box)   # ← ФИКС: коробки квестов не добавлялись в панель → дейли были ПУСТЫЕ (Диана)
-	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	var close := Button.new(); close.text = _t("close"); close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 196 + 3 * 92 + 16); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
 # === КВЕСТ-ЧАТ (идея Рамиля): фиксер шлёт задание в мессенджер-облачках ===
@@ -3946,10 +3960,10 @@ func _open_story_group() -> void:
 func _open_rewards_group() -> void:
 	_dq_refresh()
 	var dqn := _dq_ready_count(); var bpn := _bp_unclaimed_count(); var acn := _ach_claimable()
-	_open_submenu("🎁 НАГРАДЫ", [
-		["📋  Ежедневные квесты" + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
-		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
-		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
+	_open_submenu(_t("m_rewards_hdr"), [
+		[_t("m_daily") + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
+		[_t("m_battlepass") + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
+		[_t("m_achieve") + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
 	])
 
 # универсальный рендер списка-меню (снизу-вверх от навбара, влезает любое кол-во)
@@ -4153,7 +4167,7 @@ func _claim_daily(panel: Control) -> void:
 	cores += int(r.get("cores", 0)); diamonds += int(r.get("diamonds", 0)); scrap += int(r.get("scrap", 0))
 	daily_day = _today_num(); daily_streak = ns
 	_save(); _refresh_hud()
-	_popup_center("🎁 День %d: +%s!" % [ns, _daily_reward_text(r)], Color("#ffd24a"), 2.4)
+	_popup_center(_t("dr_pop") % [ns, _daily_reward_text(r)], Color("#ffd24a"), 2.4)
 	if panel: panel.queue_free()
 
 func _show_daily() -> void:
@@ -4166,8 +4180,8 @@ func _show_daily() -> void:
 	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.08, 0.07, 0.13, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 200); card.custom_minimum_size = Vector2(420, 0); panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	v.add_child(_lbl("🎁 ЕЖЕДНЕВНАЯ НАГРАДА", 19, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl("Стрик: день %d из 7   ·   заходи каждый день!" % ns, 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("dr_title"), 19, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("dr_streak") % ns, 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
 	# трек 7 дней
 	var grid := HBoxContainer.new(); grid.add_theme_constant_override("separation", 5); grid.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_child(grid)
 	for day in range(1, 8):
@@ -4177,10 +4191,10 @@ func _show_daily() -> void:
 		csb.border_color = Color("#ffd24a") if day == ns else Color("#2a2f45"); csb.set_border_width_all(2 if day == ns else 1)
 		cell.add_theme_stylebox_override("panel", csb); cell.custom_minimum_size = Vector2(54, 60)
 		var cv := VBoxContainer.new(); cell.add_child(cv)
-		cv.add_child(_lbl("Д%d" % day, 11, Color("#ffd24a") if day == ns else Color("#7a809a"), HORIZONTAL_ALIGNMENT_CENTER))
+		cv.add_child(_lbl(_t("dr_day_short") % day, 11, Color("#ffd24a") if day == ns else Color("#7a809a"), HORIZONTAL_ALIGNMENT_CENTER))
 		cv.add_child(_lbl(_daily_reward_text(DAILY_REWARDS[day - 1]), 9, Color("#cfe6ff") if day == ns else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_CENTER))
 		grid.add_child(cell)
-	var cb := Button.new(); cb.text = "🎁 ЗАБРАТЬ ДЕНЬ %d (+%s)" % [ns, _daily_reward_text(DAILY_REWARDS[ns - 1])]; cb.custom_minimum_size = Vector2(0, 50); cb.add_theme_font_size_override("font_size", 16); cb.add_theme_color_override("font_color", Color("#ffd24a"))
+	var cb := Button.new(); cb.text = _t("dr_claim_btn") % [ns, _daily_reward_text(DAILY_REWARDS[ns - 1])]; cb.custom_minimum_size = Vector2(0, 50); cb.add_theme_font_size_override("font_size", 16); cb.add_theme_color_override("font_color", Color("#ffd24a"))
 	cb.pressed.connect(func(): _claim_daily(panel)); v.add_child(cb)
 
 # описание класса (Диана: непонятно чем герои различаются / что делают ульты)
