@@ -353,6 +353,11 @@ var frag_flags := {}        # idx фрагмента → помечен подд
 var case_solved := false
 var frags_notified := 0     # сколько фрагментов уже показали (для попапа-уведомления)
 var milestones_hit := 0     # рубежи стадий (каждые 10) — награда-celebration, БЕЗ DPS (не трогает кривую 1.34)
+var power_peak := 0         # ПИК-МОЩЬ (prestige-proof): для клан-боссов — снапшот лучшей силы, не гимпится престижем
+func _power_now() -> int:   # текущая мощь отряда + бонус от глубины (best_stage) → база для клан-вклада
+	return int(_party_power() * (1.0 + best_stage * 0.04))
+func _update_power_peak() -> void:
+	power_peak = max(power_peak, _power_now())
 # нарративный пульс фарма (анти-выгорание): редкие реплики мира/Сигнала во время гринда
 const PULSE_LINES := [
 	"📡 Сигнал: «…всё ещё слышу тебя. Не оборачивайся.»",
@@ -1712,7 +1717,7 @@ func _save() -> void:
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
-		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit,
+		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -1771,6 +1776,7 @@ func _load() -> void:
 	endgame_mode = str(d.get("endgame_mode", ""))
 	if endgame_mode != "" and not ENDINGS.has(endgame_mode): endgame_mode = ""   # хардениг: невалидный режим (старый сейв) → "" (иначе ENDINGS[mode] краш в меню/финале)
 	milestones_hit = int(d.get("milestones_hit", 0))
+	power_peak = int(d.get("power_peak", 0))
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = _arr(d.get("dq_idx", [])).map(func(x): return int(x))
@@ -2016,6 +2022,7 @@ func _process(delta: float) -> void:
 			boss_retry = false
 			_popup_center("🏆 СТАДИЯ %d ПРОЙДЕНА" % (stage - 1), Color("#ffd24a"))
 			best_stage = max(best_stage, stage)
+			_update_power_peak()   # пик-мощь для клан-боссов (prestige-proof)
 			if _frags_open() > frags_notified:
 				frags_notified = _frags_open()
 				_popup_center("🧩 Восстановлен фрагмент памяти — открой 📓 Дело", Color("#ff2d95"), 2.6)
