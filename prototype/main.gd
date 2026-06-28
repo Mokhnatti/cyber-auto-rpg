@@ -43,8 +43,9 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.5.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
+var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
 var http: HTTPRequest
 var nick_panel: Control
@@ -56,6 +57,7 @@ var show_cd := true         # цифры КД ульт (настройка)
 var set_cd_btn: Button
 var settings_panel: Control
 var set_dmg_btn: Button
+var lang_btn: Button
 var nick_show: Label
 var set_nick_input: LineEdit
 # БОТ-ПЛЕЙТЕСТЕР (godot --headless -- --bot): сам играет, логирует TTSTATE
@@ -384,6 +386,40 @@ const CLAN_BOSSES := [
 ]
 func _week_num() -> int: return int(Time.get_unix_time_from_system() / 604800.0)
 func _weekly_boss() -> Dictionary: return CLAN_BOSSES[_week_num() % CLAN_BOSSES.size()]
+
+# === ЛОКАЛИЗАЦИЯ (i18n): _t(key) → строка на текущем языке, фолбэк ru → key ===
+const TR := {
+	# общие
+	"close": {"ru": "✕ закрыть", "en": "✕ close"},
+	"back": {"ru": "← назад", "en": "← back"},
+	"ready": {"ru": "ГОТОВО", "en": "READY"},
+	"claim": {"ru": "ЗАБРАТЬ ✨", "en": "CLAIM ✨"},
+	"locked": {"ru": "🔒 закрыто", "en": "🔒 locked"},
+	# нижнее меню / тултипы
+	"tab_upgrade": {"ru": "Прокачка", "en": "Upgrade"},
+	"tab_gear": {"ru": "Экипировка", "en": "Gear"},
+	"tab_prestige": {"ru": "Престиж", "en": "Prestige"},
+	"tab_more": {"ru": "Ещё", "en": "More"},
+	# заголовки панелей
+	"t_upgrade": {"ru": "📊 ПРОКАЧКА ОТРЯДА", "en": "📊 SQUAD UPGRADE"},
+	"t_gear": {"ru": "🦾 ЭКИПИРОВКА БОЙЦА", "en": "🦾 FIGHTER GEAR"},
+	"t_prestige": {"ru": "♻ ПРЕСТИЖ", "en": "♻ PRESTIGE"},
+	"t_settings": {"ru": "⚙ НАСТРОЙКИ", "en": "⚙ SETTINGS"},
+	"t_map": {"ru": "🗺 КАРТА ЛОКАЦИЙ", "en": "🗺 LOCATIONS MAP"},
+	# меню «Ещё»
+	"m_story": {"ru": "📖 Сюжет", "en": "📖 Story"},
+	"m_rewards": {"ru": "🎁 Награды", "en": "🎁 Rewards"},
+	"m_map": {"ru": "🗺 Карта локаций", "en": "🗺 Locations map"},
+	"m_clans": {"ru": "🛡 Кланы", "en": "🛡 Clans"},
+	"m_settings": {"ru": "⚙ Настройки", "en": "⚙ Settings"},
+	# настройки
+	"set_lang": {"ru": "🌐 Язык", "en": "🌐 Language"},
+	"set_sci": {"ru": "Научные числа", "en": "Scientific numbers"},
+	"set_reset": {"ru": "Сбросить прогресс", "en": "Reset progress"},
+}
+func _t(k: String) -> String:
+	var e: Dictionary = TR.get(k, {})
+	return str(e.get(lang, e.get("ru", k)))
 func _fb_init() -> void:
 	if not OS.has_feature("web"): return
 	var js := """
@@ -1795,7 +1831,16 @@ func _toggle_settings() -> void:
 	settings_panel.visible = not settings_panel.visible
 	_refresh_settings()
 
+func _apply_lang() -> void:   # применить смену языка к постоянному UI (панели берут _t при открытии)
+	_refresh_settings()
+	if inv_btn: inv_btn.tooltip_text = _t("tab_upgrade")
+	if impl_btn: impl_btn.tooltip_text = _t("tab_gear")
+	if more_btn: more_btn.tooltip_text = _t("tab_more")
+	_popup_center("✅ " + ("English" if lang == "en" else "Русский"), Color("#00f0ff"), 1.4)
+
 func _refresh_settings() -> void:
+	if lang_btn:
+		lang_btn.text = "🌐 Язык / Language:  %s" % ("Русский 🇷🇺" if lang == "ru" else "English 🇬🇧")
 	if set_dmg_btn:
 		set_dmg_btn.text = "Цифры урона над врагами: %s" % ("ВКЛ ✅" if show_dmg else "ВЫКЛ ⬜")
 	if set_cd_btn:
@@ -1820,6 +1865,9 @@ func _build_settings() -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14)
 	v.position = Vector2(30, 130); v.size = Vector2(W - 60, 0)
 	settings_panel.add_child(v)
+	lang_btn = Button.new(); lang_btn.add_theme_font_size_override("font_size", 16); lang_btn.custom_minimum_size = Vector2(0, 52)
+	lang_btn.pressed.connect(func(): lang = ("en" if lang == "ru" else "ru"); _save(); _apply_lang())
+	v.add_child(lang_btn)
 	set_dmg_btn = Button.new(); set_dmg_btn.add_theme_font_size_override("font_size", 16); set_dmg_btn.custom_minimum_size = Vector2(0, 52)
 	set_dmg_btn.pressed.connect(func(): show_dmg = not show_dmg; _save(); _refresh_settings())
 	v.add_child(set_dmg_btn)
@@ -2006,7 +2054,7 @@ func _save() -> void:
 	for hh in heroes:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
-		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
+		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
@@ -2038,6 +2086,8 @@ func _load() -> void:
 	for k in d.keys():
 		if d[k] == null: d.erase(k)
 	nick = str(d.get("nick", ""))
+	lang = str(d.get("lang", "ru"))
+	if lang != "ru" and lang != "en": lang = "ru"
 	show_dmg = bool(d.get("show_dmg", true))
 	show_cd = bool(d.get("show_cd", true))
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
@@ -3746,11 +3796,11 @@ func _open_more() -> void:
 	var rew_n := _dq_ready_count() + _bp_unclaimed_count() + _ach_claimable()
 	var rew_b := "   ●%d" % rew_n if rew_n > 0 else ""
 	_open_submenu("☰ ЕЩЁ", [
-		["📖  Сюжет" + story_b, Callable(self, "_open_story_group")],
-		["🎁  Награды" + rew_b, Callable(self, "_open_rewards_group")],
-		["🗺  Карта локаций", Callable(self, "_open_map")],
-		["🛡  Кланы" + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
-		["⚙  Настройки", Callable(self, "_toggle_settings")],
+		[_t("m_story") + story_b, Callable(self, "_open_story_group")],
+		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
+		[_t("m_map"), Callable(self, "_open_map")],
+		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
+		[_t("m_settings"), Callable(self, "_toggle_settings")],
 		["🔄  v%s · обновить игру" % VERSION, Callable(self, "_force_update")],
 	])
 
@@ -4102,7 +4152,7 @@ func _build_inventory() -> void:
 	inv_panel.add_child(bg)
 
 	var title := Label.new()
-	title.text = "📊 ПРОКАЧКА ОТРЯДА"
+	title.text = _t("t_upgrade")
 	title.add_theme_color_override("font_color", Color("#ffb02e"))
 	title.add_theme_font_size_override("font_size", 26)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -4493,7 +4543,7 @@ func _build_implants() -> void:
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_impl())
 	impl_panel.add_child(bg)
 	var title := Label.new()
-	title.text = "🦾 ЭКИПИРОВКА БОЙЦА"
+	title.text = _t("t_gear")
 	title.add_theme_color_override("font_color", Color("#00f0ff"))
 	title.add_theme_font_size_override("font_size", 22)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
