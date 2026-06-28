@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.7" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.8" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -58,6 +58,15 @@ var set_cd_btn: Button
 var settings_panel: Control
 var set_dmg_btn: Button
 var lang_btn: Button
+var settings_title: Label    # построенные-однажды строки настроек (рефрешим при смене языка)
+var settings_ver: Label
+var recs_btn: Button
+var cache_btn: Button
+var nick_lbl: Label
+var save_nick_btn: Button
+var settings_close: Button
+var reboot_title: Label       # заголовок/закрыть панели престижа (build-once → рефреш по языку)
+var reboot_close: Button
 var nick_show: Label
 var set_nick_input: LineEdit
 # БОТ-ПЛЕЙТЕСТЕР (godot --headless -- --bot): сам играет, логирует TTSTATE
@@ -1829,12 +1838,12 @@ func _build_reboot() -> void:
 	bg.color = Color(0.05, 0.04, 0.09, 0.99); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_reboot())
 	reboot_panel.add_child(bg)
-	var title := Label.new()
-	title.text = _t("rb_title")
-	title.add_theme_color_override("font_color", Color("#b46bff")); title.add_theme_font_size_override("font_size", 21)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.position = Vector2(0, 24); title.size = Vector2(W, 30)
-	reboot_panel.add_child(title)
+	reboot_title = Label.new()
+	reboot_title.text = _t("rb_title")
+	reboot_title.add_theme_color_override("font_color", Color("#b46bff")); reboot_title.add_theme_font_size_override("font_size", 21)
+	reboot_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reboot_title.position = Vector2(0, 24); reboot_title.size = Vector2(W, 30)
+	reboot_panel.add_child(reboot_title)
 	_add_help(reboot_panel, _t("rb_help_t"), _t("rb_help_b"))
 	reboot_info = Label.new()
 	reboot_info.add_theme_font_size_override("font_size", 14); reboot_info.add_theme_color_override("font_color", Color("#cdbbe8"))
@@ -1856,13 +1865,15 @@ func _build_reboot() -> void:
 	reboot_list = VBoxContainer.new(); reboot_list.add_theme_constant_override("separation", 8)
 	reboot_list.custom_minimum_size = Vector2(540, 0)
 	sc.add_child(reboot_list)
-	var close := Button.new()
-	close.text = _t("close_caps"); close.add_theme_font_size_override("font_size", 16)
-	close.custom_minimum_size = Vector2(200, 48); close.position = Vector2(W * 0.5 - 100, H - 56)
-	close.pressed.connect(_toggle_reboot)
-	reboot_panel.add_child(close)
+	reboot_close = Button.new()
+	reboot_close.text = _t("close_caps"); reboot_close.add_theme_font_size_override("font_size", 16)
+	reboot_close.custom_minimum_size = Vector2(200, 48); reboot_close.position = Vector2(W * 0.5 - 100, H - 56)
+	reboot_close.pressed.connect(_toggle_reboot)
+	reboot_panel.add_child(reboot_close)
 
 func _refresh_reboot() -> void:
+	if reboot_title: reboot_title.text = _t("rb_title")   # build-once строки → язык
+	if reboot_close: reboot_close.text = _t("close_caps")
 	var unlocked := _can_prestige()
 	# чисто: только мощь + ядра. Условие перезагрузки — на самой кнопке (не грузим экран).
 	reboot_info.text = _t("rb_info") % [_gsep(_party_power()), cores]
@@ -2294,12 +2305,21 @@ func _toggle_settings() -> void:
 
 func _apply_lang() -> void:   # применить смену языка к постоянному UI (панели берут _t при открытии)
 	_refresh_settings()
+	if reboot_panel: _refresh_reboot()   # престиж тоже построен однажды — рефрешим строки
 	if inv_btn: inv_btn.tooltip_text = _t("tab_upgrade")
 	if impl_btn: impl_btn.tooltip_text = _t("tab_gear")
 	if more_btn: more_btn.tooltip_text = _t("tab_more")
 	_popup_center("✅ " + ("English" if lang == "en" else "Русский"), Color("#00f0ff"), 1.4)
 
 func _refresh_settings() -> void:
+	# статичные строки настроек (build-once) — пере-применяем под текущий язык
+	if settings_title: settings_title.text = _t("t_settings")
+	if settings_ver: settings_ver.text = _t("set_version") + " " + VERSION
+	if recs_btn: recs_btn.text = _t("set_records")
+	if cache_btn: cache_btn.text = _t("set_refresh")
+	if nick_lbl: nick_lbl.text = _t("set_nick_lbl")
+	if save_nick_btn: save_nick_btn.text = _t("set_nick_btn")
+	if settings_close: settings_close.text = _t("close_caps")
 	if lang_btn:
 		lang_btn.text = _t("set_lang_btn") % ("Русский 🇷🇺" if lang == "ru" else "English 🇬🇧")
 	if set_dmg_btn:
@@ -2319,10 +2339,10 @@ func _build_settings() -> void:
 	bg.color = Color(0.04, 0.04, 0.08, 0.99); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: settings_panel.visible = false)
 	settings_panel.add_child(bg)
-	var t := Label.new(); t.text = _t("t_settings"); t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; t.position = Vector2(0, 50); t.size = Vector2(W, 34)
-	settings_panel.add_child(t)
-	var sver := Label.new(); sver.text = _t("set_version") + " " + VERSION; sver.add_theme_font_size_override("font_size", 14); sver.add_theme_color_override("font_color", Color("#ffd24a")); sver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sver.position = Vector2(0, 86); sver.size = Vector2(W, 20)
-	settings_panel.add_child(sver)
+	settings_title = Label.new(); settings_title.text = _t("t_settings"); settings_title.add_theme_font_size_override("font_size", 26); settings_title.add_theme_color_override("font_color", Color("#00f0ff")); settings_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; settings_title.position = Vector2(0, 50); settings_title.size = Vector2(W, 34)
+	settings_panel.add_child(settings_title)
+	settings_ver = Label.new(); settings_ver.text = _t("set_version") + " " + VERSION; settings_ver.add_theme_font_size_override("font_size", 14); settings_ver.add_theme_color_override("font_color", Color("#ffd24a")); settings_ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; settings_ver.position = Vector2(0, 86); settings_ver.size = Vector2(W, 20)
+	settings_panel.add_child(settings_ver)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14)
 	v.position = Vector2(30, 130); v.size = Vector2(W - 60, 0)
 	settings_panel.add_child(v)
@@ -2335,22 +2355,22 @@ func _build_settings() -> void:
 	set_cd_btn = Button.new(); set_cd_btn.add_theme_font_size_override("font_size", 16); set_cd_btn.custom_minimum_size = Vector2(0, 52)
 	set_cd_btn.pressed.connect(func(): show_cd = not show_cd; _save(); _refresh_settings())
 	v.add_child(set_cd_btn)
-	var recs_btn := Button.new(); recs_btn.text = _t("set_records"); recs_btn.add_theme_font_size_override("font_size", 16); recs_btn.custom_minimum_size = Vector2(0, 52)
+	recs_btn = Button.new(); recs_btn.text = _t("set_records"); recs_btn.add_theme_font_size_override("font_size", 16); recs_btn.custom_minimum_size = Vector2(0, 52)
 	recs_btn.pressed.connect(_toggle_stats)
 	v.add_child(recs_btn)
-	var cache_btn := Button.new(); cache_btn.text = _t("set_refresh"); cache_btn.add_theme_font_size_override("font_size", 15); cache_btn.custom_minimum_size = Vector2(0, 50)
+	cache_btn = Button.new(); cache_btn.text = _t("set_refresh"); cache_btn.add_theme_font_size_override("font_size", 15); cache_btn.custom_minimum_size = Vector2(0, 50)
 	cache_btn.pressed.connect(_clear_cache)
 	v.add_child(cache_btn)
 	# смена ника (нативный браузерный ввод)
-	var nl := Label.new(); nl.text = _t("set_nick_lbl"); nl.add_theme_font_size_override("font_size", 14); nl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nl)
-	var save_nick := Button.new(); save_nick.text = _t("set_nick_btn"); save_nick.add_theme_font_size_override("font_size", 15); save_nick.custom_minimum_size = Vector2(0, 46)
-	save_nick.pressed.connect(func():
+	nick_lbl = Label.new(); nick_lbl.text = _t("set_nick_lbl"); nick_lbl.add_theme_font_size_override("font_size", 14); nick_lbl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nick_lbl)
+	save_nick_btn = Button.new(); save_nick_btn.text = _t("set_nick_btn"); save_nick_btn.add_theme_font_size_override("font_size", 15); save_nick_btn.custom_minimum_size = Vector2(0, 46)
+	save_nick_btn.pressed.connect(func():
 		_prompt_nick()
 		_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center(_t("set_nick_saved") % nick, Color("#00f0ff")))
-	v.add_child(save_nick)
-	var close := Button.new(); close.text = _t("close_caps"); close.add_theme_font_size_override("font_size", 16); close.custom_minimum_size = Vector2(0, 50)
-	close.pressed.connect(func(): settings_panel.visible = false)
-	v.add_child(close)
+	v.add_child(save_nick_btn)
+	settings_close = Button.new(); settings_close.text = _t("close_caps"); settings_close.add_theme_font_size_override("font_size", 16); settings_close.custom_minimum_size = Vector2(0, 50)
+	settings_close.pressed.connect(func(): settings_panel.visible = false)
+	v.add_child(settings_close)
 
 # === ОКНО РЕКОРДЫ/СТАТИСТИКА (п.7) ===
 func _fmt_time(sec) -> String:
