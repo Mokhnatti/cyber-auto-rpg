@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.1" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.2" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -285,9 +285,18 @@ const LOCATIONS := [
 	 "desc_en": "Slums — psychosis from cheap ZenoCore implants. Where Vector began.",
 	 "quest": {"item": "🔪 Бритва главаря", "item_en": "🔪 Gang Leader's Razor", "boss": "Главарь трущоб", "reward": "weapon", "contact": "🐀 Крыс", "contact_en": "🐀 Rat",
 	           "chat": ["Ты тот курьер, которого ZenoCore списали? 🐀 Слыхал.", "Не дёргайся, я свой. Крыс. Тут все так зовут.", "Работа есть. Главарь трущоб таскает фирменную бритву — заказчик за неё отвалит ствол на выбор 🔫", "И гляди в оба: местные звереют от дешёвых имплантов. Психоз. Раньше такого не было...", "Зачисти Трущобы, выбей бритву с босса. Не подведи, Вектор."],
-	           "moral": {"id": "batch", "prompt": "Ещё момент. Тут склад нераспечатанных коробок — те самые импланты ZenoCore. Местные расхватают как «бесплатную силу». Что делать будем?",
-	                     "a": {"label": "🔥 Сжечь партию", "result": "Трущобы остались без «брони», Крыс в ярости — но психоз не расползётся. Ты заплатил репутацией ради чужих.", "karma": 1, "scrap": 0},
-	                     "b": {"label": "💰 Дать толкнуть", "result": "Крыс доволен, карман потяжелел (+400 лом). Но эти импланты ещё вернутся к тебе психами. ⚠️", "karma": -1, "scrap": 400}},
+	           "chat_en": ["You're that courier ZenoCore wrote off? 🐀 Heard of you.", "Easy. I'm a friend. Name's Rat. Everyone calls me that here.", "Got a job. The slum boss carries a branded razor — client will pay a weapon of your choice for it 🔫", "And keep your eyes open: locals are going feral from cheap implants. Psychosis. Never used to be this bad...", "Clear the Slums, knock the razor off the boss. Don't let me down, Vector."],
+	           "moral": {"id": "batch",
+	                     "prompt": "Ещё момент. Тут склад нераспечатанных коробок — те самые импланты ZenoCore. Местные расхватают как «бесплатную силу». Что делать будем?",
+	                     "prompt_en": "One more thing. There's a warehouse of unopened boxes here — those very ZenoCore implants. Locals will grab them as 'free power.' What do we do?",
+	                     "a": {"label": "🔥 Сжечь партию", "label_en": "🔥 Burn the batch",
+	                           "result": "Трущобы остались без «брони», Крыс в ярости — но психоз не расползётся. Ты заплатил репутацией ради чужих.",
+	                           "result_en": "The Slums lost their 'armor', Rat is furious — but the psychosis won't spread. You paid with reputation for strangers.",
+	                           "karma": 1, "scrap": 0},
+	                     "b": {"label": "💰 Дать толкнуть", "label_en": "💰 Let them move it",
+	                           "result": "Крыс доволен, карман потяжелел (+400 лом). Но эти импланты ещё вернутся к тебе психами. ⚠️",
+	                           "result_en": "Rat's happy, your pocket's heavier (+400 scrap). But those implants will come back to you as psychos. ⚠️",
+	                           "karma": -1, "scrap": 400}},
 	           "dialog": "Крыс: «Главарь носит фирменную бритву. Достань — заказчик отвалит ствол. И берегись психов: их плодят дешёвые импланты.»"}},
 	{"id": "corp",   "name": "Корп-район",   "name_en": "Corp District", "icon": "🏢", "unlock": 8,
 	 "pool": ["grunt", "armor", "shield", "archer", "healer"],
@@ -296,9 +305,18 @@ const LOCATIONS := [
 	 "desc_en": "ZenoCore Corp District — where 'affordable augmentation' lives on paper.",
 	 "quest": {"item": "💳 КПК Холта", "item_en": "💳 Holt's PDA", "boss": "Менеджер Холт", "reward": "weapon", "contact": "💼 Агент Ким", "contact_en": "💼 Agent Kim",
 	           "chat": ["Вектор. У меня контракт под тебя 💼", "Я аналитик ZenoCore. Та программа субсидий, что плодит психоз... я визировала отгрузки. Я знала.", "В КПК менеджера Холта — тред «откат партии». Доказательство, что не остановили нарочно.", "Выбей КПК с него. Пушка на выбор твоя.", "И... спасибо, что не спрашиваешь, почему я это сливаю."],
-	           "moral": {"id": "holt", "prompt": "Холт на коленях: «У меня дети. Я подписал «ещё один цикл наблюдений». Один. Дай уйти — я исчезну.» Сдать его публике как лицо скандала — или отпустить?",
-	                     "a": {"label": "🤝 Отпустить", "result": "Ты дал ему уйти. Не монстр — просто человек, что не нажал «стоп». Скандал останется без лица.", "karma": 1, "scrap": 0},
-	                     "b": {"label": "📢 Сдать публике", "result": "Холт — теперь лицо скандала ZenoCore (+500 лом за слив). Но корпа запомнила твоё лицо. ⚠️", "karma": -1, "scrap": 500}},
+	           "chat_en": ["Vector. I have a contract for you 💼", "I'm a ZenoCore analyst. That subsidy programme that's breeding the psychosis... I signed off on the shipments. I knew.", "In Manager Holt's PDA — a thread called 'batch recall'. Proof they didn't stop it on purpose.", "Knock the PDA off him. A weapon of your choice is yours.", "And... thank you for not asking why I'm leaking this."],
+	           "moral": {"id": "holt",
+	                     "prompt": "Холт на коленях: «У меня дети. Я подписал «ещё один цикл наблюдений». Один. Дай уйти — я исчезну.» Сдать его публике как лицо скандала — или отпустить?",
+	                     "prompt_en": "Holt on his knees: «I have kids. I signed off on 'one more observation cycle.' Just one. Let me go — I'll disappear.» Hand him to the public as the face of the scandal — or let him go?",
+	                     "a": {"label": "🤝 Отпустить", "label_en": "🤝 Let him go",
+	                           "result": "Ты дал ему уйти. Не монстр — просто человек, что не нажал «стоп». Скандал останется без лица.",
+	                           "result_en": "You let him go. Not a monster — just a man who didn't press stop. The scandal will have no face.",
+	                           "karma": 1, "scrap": 0},
+	                     "b": {"label": "📢 Сдать публике", "label_en": "📢 Expose him",
+	                           "result": "Холт — теперь лицо скандала ZenoCore (+500 лом за слив). Но корпа запомнила твоё лицо. ⚠️",
+	                           "result_en": "Holt is now the face of the ZenoCore scandal (+500 scrap for the leak). But the corp remembers your face. ⚠️",
+	                           "karma": -1, "scrap": 500}},
 	           "dialog": "Ким: «В КПК Холта — доказательство, что партию психозных имплантов не отозвали ради премии. Выбей его. Я знала и молчала — хватит.»"}},
 	{"id": "docks",  "name": "Доки",         "name_en": "Docks",         "icon": "⚓", "unlock": 16,
 	 "pool": ["grunt", "swift", "armor", "bomber", "archer"],
@@ -307,9 +325,18 @@ const LOCATIONS := [
 	 "desc_en": "The Docks — contraband psychosis shipments, drones, heavy armor.",
 	 "quest": {"item": "📦 Чёрный груз", "item_en": "📦 Black Cargo", "boss": "Босс доков", "reward": "weapon", "contact": "⚓ Боцман", "contact_en": "⚓ Bosun",
 	           "chat": ["Слышь, курьер. Боцман на связи ⚓", "На причале — ящик ZenoCore. Та самая партия. Психозная.", "Вожу и для них, и для тебя. Лояльность у меня по прайсу — не обижайся.", "Вышиби ящик с босса доков. Пушка твоя.", "Мне бабки очень нужны. Не спрашивай зачем."],
-	           "moral": {"id": "bosun", "prompt": "Боцман палится: он слил твой маршрут ZenoCore — за долг дочери в кабале. Прижать его — или понять?",
-	                     "a": {"label": "🫂 Понять", "result": "Ты понял Боцмана. Он сломался от того, что его не убили — теперь он твой, без прайса.", "karma": 1, "scrap": 0},
-	                     "b": {"label": "🔫 Прижать к стене", "result": "Ты выбил из Боцмана компенсацию (+500 лом). Но доверие сожжено — он больше не прикроет.", "karma": -1, "scrap": 500}},
+	           "chat_en": ["Hey, courier. Bosun here ⚓", "There's a crate on the pier — ZenoCore. That very shipment. The psychosis one.", "I haul for both sides. Loyalty's on the price list — no hard feelings.", "Knock the crate off the dock boss. Your weapon.", "I really need the money. Don't ask why."],
+	           "moral": {"id": "bosun",
+	                     "prompt": "Боцман палится: он слил твой маршрут ZenoCore — за долг дочери в кабале. Прижать его — или понять?",
+	                     "prompt_en": "Bosun confesses: he leaked your route to ZenoCore — to pay off his daughter's debt. Squeeze him — or understand?",
+	                     "a": {"label": "🫂 Понять", "label_en": "🫂 Understand",
+	                           "result": "Ты понял Боцмана. Он сломался от того, что его не убили — теперь он твой, без прайса.",
+	                           "result_en": "You understood the Bosun. He broke from the fact they didn't kill him — now he's yours, no price tag.",
+	                           "karma": 1, "scrap": 0},
+	                     "b": {"label": "🔫 Прижать к стене", "label_en": "🔫 Pin him to the wall",
+	                           "result": "Ты выбил из Боцмана компенсацию (+500 лом). Но доверие сожжено — он больше не прикроет.",
+	                           "result_en": "You got compensation out of the Bosun (+500 scrap). But the trust is burned — he won't cover for you again.",
+	                           "karma": -1, "scrap": 500}},
 	           "dialog": "Боцман: «Ящик ZenoCore застрял на причале. Вышиби с босса. Я вожу для всех — кто платит. Не суди.»"}},
 	{"id": "core",   "name": "Нео-Ядро",     "name_en": "Neo-Core",      "icon": "🌐", "unlock": 26,
 	 "pool": ["grunt", "swift", "armor", "swarm", "archer", "bomber", "healer", "shield"],
@@ -318,6 +345,7 @@ const LOCATIONS := [
 	 "desc_en": "Neo-Core — where whatever broke Vector's life resides.",
 	 "quest": {"item": "🧠 Чип PHANTOM-LIMB", "item_en": "🧠 PHANTOM-LIMB Chip", "boss": "Страж Ядра", "reward": "weapon", "contact": "📡 Сигнал", "contact_en": "📡 Signal",
 	           "chat": ["...слышишь меня, Вектор? Это не Крыс и не Ким 📡", "Зови меня Сигнал. Помеха на линии. Шум. Тот, кто слушает.", "В Ядре — чип. Он объяснит твои девять секунд. Те, которых ты не помнишь.", "Дойди до Стража Ядра. Вырви чип. Я проведу.", "...я был там. Когда у тебя в голове всё сломалось. Я помню это изнутри."],
+	           "chat_en": ["...can you hear me, Vector? Not Rat, not Kim 📡", "Call me Signal. A glitch on the line. Noise. The one who listens.", "In the Core — a chip. It will explain your nine seconds. The ones you can't remember.", "Reach the Core Guardian. Pull the chip. I'll guide you.", "...I was there. When everything broke inside your head. I remember it from the inside."],
 	           "dialog": "Сигнал: «В Ядре — чип, что объяснит твои девять секунд. Дойди до Стража, вырви его. Я проведу — я был там, внутри.»"}},
 ]
 var cur_location := 0       # индекс активной локации
@@ -328,9 +356,9 @@ var tone_counts := {"empathy": 0, "anger": 0, "cold": 0}
 var moral_choices := {}     # id морального выбора → "a"/"b" (сюжетные развилки)
 var karma := 0              # суммарная карма выборов (нарративный счётчик, не бафф)
 const TONES := {
-	"empathy": {"icon": "🫶", "title": "Сострадающий", "reply": "...Ладно. Но без лишней крови, если выйдет."},
-	"anger":   {"icon": "😡", "title": "Яростный",     "reply": "Хорошо. Кто-то за это ответит."},
-	"cold":    {"icon": "🧊", "title": "Холодный",      "reply": "Цена?"},
+	"empathy": {"icon": "🫶", "title": "Сострадающий", "title_en": "Compassionate", "reply": "...Ладно. Но без лишней крови, если выйдет.", "reply_en": "...Alright. But let's keep the bloodshed low, if we can."},
+	"anger":   {"icon": "😡", "title": "Яростный",     "title_en": "Furious",       "reply": "Хорошо. Кто-то за это ответит.",             "reply_en": "Fine. Someone's going to answer for this."},
+	"cold":    {"icon": "🧊", "title": "Холодный",      "title_en": "Cold",          "reply": "Цена?",                                       "reply_en": "Price?"},
 }
 func _tone_dominant() -> String:
 	var best := ""; var bn := 0; var total := 0
@@ -345,15 +373,39 @@ func _tone_dominant() -> String:
 # Фрагменты восстанавливаются по стадиям (front-loaded: ранние часто). 3 из 9 — подделки PHANTOM-LIMB
 # с ловимым несоответствием (противоречат известным фактам). Игрок помечает подделки.
 const FRAGMENTS := [
-	{"unlock": 2,  "fake": false, "text": "Колонна вошла в туннель 14-го этажа. Маршрутизатор гудел ровно. Ты вёл — спокойно, как всегда."},
-	{"unlock": 4,  "fake": false, "text": "В 0:02 кольнуло в виске. Не боль — будто кто-то ВНУТРИ впервые открыл глаза."},
-	{"unlock": 6,  "fake": false, "text": "Тэо крикнул по связи: «Вектор, левый борт!» Ты слышал его. Ты точно его слышал."},
-	{"unlock": 9,  "fake": true,  "text": "Ты сам убрал руки с управления. Ты хотел, чтобы это случилось.", "tell": "Противоречит: ты СЛЫШАЛ Тэо и реагировал — руки были на управлении."},
-	{"unlock": 12, "fake": false, "text": "Маршрутизатор завис. Экран — белый шум. Девять секунд ты не управлял ничем."},
-	{"unlock": 16, "fake": true,  "text": "Тэо успел выпрыгнуть. Ты видел, как он встал и ушёл в дым — живой.", "tell": "Противоречит: Тэо погиб, тело не нашли. Этого не было."},
-	{"unlock": 20, "fake": false, "text": "Картинка вернулась — колонна горела. Тэо не отвечал. Груз исчез."},
-	{"unlock": 25, "fake": true,  "text": "Корпа была права: цифры по психозу — просто шум выборки. Твоей вины нет, расслабься.", "tell": "Противоречит: это легенда ZenoCore, а не твоя память. Кто-то вложил её тебе."},
-	{"unlock": 30, "fake": false, "text": "Что-то осталось в твоей голове после тех секунд. Оно до сих пор слушает. И иногда — говорит."},
+	{"unlock": 2,  "fake": false,
+	 "text": "Колонна вошла в туннель 14-го этажа. Маршрутизатор гудел ровно. Ты вёл — спокойно, как всегда.",
+	 "text_en": "The column entered the 14th floor tunnel. The router hummed steadily. You led — calm, like always."},
+	{"unlock": 4,  "fake": false,
+	 "text": "В 0:02 кольнуло в виске. Не боль — будто кто-то ВНУТРИ впервые открыл глаза.",
+	 "text_en": "At 0:02 a sting in your temple. Not pain — as if someone INSIDE opened their eyes for the first time."},
+	{"unlock": 6,  "fake": false,
+	 "text": "Тэо крикнул по связи: «Вектор, левый борт!» Ты слышал его. Ты точно его слышал.",
+	 "text_en": "Teo shouted over comms: «Vector, port side!» You heard him. You definitely heard him."},
+	{"unlock": 9,  "fake": true,
+	 "text": "Ты сам убрал руки с управления. Ты хотел, чтобы это случилось.",
+	 "text_en": "You took your own hands off the controls. You wanted it to happen.",
+	 "tell": "Противоречит: ты СЛЫШАЛ Тэо и реагировал — руки были на управлении.",
+	 "tell_en": "Contradicts: you HEARD Teo and were reacting — your hands were on the controls."},
+	{"unlock": 12, "fake": false,
+	 "text": "Маршрутизатор завис. Экран — белый шум. Девять секунд ты не управлял ничем.",
+	 "text_en": "The router froze. Screen — white noise. For nine seconds you controlled nothing."},
+	{"unlock": 16, "fake": true,
+	 "text": "Тэо успел выпрыгнуть. Ты видел, как он встал и ушёл в дым — живой.",
+	 "text_en": "Teo managed to jump out. You saw him stand and walk into the smoke — alive.",
+	 "tell": "Противоречит: Тэо погиб, тело не нашли. Этого не было.",
+	 "tell_en": "Contradicts: Teo died, the body was never found. This didn't happen."},
+	{"unlock": 20, "fake": false,
+	 "text": "Картинка вернулась — колонна горела. Тэо не отвечал. Груз исчез.",
+	 "text_en": "Vision returned — the column was burning. Teo wasn't answering. The cargo was gone."},
+	{"unlock": 25, "fake": true,
+	 "text": "Корпа была права: цифры по психозу — просто шум выборки. Твоей вины нет, расслабься.",
+	 "text_en": "The corp was right: the psychosis numbers are just sampling noise. It's not your fault, relax.",
+	 "tell": "Противоречит: это легенда ZenoCore, а не твоя память. Кто-то вложил её тебе.",
+	 "tell_en": "Contradicts: this is ZenoCore's cover story, not your memory. Someone planted it."},
+	{"unlock": 30, "fake": false,
+	 "text": "Что-то осталось в твоей голове после тех секунд. Оно до сих пор слушает. И иногда — говорит.",
+	 "text_en": "Something stayed in your head after those seconds. It still listens. And sometimes — speaks."},
 ]
 var frag_flags := {}        # idx фрагмента → помечен подделкой (bool)
 var case_solved := false
@@ -623,6 +675,44 @@ const TR := {
 	"upg_help_b":   {"ru": "Повышай УРОВЕНЬ бойцов за золото 💰. Уровень множит их урон и здоровье — основа силы.\n\n• Чем выше уровень — тем дороже следующий.\n• Кнопка ×1/×10/×100 — сколько уровней брать за раз.\n• Качай отстающих или вливай в любимца под свой билд.\n\nЗолото капает само + падает с врагов. Не хватает — фарми текущую стадию.", "en": "Level up FIGHTERS for gold 💰. Level multiplies their damage and HP — foundation of power.\n\n• Higher level = more expensive next level.\n• ×1/×10/×100 button — how many levels to buy at once.\n• Upgrade laggards or pour into your favorite for your build.\n\nGold trickles in + drops from enemies. Not enough — farm the current stage."},
 	"gear_help_t":  {"ru": "Экипировка", "en": "Gear"},
 	"gear_help_b":  {"ru": "Надевай выпавший ЛУТ бойцам.\n\n• Выбери бойца портретом слева (подсветка = активный).\n• ОРУЖИЕ 🔫 = урон. МОДУЛЬ 🦾 = защита/утилита (HP, заряд ульты).\n• Тап по предмету в списке → сравнить и надеть лучший.\n• Цвет = редкость (серый→зелёный→синий→фиолет). «НАДЕТО» = то что носишь.\n• ℹ на портрете = описание класса и ульты.\n\nЛут падает с волн и боссов под конкретного бойца.", "en": "Equip dropped LOOT to fighters.\n\n• Choose a fighter by portrait on the left (highlight = active).\n• WEAPON 🔫 = damage. MODULE 🦾 = defense/utility (HP, ult charge).\n• Tap an item → compare and equip the best.\n• Color = rarity (grey→green→blue→purple). «EQUIPPED» = what you're wearing.\n• ℹ on portrait = class and ult description.\n\nLoot drops from waves and bosses for a specific fighter."},
+	# сюжет — квест-чат
+	"quest_online":      {"ru": "🟢 в сети", "en": "🟢 online"},
+	"quest_reply_prompt":{"ru": "— что ответишь? —", "en": "— what's your reply? —"},
+	"quest_goal":        {"ru": "🎯 Цель: «%s» с босса «%s» · 🎁 пушка на выбор", "en": "🎯 Target: «%s» from boss «%s» · 🎁 weapon of your choice"},
+	"quest_tone_line":   {"ru": "〔 ты держишь линию: %s %s 〕", "en": "〔 you hold the line: %s %s 〕"},
+	"no_msgs":           {"ru": "📭 Нет новых сообщений. Открой район на 🗺 карте.", "en": "📭 No new messages. Open a district on the 🗺 map."},
+	# досье Вектора
+	"dossier_title":     {"ru": "📁 ДОСЬЕ: ВЕКТОР", "en": "📁 DOSSIER: VECTOR"},
+	"dossier_bio":       {"ru": "Экс-курьер ZenoCore. Списан после «инцидента на 14-м этаже»: боевой маршрутизатор-имплант завис на 9 секунд, погиб напарник Тэо. Этих девяти секунд Вектор не помнит — и не знает, виноват ли.", "en": "Ex-ZenoCore courier. Written off after the '14th floor incident': a combat router implant froze for 9 seconds, partner Teo was killed. Vector has no memory of those nine seconds — and doesn't know if he's to blame."},
+	"dossier_char":      {"ru": "— ХАРАКТЕР —", "en": "— CHARACTER —"},
+	"dossier_no_char":   {"ru": "❓ Ещё не определился", "en": "❓ Not decided yet"},
+	"dossier_conscience":{"ru": "— СОВЕСТЬ —", "en": "— CONSCIENCE —"},
+	"karma_neutral":     {"ru": "⚖️ Прагматик", "en": "⚖️ Pragmatist"},
+	"karma_good":        {"ru": "🕊 Милосердный (+%d)", "en": "🕊 Merciful (+%d)"},
+	"karma_bad":         {"ru": "💀 Безжалостный (%d)", "en": "💀 Ruthless (%d)"},
+	"dossier_decisions": {"ru": "— РЕШЕНИЯ —", "en": "— DECISIONS —"},
+	"dossier_no_dec":    {"ru": "Пока ни одного выбора. Иди по сюжету.", "en": "No choices made yet. Follow the story."},
+	"dossier_close":     {"ru": "✕ закрыть", "en": "✕ close"},
+	# дело «9 секунд»
+	"case_title":        {"ru": "📓 ДЕЛО: ДЕВЯТЬ СЕКУНД", "en": "📓 CASE: NINE SECONDS"},
+	"case_sub":          {"ru": "Те 9 секунд, которых ты не помнишь. Часть «воспоминаний» подброшена ИИ — помечай подделки 🚩\n🔎 Открыто %d/9 · подделок среди них: %d", "en": "Those 9 seconds you can't remember. Some 'memories' were planted by AI — flag the fakes 🚩\n🔎 Revealed %d/9 · fakes among them: %d"},
+	"case_empty":        {"ru": "Память пуста. Зачищай стадии — фрагменты вернутся (1-й со стадии 2).", "en": "Memory empty. Clear stages — fragments will return (1st from stage 2)."},
+	"case_frag_hdr":     {"ru": "🧩 Фрагмент %d", "en": "🧩 Fragment %d"},
+	"case_fake_lbl":     {"ru": "⚠️ ПОДДЕЛКА ИИ. %s", "en": "⚠️ AI FAKE. %s"},
+	"case_flag_on":      {"ru": "🚩 помечено подделкой", "en": "🚩 flagged as fake"},
+	"case_flag_off":     {"ru": "помечу подделкой", "en": "mark as fake"},
+	"case_check_btn":    {"ru": "🔍 ПРОВЕРИТЬ ВЕРСИЮ", "en": "🔍 CHECK THEORY"},
+	"case_solved_title": {"ru": "📓 ДЕЛО РАСКРЫТО — Девять секунд", "en": "📓 CASE SOLVED — Nine Seconds"},
+	"case_solved_body":  {"ru": "Ты вычистил подделки ИИ. Правда: ты НЕ трус и не убирал руки. Прототип PHANTOM-LIMB, что тестили в твоём маршрутизаторе, впервые поймал рассинхрон и заклинил — утянув тебя на девять секунд. Тэо погиб не по твоей вине. А часть того ИИ осталась в твоей голове. Оно слушает. Иногда — говорит.", "en": "You cleared the AI fakes. The truth: you were NOT a coward and did not take your hands off the controls. The PHANTOM-LIMB prototype being tested in your router caught a desync for the first time and froze — pulling you under for nine seconds. Teo's death was not your fault. And a part of that AI stayed in your head. It listens. Sometimes — it speaks."},
+	"case_ok":           {"ru": "✅ Пока сходится. Жди новых фрагментов памяти.", "en": "✅ Checks out so far. Wait for more memory fragments."},
+	"case_fail":         {"ru": "❌ Версия не сходится. Что противоречит фактам?", "en": "❌ Theory doesn't hold. What contradicts the facts?"},
+	"case_close":        {"ru": "✕ закрыть", "en": "✕ close"},
+	# финал
+	"finale_locked":     {"ru": "🏁 Финал откроется после всех 4 актов (%d/4). Иди по сюжету.", "en": "🏁 The finale unlocks after all 4 acts (%d/4). Follow the story."},
+	"finale_case_done":  {"ru": "📓 А девять секунд ты раскрыл: ты не был трусом. И часть его — навсегда с тобой.", "en": "📓 And the nine seconds — you solved that: you were no coward. And a part of it is with you forever."},
+	"finale_case_open":  {"ru": "(Тайна девяти секунд так и не раскрыта — собери фрагменты в 📓 Деле.)", "en": "(The mystery of the nine seconds remains unsolved — collect fragments in the 📓 Case.)"},
+	# кнопка обновления в меню «Ещё»
+	"update_btn":        {"ru": "🔄  v%s · обновить игру", "en": "🔄  v%s · update game"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -905,21 +995,43 @@ const PULSE_LINES := [
 	"🗞 Сеть: «Ещё один киберпсихоз в районе. Власти молчат.»",
 	"📡 Сигнал: «Чем глубже идёшь — тем громче я. Тебе не страшно?»",
 ]
+const PULSE_LINES_EN := [
+	"📡 Signal: «…I still hear you. Don't look back.»",
+	"🗞 Net: «ZenoCore denies any link between subsidies and the psychosis wave.»",
+	"🐀 Rat: «You alive out there? The slums are going wild again.»",
+	"📡 Signal: «Those nine seconds… I got stuck in them too. With you.»",
+	"🗞 Net: «Another cyberpsychosis incident in the district. Authorities silent.»",
+	"📡 Signal: «The deeper you go, the louder I get. Aren't you scared?»",
+]
 const PULSE_SOLVED := [
 	"📡 Сигнал: «Теперь ты знаешь. И всё равно слушаешь меня. Почему?»",
 	"📡 Сигнал: «Я — не Тэо. Я half of you. Половина, которую вырезали.»",
 	"🗞 Сеть: «Утечка: прототип PHANTOM-LIMB тестили на курьерах ZenoCore.»",
 ]
+const PULSE_SOLVED_EN := [
+	"📡 Signal: «Now you know. And you still listen to me. Why?»",
+	"📡 Signal: «I am not Teo. I am half of you. The half they cut out.»",
+	"🗞 Net: «Leak: PHANTOM-LIMB prototype was tested on ZenoCore couriers.»",
+]
 var pulse_t := 0.0
 var pulse_idx := 0
 # === 3 ФИНАЛА (эндгейм-режимы) — по карме после прохождения всех 4 актов ===
 const ENDINGS := {
-	"quiet": {"name": "Тихий протокол", "icon": "🕊", "text": "Ты щадил тех, кого мог. ZenoCore замяла скандал, но трущобы дышат свободнее. Ты выбираешь тишину — фарм без войны. PHANTOM-LIMB молчит… почти.",
-	          "pulse": ["🕊 Тихо. Слишком тихо. Сигнал почти не говорит.", "🗞 Ева Кван: «Прогресс не остановить. Но сегодня — меньше крови.»"]},
-	"wild":  {"name": "Открытый канал", "icon": "🔥", "text": "Ты сжёг мосты и выставил счёт. Сеть знает твоё имя — на тебя открыта охота. Дикий эндшпиль: баунти, перехваты, никакой пощады.",
-	          "pulse": ["🔥 Перехват: за твою голову подняли цену.", "📡 Сеть кипит. Все хотят кусок Вектора."]},
-	"grey":  {"name": "Серый путь", "icon": "🧠", "text": "Ты не уничтожил и не освободил — ты впустил. PHANTOM-LIMB остаётся в голове: комментирует, иногда врёт, иногда помогает. Кооп-в-голове — вы двое, навсегда.",
-	          "pulse": ["🧠 PHANTOM-LIMB: «Левее. Доверься. …или нет. Решай.»", "🧠 PHANTOM-LIMB: «Мы половинки. Я не уйду — и ты это знаешь.»"]},
+	"quiet": {"name": "Тихий протокол", "name_en": "Quiet Protocol", "icon": "🕊",
+	          "text": "Ты щадил тех, кого мог. ZenoCore замяла скандал, но трущобы дышат свободнее. Ты выбираешь тишину — фарм без войны. PHANTOM-LIMB молчит… почти.",
+	          "text_en": "You spared those you could. ZenoCore buried the scandal, but the slums breathe easier. You choose silence — farming without war. PHANTOM-LIMB is quiet… almost.",
+	          "pulse": ["🕊 Тихо. Слишком тихо. Сигнал почти не говорит.", "🗞 Ева Кван: «Прогресс не остановить. Но сегодня — меньше крови.»"],
+	          "pulse_en": ["🕊 Silence. Too much silence. Signal barely speaks now.", "🗞 Eva Kwan: «Progress can't be stopped. But today — less blood.»"]},
+	"wild":  {"name": "Открытый канал", "name_en": "Open Channel", "icon": "🔥",
+	          "text": "Ты сжёг мосты и выставил счёт. Сеть знает твоё имя — на тебя открыта охота. Дикий эндшпиль: баунти, перехваты, никакой пощады.",
+	          "text_en": "You burned your bridges and settled the score. The net knows your name — there's a hunt open on you. Wild endgame: bounties, intercepts, no mercy.",
+	          "pulse": ["🔥 Перехват: за твою голову подняли цену.", "📡 Сеть кипит. Все хотят кусок Вектора."],
+	          "pulse_en": ["🔥 Intercept: the bounty on your head just went up.", "📡 The net is boiling. Everyone wants a piece of Vector."]},
+	"grey":  {"name": "Серый путь", "name_en": "Grey Path", "icon": "🧠",
+	          "text": "Ты не уничтожил и не освободил — ты впустил. PHANTOM-LIMB остаётся в голове: комментирует, иногда врёт, иногда помогает. Кооп-в-голове — вы двое, навсегда.",
+	          "text_en": "You didn't destroy it and didn't free it — you let it in. PHANTOM-LIMB stays in your head: commenting, sometimes lying, sometimes helping. Co-op-in-your-head — the two of you, forever.",
+	          "pulse": ["🧠 PHANTOM-LIMB: «Левее. Доверься. …или нет. Решай.»", "🧠 PHANTOM-LIMB: «Мы половинки. Я не уйду — и ты это знаешь.»"],
+	          "pulse_en": ["🧠 PHANTOM-LIMB: «Left. Trust me. …or don't. You decide.»", "🧠 PHANTOM-LIMB: «We're two halves. I'm not leaving — and you know it.»"]},
 }
 var endgame_mode := ""
 func _all_quests_done() -> bool:
@@ -929,9 +1041,11 @@ func _all_quests_done() -> bool:
 func _frag_unlocked(i: int) -> bool: return max(best_stage, stage) >= int(FRAGMENTS[i]["unlock"])
 func _farm_pulse() -> void:
 	var pool: Array
-	if endgame_mode != "" and ENDINGS.has(endgame_mode): pool = ENDINGS[endgame_mode]["pulse"]
-	elif case_solved: pool = PULSE_SOLVED
-	else: pool = PULSE_LINES
+	if endgame_mode != "" and ENDINGS.has(endgame_mode):
+		var e: Dictionary = ENDINGS[endgame_mode]
+		pool = e.get("pulse_en" if lang == "en" else "pulse", e.get("pulse", []))
+	elif case_solved: pool = PULSE_SOLVED_EN if lang == "en" else PULSE_SOLVED
+	else: pool = PULSE_LINES_EN if lang == "en" else PULSE_LINES
 	_popup_center(str(pool[pulse_idx % pool.size()]), Color("#9ad0ff"), 3.0)
 	pulse_idx += 1
 func _frags_open() -> int:
@@ -3795,8 +3909,10 @@ func _chat_bubble(text: String, incoming: bool, accent: Color) -> Control:
 func _open_quest_chat(li: int) -> void:
 	var loc: Dictionary = LOCATIONS[li]
 	var q: Dictionary = loc["quest"]
-	var contact: String = str(q.get("contact", "📡 Связной"))
-	var msgs: Array = q.get("chat", [str(q.get("dialog", ""))])
+	var contact: String = _tloc(q, "contact")
+	if contact == "": contact = "📡 Связной"
+	var chat_key: String = "chat_en" if lang == "en" else "chat"
+	var msgs: Array = q.get(chat_key, q.get("chat", [str(q.get("dialog", ""))]))
 	var accent := Color(loc["neon"][0])
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -3811,7 +3927,7 @@ func _open_quest_chat(li: int) -> void:
 	var head := PanelContainer.new()
 	var hsb := StyleBoxFlat.new(); hsb.bg_color = Color(accent.r * 0.28, accent.g * 0.28, accent.b * 0.28, 1); hsb.set_corner_radius_all(16); hsb.set_content_margin_all(10)
 	head.add_theme_stylebox_override("panel", hsb)
-	var hl := Label.new(); hl.text = "📱 " + contact + "    🟢 в сети"; hl.add_theme_font_size_override("font_size", 16); hl.add_theme_color_override("font_color", accent.lightened(0.35))
+	var hl := Label.new(); hl.text = "📱 " + contact + "    " + _t("quest_online"); hl.add_theme_font_size_override("font_size", 16); hl.add_theme_color_override("font_color", accent.lightened(0.35))
 	head.add_child(hl); col.add_child(head)
 	var scr := ScrollContainer.new(); scr.custom_minimum_size = Vector2(400, 556); scr.size = Vector2(400, 556)
 	col.add_child(scr)
@@ -3830,11 +3946,11 @@ func _open_quest_chat(li: int) -> void:
 		await get_tree().create_timer(0.4).timeout
 		if not is_instance_valid(panel): return
 	# ВЫБОР РЕПЛИКИ Вектора — настоящие фразы (игрок выбирает что сказать). Тон считается за кадром.
-	var goal_txt := "🎯 Цель: «%s» с босса «%s» · 🎁 пушка на выбор" % [str(q["item"]), str(q["boss"])]
-	box.add_child(_lbl("— что ответишь? —", 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var goal_txt := _t("quest_goal") % [_tloc(q, "item"), str(q["boss"])]
+	box.add_child(_lbl(_t("quest_reply_prompt"), 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
 	var tchoices := VBoxContainer.new(); tchoices.add_theme_constant_override("separation", 6)
 	for tk in ["empathy", "anger", "cold"]:
-		var reply: String = str(TONES[tk]["reply"])
+		var reply: String = _tloc(TONES[tk], "reply")
 		var key: String = tk
 		tchoices.add_child(_reply_choice(reply, accent, func():
 			if is_instance_valid(tchoices): tchoices.queue_free()
@@ -3843,7 +3959,7 @@ func _open_quest_chat(li: int) -> void:
 			box.add_child(_chat_bubble(goal_txt, true, accent))
 			var dom := _tone_dominant()
 			if dom != "":
-				box.add_child(_chat_bubble("〔 ты держишь линию: %s %s 〕" % [TONES[dom]["icon"], TONES[dom]["title"]], true, Color("#ffd24a")))
+				box.add_child(_chat_bubble(_t("quest_tone_line") % [TONES[dom]["icon"], _tloc(TONES[dom], "title")], true, Color("#ffd24a")))
 			_save(); scroll_btm.call()
 			_show_moral_choice(box, q, accent, scroll_btm)))
 	box.add_child(tchoices); scroll_btm.call()
@@ -3865,18 +3981,18 @@ func _show_moral_choice(box: VBoxContainer, q: Dictionary, accent: Color, scroll
 	if not q.has("moral"): return
 	var mo: Dictionary = q["moral"]
 	if str(mo["id"]) in moral_choices: return   # уже решено
-	box.add_child(_chat_bubble(str(mo["prompt"]), true, accent)); scroll_btm.call()
+	box.add_child(_chat_bubble(_tloc(mo, "prompt"), true, accent)); scroll_btm.call()
 	var mchoices := VBoxContainer.new(); mchoices.add_theme_constant_override("separation", 6)
 	for opt in ["a", "b"]:
 		var o: Dictionary = mo[opt]
 		var ch: String = opt
-		mchoices.add_child(_reply_choice(str(o["label"]), accent, func():
+		mchoices.add_child(_reply_choice(_tloc(o, "label"), accent, func():
 			if is_instance_valid(mchoices): mchoices.queue_free()
 			moral_choices[str(mo["id"])] = ch
 			karma += int(o.get("karma", 0))
 			var sc := int(o.get("scrap", 0))
 			if sc > 0: scrap += sc
-			box.add_child(_chat_bubble(str(o["result"]), true, Color("#ffd24a")))
+			box.add_child(_chat_bubble(_tloc(o, "result"), true, Color("#ffd24a")))
 			_save(); _refresh_hud(); scroll_btm.call()))
 	box.add_child(mchoices); scroll_btm.call()
 
@@ -3884,7 +4000,7 @@ func _open_messages() -> void:
 	if not (str(_loc()["id"]) in quest_done):
 		_open_quest_chat(cur_location)
 	else:
-		_popup_center("📭 Нет новых сообщений. Открой район на 🗺 карте.", Color("#9aa0b5"), 2.0)
+		_popup_center(_t("no_msgs"), Color("#9aa0b5"), 2.0)
 
 # ДОСЬЕ ВЕКТОРА — глубокий слой (характер/совесть/решения). Опционально, казуала не грузит.
 func _open_dossier() -> void:
@@ -3892,31 +4008,31 @@ func _open_dossier() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var t := _lbl("📁 ДОСЬЕ: ВЕКТОР", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 86); t.size = Vector2(W, 30); panel.add_child(t)
+	var t := _lbl(_t("dossier_title"), 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 86); t.size = Vector2(W, 30); panel.add_child(t)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 215, 128); scroll.custom_minimum_size = Vector2(430, 600); scroll.size = Vector2(430, 600); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 10); list.custom_minimum_size = Vector2(430, 0); scroll.add_child(list)
-	var bio := _lbl("Экс-курьер ZenoCore. Списан после «инцидента на 14-м этаже»: боевой маршрутизатор-имплант завис на 9 секунд, погиб напарник Тэо. Этих девяти секунд Вектор не помнит — и не знает, виноват ли.", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT)
+	var bio := _lbl(_t("dossier_bio"), 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT)
 	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; bio.custom_minimum_size = Vector2(410, 0); list.add_child(bio)
-	list.add_child(_lbl("— ХАРАКТЕР —", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	list.add_child(_lbl(_t("dossier_char"), 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
 	var dom := _tone_dominant()
-	var char_txt := ("%s %s" % [TONES[dom]["icon"], TONES[dom]["title"]]) if dom != "" else "❓ Ещё не определился"
+	var char_txt := ("%s %s" % [TONES[dom]["icon"], _tloc(TONES[dom], "title")]) if dom != "" else _t("dossier_no_char")
 	list.add_child(_lbl(char_txt, 16, Color("#e8ecf5"), HORIZONTAL_ALIGNMENT_CENTER))
-	list.add_child(_lbl("— СОВЕСТЬ —", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
-	var ktxt := "⚖️ Прагматик"
-	if karma > 0: ktxt = "🕊 Милосердный (+%d)" % karma
-	elif karma < 0: ktxt = "💀 Безжалостный (%d)" % karma
+	list.add_child(_lbl(_t("dossier_conscience"), 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	var ktxt := _t("karma_neutral")
+	if karma > 0: ktxt = _t("karma_good") % karma
+	elif karma < 0: ktxt = _t("karma_bad") % karma
 	list.add_child(_lbl(ktxt, 16, Color("#7ee08a") if karma > 0 else (Color("#ff5050") if karma < 0 else Color("#9aa0b5")), HORIZONTAL_ALIGNMENT_CENTER))
-	list.add_child(_lbl("— РЕШЕНИЯ —", 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	list.add_child(_lbl(_t("dossier_decisions"), 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
 	var any := false
 	for loc in LOCATIONS:
 		var qq: Dictionary = loc["quest"]
 		if qq.has("moral") and str(qq["moral"]["id"]) in moral_choices:
 			any = true
 			var ch: String = str(moral_choices[str(qq["moral"]["id"])])
-			var ml := _lbl("%s %s — %s" % [loc["icon"], loc["name"], str(qq["moral"][ch]["label"])], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT)
+			var ml := _lbl("%s %s — %s" % [loc["icon"], _tloc(loc, "name"), _tloc(qq["moral"][ch], "label")], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT)
 			ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; ml.custom_minimum_size = Vector2(410, 0); list.add_child(ml)
-	if not any: list.add_child(_lbl("Пока ни одного выбора. Иди по сюжету.", 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
-	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	if not any: list.add_child(_lbl(_t("dossier_no_dec"), 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var close := Button.new(); close.text = _t("dossier_close"); close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 760); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
 # ДЕТЕКТИВ «9 секунд» — доска фрагментов (фишка игры, глубокий слой)
@@ -3925,17 +4041,17 @@ func _open_case() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.92); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var t := _lbl("📓 ДЕЛО: ДЕВЯТЬ СЕКУНД", 19, Color("#ff2d95"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 70); t.size = Vector2(W, 28); panel.add_child(t)
+	var t := _lbl(_t("case_title"), 19, Color("#ff2d95"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 70); t.size = Vector2(W, 28); panel.add_child(t)
 	var open_n := _frags_open()
 	var fakes_open := 0
 	for i in FRAGMENTS.size():
 		if _frag_unlocked(i) and bool(FRAGMENTS[i]["fake"]): fakes_open += 1
-	var sub := _lbl("Те 9 секунд, которых ты не помнишь. Часть «воспоминаний» подброшена ИИ — помечай подделки 🚩\n🔎 Открыто %d/9 · подделок среди них: %d" % [open_n, fakes_open], 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER)
+	var sub := _lbl(_t("case_sub") % [open_n, fakes_open], 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER)
 	sub.position = Vector2(W * 0.5 - 220, 100); sub.size = Vector2(440, 44); panel.add_child(sub)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 150); scroll.custom_minimum_size = Vector2(440, 540); scroll.size = Vector2(440, 540); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 8); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
 	if open_n == 0:
-		list.add_child(_lbl("Память пуста. Зачищай стадии — фрагменты вернутся (1-й со стадии 2).", 13, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+		list.add_child(_lbl(_t("case_empty"), 13, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
 	for i in FRAGMENTS.size():
 		if not _frag_unlocked(i): continue
 		var fr: Dictionary = FRAGMENTS[i]
@@ -3945,22 +4061,22 @@ func _open_case() -> void:
 		sb.border_color = Color("#ff2d95") if flagged else Color("#2a3358"); sb.set_border_width_all(2 if flagged else 1)
 		box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
 		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 4); box.add_child(v)
-		var ftxt := _lbl("🧩 Фрагмент %d\n%s" % [i + 1, str(fr["text"])], 13, Color("#e8ecf5"), HORIZONTAL_ALIGNMENT_LEFT)
+		var ftxt := _lbl(_t("case_frag_hdr") % (i + 1) + "\n" + _tloc(fr, "text"), 13, Color("#e8ecf5"), HORIZONTAL_ALIGNMENT_LEFT)
 		ftxt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; ftxt.custom_minimum_size = Vector2(400, 0); v.add_child(ftxt)
 		if case_solved and bool(fr["fake"]):
-			v.add_child(_lbl("⚠️ ПОДДЕЛКА ИИ. " + str(fr.get("tell", "")), 12, Color("#ff5050"), HORIZONTAL_ALIGNMENT_LEFT))
+			v.add_child(_lbl(_t("case_fake_lbl") % _tloc(fr, "tell"), 12, Color("#ff5050"), HORIZONTAL_ALIGNMENT_LEFT))
 		elif not case_solved:
-			var fb := Button.new(); fb.text = "🚩 помечено подделкой" if flagged else "помечу подделкой"; fb.add_theme_font_size_override("font_size", 12); fb.custom_minimum_size = Vector2(0, 30)
+			var fb := Button.new(); fb.text = _t("case_flag_on") if flagged else _t("case_flag_off"); fb.add_theme_font_size_override("font_size", 12); fb.custom_minimum_size = Vector2(0, 30)
 			var ii := i
 			fb.pressed.connect(func():
 				frag_flags[ii] = not bool(frag_flags.get(ii, false)); _save(); panel.queue_free(); _open_case())
 			v.add_child(fb)
 		list.add_child(box)
 	if open_n > 0 and not case_solved:
-		var chk := Button.new(); chk.text = "🔍 ПРОВЕРИТЬ ВЕРСИЮ"; chk.custom_minimum_size = Vector2(260, 40); chk.add_theme_font_size_override("font_size", 15)
+		var chk := Button.new(); chk.text = _t("case_check_btn"); chk.custom_minimum_size = Vector2(260, 40); chk.add_theme_font_size_override("font_size", 15)
 		chk.pressed.connect(func(): _check_case(panel))
 		list.add_child(chk)
-	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(180, 38)
+	var close := Button.new(); close.text = _t("case_close"); close.custom_minimum_size = Vector2(180, 38)
 	close.position = Vector2(W * 0.5 - 90, 760); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
 func _check_case(panel: Control) -> void:
@@ -3975,11 +4091,11 @@ func _check_case(panel: Control) -> void:
 		if _frags_open() >= FRAGMENTS.size():
 			case_solved = true; _save()
 			if is_instance_valid(panel): panel.queue_free()
-			_show_help("📓 ДЕЛО РАСКРЫТО — Девять секунд", "Ты вычистил подделки ИИ. Правда: ты НЕ трус и не убирал руки. Прототип PHANTOM-LIMB, что тестили в твоём маршрутизаторе, впервые поймал рассинхрон и заклинил — утянув тебя на девять секунд. Тэо погиб не по твоей вине. А часть того ИИ осталась в твоей голове. Оно слушает. Иногда — говорит.")
+			_show_help(_t("case_solved_title"), _t("case_solved_body"))
 		else:
-			_popup_center("✅ Пока сходится. Жди новых фрагментов памяти.", Color("#7ee08a"), 2.2)
+			_popup_center(_t("case_ok"), Color("#7ee08a"), 2.2)
 	else:
-		_popup_center("❌ Версия не сходится. Что противоречит фактам?", Color("#ff5050"), 2.2)
+		_popup_center(_t("case_fail"), Color("#ff5050"), 2.2)
 
 # ФИНАЛ — 3 эндгейм-режима по карме после всех 4 актов
 func _open_finale() -> void:
@@ -3987,7 +4103,7 @@ func _open_finale() -> void:
 		var dn := 0
 		for loc in LOCATIONS:
 			if str(loc["id"]) in quest_done: dn += 1
-		_popup_center("🏁 Финал откроется после всех 4 актов (%d/4). Иди по сюжету." % dn, Color("#9aa0b5"), 2.6)
+		_popup_center(_t("finale_locked") % dn, Color("#9aa0b5"), 2.6)
 		return
 	if endgame_mode == "":
 		if karma >= 2: endgame_mode = "quiet"
@@ -3995,10 +4111,10 @@ func _open_finale() -> void:
 		else: endgame_mode = "grey"
 		_save()
 	var e: Dictionary = ENDINGS[endgame_mode]
-	var body := str(e["text"])
-	if case_solved: body += "\n\n📓 А девять секунд ты раскрыл: ты не был трусом. И часть его — навсегда с тобой."
-	else: body += "\n\n(Тайна девяти секунд так и не раскрыта — собери фрагменты в 📓 Деле.)"
-	_show_help("%s ФИНАЛ: %s" % [str(e["icon"]), str(e["name"])], body)
+	var body := _tloc(e, "text")
+	if case_solved: body += "\n\n" + _t("finale_case_done")
+	else: body += "\n\n" + _t("finale_case_open")
+	_show_help("%s FINALE: %s" % [str(e["icon"]), _tloc(e, "name")] if lang == "en" else "%s ФИНАЛ: %s" % [str(e["icon"]), _tloc(e, "name")], body)
 
 # ☰ Ещё — СГРУППИРОВАНО в 4 группы (Рамиль: «9 пунктов страшно»). Группа → под-список.
 func _open_more() -> void:
@@ -4013,7 +4129,7 @@ func _open_more() -> void:
 		[_t("m_map"), Callable(self, "_open_map")],
 		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 		[_t("m_settings"), Callable(self, "_toggle_settings")],
-		["🔄  v%s · обновить игру" % VERSION, Callable(self, "_force_update")],
+		[_t("update_btn") % VERSION, Callable(self, "_force_update")],
 	])
 
 # принудительное обновление до свежего билда (чистка кэша+SW) — нужно на тесте (фидбэк Рамиля «зря убрал»)
