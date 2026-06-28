@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.9"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.0.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -3415,37 +3415,52 @@ func _open_finale() -> void:
 	else: body += "\n\n(Тайна девяти секунд так и не раскрыта — собери фрагменты в 📓 Деле.)"
 	_show_help("%s ФИНАЛ: %s" % [str(e["icon"]), str(e["name"])], body)
 
-# UI-редизайн: «☰ Ещё» — свёрнутые пункты (батлпас/ачивки/карта/настройки) в досягаемой нижней зоне
+# ☰ Ещё — СГРУППИРОВАНО в 4 группы (Рамиль: «9 пунктов страшно»). Группа → под-список.
 func _open_more() -> void:
-	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
-	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
-	panel.add_child(dim)
-	var t := _lbl("☰ ЕЩЁ", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 376); t.size = Vector2(W, 30); panel.add_child(t)
-	var bpn := _bp_unclaimed_count()
-	var acn := _ach_claimable()
-	_dq_refresh()
-	var dqn := _dq_ready_count()
 	var msg_new: bool = not (str(_loc()["id"]) in quest_done)
-	var items := [
+	var story_b := "   📨" if msg_new else ("   ✦" if (case_solved or _frags_open() > 0) else "")
+	_dq_refresh()
+	var rew_n := _dq_ready_count() + _bp_unclaimed_count() + _ach_claimable()
+	var rew_b := "   ●%d" % rew_n if rew_n > 0 else ""
+	_open_submenu("☰ ЕЩЁ", [
+		["📖  Сюжет" + story_b, Callable(self, "_open_story_group")],
+		["🎁  Награды" + rew_b, Callable(self, "_open_rewards_group")],
+		["🗺  Карта локаций", Callable(self, "_open_map")],
+		["⚙  Настройки", Callable(self, "_toggle_settings")],
+	])
+
+func _open_story_group() -> void:
+	var msg_new: bool = not (str(_loc()["id"]) in quest_done)
+	_open_submenu("📖 СЮЖЕТ", [
 		["📱  Сообщения / квест" + ("   📨" if msg_new else ""), Callable(self, "_open_messages")],
 		["📁  Досье: Вектор", Callable(self, "_open_dossier")],
 		["📓  Дело: 9 секунд" + ("   ✅" if case_solved else ("   🧩%d" % _frags_open() if _frags_open() > 0 else "")), Callable(self, "_open_case")],
 		["🏁  Финал" + ("   %s" % str(ENDINGS[endgame_mode]["icon"]) if endgame_mode != "" else ("   ✦" if _all_quests_done() else "   🔒")), Callable(self, "_open_finale")],
+	])
+
+func _open_rewards_group() -> void:
+	_dq_refresh()
+	var dqn := _dq_ready_count(); var bpn := _bp_unclaimed_count(); var acn := _ach_claimable()
+	_open_submenu("🎁 НАГРАДЫ", [
 		["📋  Ежедневные квесты" + ("   ●%d" % dqn if dqn > 0 else ""), Callable(self, "_open_daily_quests")],
 		["🎟  Батлпас" + ("   ●%d" % bpn if bpn > 0 else ""), Callable(self, "_open_battlepass")],
 		["📖  Достижения" + ("   ●%d" % acn if acn > 0 else ""), Callable(self, "_open_achievements")],
-		["🗺  Карта локаций", Callable(self, "_open_map")],
-		["⚙  Настройки", Callable(self, "_toggle_settings")],
-	]
-	# фикс переполнения: 9 пунктов раскладываем так, чтобы ВСЕ влезли над навбаром (было 462+i*62 → ⚙ уезжал за экран)
+	])
+
+# универсальный рендер списка-меню (снизу-вверх от навбара, влезает любое кол-во)
+func _open_submenu(title: String, items: Array) -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
 	var n_items := items.size()
-	var item_h := 50
-	var gap := 4
-	var top := int(H) - 60 - n_items * (item_h + gap)   # снизу вверх от навбара
+	var item_h := 56
+	var gap := 8
+	var top := int(H) - 72 - n_items * (item_h + gap)
+	var t := _lbl(title, 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, top - 46); t.size = Vector2(W, 30); panel.add_child(t)
 	for i in n_items:
-		var b := Button.new(); b.text = items[i][0]; b.custom_minimum_size = Vector2(300, item_h); b.add_theme_font_size_override("font_size", 16)
-		b.position = Vector2(W * 0.5 - 150, top + i * (item_h + gap))
+		var b := Button.new(); b.text = items[i][0]; b.custom_minimum_size = Vector2(320, item_h); b.add_theme_font_size_override("font_size", 18)
+		b.position = Vector2(W * 0.5 - 160, top + i * (item_h + gap))
 		var cb: Callable = items[i][1]
 		b.pressed.connect(func(): panel.queue_free(); cb.call())
 		panel.add_child(b)
