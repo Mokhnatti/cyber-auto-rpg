@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.8" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.9" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -213,20 +213,20 @@ const ITEM_VARIANTS := {
 }
 # редкость = число стат-строк (1..4); индекс 0 не используется
 const RARITY := [
-	{"name": "—", "col": "#666"},
-	{"name": "Обычный", "col": "#9aa0a6"},
-	{"name": "Необычный", "col": "#3ad97a"},
-	{"name": "Редкий", "col": "#3a8bd9"},
-	{"name": "Эпический", "col": "#b46bff"},
+	{"name": "—", "name_en": "—", "col": "#666"},
+	{"name": "Обычный", "name_en": "Common", "col": "#9aa0a6"},
+	{"name": "Необычный", "name_en": "Uncommon", "col": "#3ad97a"},
+	{"name": "Редкий", "name_en": "Rare", "col": "#3a8bd9"},
+	{"name": "Эпический", "name_en": "Epic", "col": "#b46bff"},
 ]
 # роллы значений: каждый стат роллится из 4 ступеней (100/90/80/70% от макс по 25%) — Genshin-модель
 const STAT_ROLL := {
-	"hp":   {"max": 40, "fmt": "+%d здоровья"},
-	"dmg":  {"max": 8, "fmt": "+%d урон"},
-	"wdmg": {"max": 16, "fmt": "+%d урон"},
-	"crit": {"max": 8, "fmt": "+%d%% крит"},
-	"atk":  {"max": 8, "fmt": "+%d%% скор.атаки"},
-	"ult":  {"max": 10, "fmt": "+%d%% заряд ульты"},
+	"hp":   {"max": 40, "fmt": "+%d здоровья", "fmt_en": "+%d HP"},
+	"dmg":  {"max": 8, "fmt": "+%d урон", "fmt_en": "+%d dmg"},
+	"wdmg": {"max": 16, "fmt": "+%d урон", "fmt_en": "+%d dmg"},
+	"crit": {"max": 8, "fmt": "+%d%% крит", "fmt_en": "+%d%% crit"},
+	"atk":  {"max": 8, "fmt": "+%d%% скор.атаки", "fmt_en": "+%d%% atk spd"},
+	"ult":  {"max": 10, "fmt": "+%d%% заряд ульты", "fmt_en": "+%d%% ult charge"},
 }
 const ROLL_TIERS := [1.0, 0.9, 0.8, 0.7]   # по 25% каждая
 const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
@@ -792,6 +792,45 @@ const TR := {
 	"hint_sniper":       {"ru": "💡 Качай СНАЙПЕРА — он первым бьёт 💊хилеров и 🛡щитоносцев", "en": "💡 Level the SNIPER — he hits 💊healers and 🛡shielders first"},
 	"hint_hacker":       {"ru": "💡 Качай ХАКЕРА — его AoE выкосит 🐝рой", "en": "💡 Level the HACKER — his AoE mows down the 🐝swarm"},
 	"hint_bomber":       {"ru": "💡 Качай ТАНКА — 💥взрывные бьют по отряду, нужен запас HP", "en": "💡 Level the TANK — 💥bombers hit the whole squad, you need HP reserve"},
+	# монетизация: панель скорости
+	"spd_title":         {"ru": "⏩ СКОРОСТЬ  (💎 %d)", "en": "⏩ SPEED  (💎 %d)"},
+	"spd_x1":            {"ru": "⏩ x1 — обычная (беспл)", "en": "⏩ x1 — normal (free)"},
+	"spd_x2_active":     {"ru": "⏩⏩ x2 — активна (%dмин)", "en": "⏩⏩ x2 — active (%dmin)"},
+	"spd_x2_ad":         {"ru": "▶ x2 на 30 мин — посмотреть рекламу", "en": "▶ x2 for 30 min — watch ad"},
+	"spd_x3_bought":     {"ru": "⏩⏩⏩ x3 — куплена", "en": "⏩⏩⏩ x3 — purchased"},
+	"spd_x3_buy":        {"ru": "💎 x3 НАВСЕГДА — 100 алмазов", "en": "💎 x3 FOREVER — 100 diamonds"},
+	"spd_pop_x2":        {"ru": "▶ Реклама → x2 на 30 минут!", "en": "▶ Ad → x2 for 30 minutes!"},
+	"spd_pop_x3":        {"ru": "⏩⏩⏩ x3 разблокирована навсегда!", "en": "⏩⏩⏩ x3 unlocked forever!"},
+	"ad_bonuses":        {"ru": "📺 БОНУСЫ ЗА РЕКЛАМУ", "en": "📺 AD BONUSES"},
+	"diamond_shop":      {"ru": "💎 МАГАЗИН АЛМАЗОВ", "en": "💎 DIAMOND SHOP"},
+	# панель реклама-бустов
+	"ad_subtitle":       {"ru": "Добровольно · 30 мин · чем больше смотришь — тем выше %", "en": "Optional · 30 min · the more you watch, the higher the %"},
+	"ad_row_active":     {"ru": "▶ %s: +%d%% активен (%dмин, ур.%d) — ещё реклама → +%d%%", "en": "▶ %s: +%d%% active (%dmin, lv.%d) — another ad → +%d%%"},
+	"ad_row_idle":       {"ru": "▶ %s — реклама → +%d%% на 30 мин (ур.%d)", "en": "▶ %s — ad → +%d%% for 30 min (lv.%d)"},
+	"ad_apply_pop":      {"ru": "📺 %s +%d%% на 30 мин!\n(уровень буста %d)", "en": "📺 %s +%d%% for 30 min!\n(boost level %d)"},
+	# магазин алмазов
+	"shop_title":        {"ru": "💎 МАГАЗИН АЛМАЗОВ  (есть: %d)", "en": "💎 DIAMOND SHOP  (have: %d)"},
+	"shop_note":         {"ru": "(покупка за реал — подключится в сборке под Google Play / App Store)", "en": "(real-money purchase — enabled in the Google Play / App Store build)"},
+	"shop_buy_pop":      {"ru": "💎 +%d (стаб покупки)", "en": "💎 +%d (purchase stub)"},
+	"shop_gacha_btn":    {"ru": "🎰 ГАЧА — призыв шмота", "en": "🎰 GACHA — summon gear"},
+	# гача
+	"gacha_title":       {"ru": "🎰 ГАЧА — призыв снаряжения", "en": "🎰 GACHA — summon equipment"},
+	"gacha_pity":        {"ru": "💎 %d   ·   до гаранта Эпического: %d пуллов", "en": "💎 %d   ·   to Epic pity: %d pulls"},
+	"gacha_rates":       {"ru": "Шансы: Обычный 50% · Необычный 30% · Редкий 15% · Эпический 5%\n(с 74-го пулла шанс Эпического растёт, на 90-м — гарант)", "en": "Rates: Common 50% · Uncommon 30% · Rare 15% · Epic 5%\n(from pull 74 the Epic chance rises, at 90 — guaranteed)"},
+	"gacha_pull1":       {"ru": "🎲 ПУЛЛ x1 — %d 💎", "en": "🎲 PULL x1 — %d 💎"},
+	"gacha_pull10":      {"ru": "🎲 ПУЛЛ x10 — %d 💎", "en": "🎲 PULL x10 — %d 💎"},
+	"gacha_no_diamonds": {"ru": "Недостаточно алмазов 💎", "en": "Not enough diamonds 💎"},
+	"gacha_epic":        {"ru": "🎉 ЭПИЧЕСКИЙ!", "en": "🎉 EPIC!"},
+	"gacha_rare":        {"ru": "✨ Редкий!", "en": "✨ Rare!"},
+	"gacha_got":         {"ru": "Выпало:", "en": "You got:"},
+	"gacha_result_foot": {"ru": "(в коллекции бойцов, надень в Экипировке)", "en": "(added to fighters' collection — equip it in Gear)"},
+	# квест-награда
+	"quest_done":        {"ru": "✅ КВЕСТ ВЫПОЛНЕН", "en": "✅ QUEST COMPLETE"},
+	"quest_looted":      {"ru": "Добыто: %s  (с босса «%s»)", "en": "Looted: %s  (from boss \"%s\")"},
+	"quest_reward":      {"ru": "Награда: +150 💎  +500 🔩  +  ПУШКА НА ВЫБОР ↓", "en": "Reward: +150 💎  +500 🔩  +  CHOOSE A WEAPON ↓"},
+	"quest_pick":        {"ru": "🔫 Выбери пушку одному бойцу (рарность рандом):", "en": "🔫 Choose a weapon for one fighter (random rarity):"},
+	"quest_weapon_btn":  {"ru": "%s  %s — пушка", "en": "%s  %s — weapon"},
+	"quest_weapon_granted": {"ru": "🔫 Пушка выдана!", "en": "🔫 Weapon granted!"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -805,6 +844,10 @@ const HERO_NAME_KEYS := ["hero_snipe", "hero_assault", "hero_tank", "hero_hacker
 func _hname(i: int) -> String:
 	if i >= 0 and i < HERO_NAME_KEYS.size(): return _t(HERO_NAME_KEYS[i])
 	return str(HEROES[i]["name"]) if i >= 0 and i < HEROES.size() else ""
+# локализованное имя редкости (ru/en) по индексу 0..4
+func _rarity_name(i: int) -> String:
+	if i < 0 or i >= RARITY.size(): return ""
+	return _tloc(RARITY[i], "name")
 func _fb_init() -> void:
 	if not OS.has_feature("web"): return
 	var js := """
@@ -1251,9 +1294,9 @@ var clan_boosts := {}  # 🎖 клан-магаз бусты: {"dmg": {"until": 
 var _ad_buff_on := false  # активен ли dmg/atk-буст (для пересчёта при истечении)
 const AD_DUR := 1800.0    # буст на 30 минут
 const AD_BOOST := {       # base% + step%/уровень (растёт от числа просмотров)
-	"dmg":  {"name": "🗡 Урон отряда",   "base": 40, "step": 10},
-	"gold": {"name": "💰 Золото и лом",  "base": 100, "step": 25},
-	"atk":  {"name": "⚡ Скорость атаки", "base": 25, "step": 5},
+	"dmg":  {"name": "🗡 Урон отряда",   "name_en": "🗡 Team Damage",  "base": 40, "step": 10},
+	"gold": {"name": "💰 Золото и лом",  "name_en": "💰 Gold & Scrap", "base": 100, "step": 25},
+	"atk":  {"name": "⚡ Скорость атаки", "name_en": "⚡ Attack Speed", "base": 25, "step": 5},
 }
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
@@ -3405,7 +3448,7 @@ func _refresh_hud() -> void:
 	var etxt: String = ("   ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
 	stage_label.text = flags + etxt   # типы врагов — на строке флажков (не налезают на кнопки)
 	# золото + прокачка урона
-	gold_label.text = "💰 %s  +%s/с   ♻ %s   🧬 %s   💎 %s" % [_gsep(gold), _gsep(_passive_rate()), _gsep(scrap), _gsep(cores), _gsep(diamonds)]
+	gold_label.text = "💰 %s  +%s%s   ♻ %s   🧬 %s   💎 %s" % [_gsep(gold), _gsep(_passive_rate()), _t("per_sec"), _gsep(scrap), _gsep(cores), _gsep(diamonds)]
 	if inv_open and inv_gold:
 		inv_gold.text = "💰 %s   +%s%s    💪 %s: %s" % [_gsep(gold), _gsep(_passive_rate()), _t("per_sec"), _t("power"), _gsep(_party_power())]
 	if inv_open: _refresh_inv()
@@ -3616,20 +3659,20 @@ func _open_speed_menu() -> void:
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 200, 180); card.custom_minimum_size = Vector2(400, 0)
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	v.add_child(_lbl("⏩ СКОРОСТЬ  (💎 %d)" % diamonds, 18, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER))
-	var b1 := Button.new(); b1.text = "⏩ x1 — обычная (беспл)"; b1.custom_minimum_size = Vector2(0, 46); b1.add_theme_font_size_override("font_size", 15)
+	v.add_child(_lbl(_t("spd_title") % diamonds, 18, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	var b1 := Button.new(); b1.text = _t("spd_x1"); b1.custom_minimum_size = Vector2(0, 46); b1.add_theme_font_size_override("font_size", 15)
 	b1.pressed.connect(func(): _set_speed(1.0); panel.queue_free()); v.add_child(b1)
 	var b2 := Button.new(); b2.custom_minimum_size = Vector2(0, 46); b2.add_theme_font_size_override("font_size", 15)
-	if _x2_active(): b2.text = "⏩⏩ x2 — активна (%dмин)" % int((x2_until - Time.get_unix_time_from_system()) / 60.0); b2.pressed.connect(func(): _set_speed(2.0); panel.queue_free())
-	else: b2.text = "▶ x2 на 30 мин — посмотреть рекламу"; b2.pressed.connect(func(): _watch_ad_x2(); panel.queue_free())
+	if _x2_active(): b2.text = _t("spd_x2_active") % int((x2_until - Time.get_unix_time_from_system()) / 60.0); b2.pressed.connect(func(): _set_speed(2.0); panel.queue_free())
+	else: b2.text = _t("spd_x2_ad"); b2.pressed.connect(func(): _watch_ad_x2(); panel.queue_free())
 	v.add_child(b2)
 	var b3 := Button.new(); b3.custom_minimum_size = Vector2(0, 46); b3.add_theme_font_size_override("font_size", 15)
-	if x3_unlocked: b3.text = "⏩⏩⏩ x3 — куплена"; b3.pressed.connect(func(): _set_speed(3.0); panel.queue_free())
-	else: b3.text = "💎 x3 НАВСЕГДА — 100 алмазов"; b3.disabled = diamonds < 100; b3.pressed.connect(func(): _buy_x3(); panel.queue_free())
+	if x3_unlocked: b3.text = _t("spd_x3_bought"); b3.pressed.connect(func(): _set_speed(3.0); panel.queue_free())
+	else: b3.text = _t("spd_x3_buy"); b3.disabled = diamonds < 100; b3.pressed.connect(func(): _buy_x3(); panel.queue_free())
 	v.add_child(b3)
-	var bab := Button.new(); bab.text = "📺 БОНУСЫ ЗА РЕКЛАМУ"; bab.custom_minimum_size = Vector2(0, 44); bab.add_theme_font_size_override("font_size", 14); bab.add_theme_color_override("font_color", Color("#3ad97a"))
+	var bab := Button.new(); bab.text = _t("ad_bonuses"); bab.custom_minimum_size = Vector2(0, 44); bab.add_theme_font_size_override("font_size", 14); bab.add_theme_color_override("font_color", Color("#3ad97a"))
 	bab.pressed.connect(func(): panel.queue_free(); _open_ad_boosts()); v.add_child(bab)
-	var bs := Button.new(); bs.text = "💎 МАГАЗИН АЛМАЗОВ"; bs.custom_minimum_size = Vector2(0, 44); bs.add_theme_font_size_override("font_size", 14); bs.add_theme_color_override("font_color", Color("#ffd24a"))
+	var bs := Button.new(); bs.text = _t("diamond_shop"); bs.custom_minimum_size = Vector2(0, 44); bs.add_theme_font_size_override("font_size", 14); bs.add_theme_color_override("font_color", Color("#ffd24a"))
 	bs.pressed.connect(func(): panel.queue_free(); _open_shop()); v.add_child(bs)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
@@ -3637,13 +3680,13 @@ func _watch_ad_x2() -> void:
 	# СТАБ рекламы (на платформе — реальный rewarded-ad SDK). Сейчас выдаём сразу.
 	x2_until = Time.get_unix_time_from_system() + 1800.0   # x2 на 30 мин
 	_set_speed(2.0); _save()
-	_popup_center("▶ Реклама → x2 на 30 минут!", Color("#3ad97a"), 2.0)
+	_popup_center(_t("spd_pop_x2"), Color("#3ad97a"), 2.0)
 
 func _buy_x3() -> void:
 	if diamonds < 100: return
 	diamonds -= 100; x3_unlocked = true
 	_set_speed(3.0); _save(); _refresh_hud()
-	_popup_center("⏩⏩⏩ x3 разблокирована навсегда!", Color("#b46bff"), 2.2)
+	_popup_center(_t("spd_pop_x3"), Color("#b46bff"), 2.2)
 
 # === РЕКЛАМА-БУСТЫ (Диана) ===
 func _ad_active(b: String) -> bool:
@@ -3678,7 +3721,7 @@ func _watch_ad_boost(b: String) -> void:
 	for hh in heroes: _recalc_hero(hh)
 	_save(); _refresh_hud()
 	var pct: int = int(AD_BOOST[b]["base"] + AD_BOOST[b]["step"] * (int(d["lvl"]) - 1))
-	_popup_center("📺 %s +%d%% на 30 мин!\n(уровень буста %d)" % [AD_BOOST[b]["name"], pct, d["lvl"]], Color("#3ad97a"), 2.2)
+	_popup_center(_t("ad_apply_pop") % [_tloc(AD_BOOST[b], "name"), pct, d["lvl"]], Color("#3ad97a"), 2.2)
 
 func _open_ad_boosts() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -3690,8 +3733,8 @@ func _open_ad_boosts() -> void:
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 150); card.custom_minimum_size = Vector2(420, 0)
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	v.add_child(_lbl("📺 БОНУСЫ ЗА РЕКЛАМУ", 19, Color("#3ad97a"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl("Добровольно · 30 мин · чем больше смотришь — тем выше %", 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("ad_bonuses"), 19, Color("#3ad97a"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("ad_subtitle"), 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
 	for b in ["dmg", "gold", "atk"]:
 		var bb: String = b
 		var lvl := _ad_lvl(b)
@@ -3700,9 +3743,9 @@ func _open_ad_boosts() -> void:
 		var row := Button.new(); row.custom_minimum_size = Vector2(0, 56); row.add_theme_font_size_override("font_size", 14)
 		if _ad_active(b):
 			var mins := int((float(ad_boosts[b]["until"]) - Time.get_unix_time_from_system()) / 60.0)
-			row.text = "▶ %s: +%d%% активен (%dмин, ур.%d) — ещё реклама → +%d%%" % [AD_BOOST[b]["name"], pct, mins, lvl, nextpct]
+			row.text = _t("ad_row_active") % [_tloc(AD_BOOST[b], "name"), pct, mins, lvl, nextpct]
 		else:
-			row.text = "▶ %s — реклама → +%d%% на 30 мин (ур.%d)" % [AD_BOOST[b]["name"], nextpct, lvl + 1]
+			row.text = _t("ad_row_idle") % [_tloc(AD_BOOST[b], "name"), nextpct, lvl + 1]
 		row.pressed.connect(func(): _watch_ad_boost(bb); panel.queue_free(); _open_ad_boosts())
 		v.add_child(row)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
@@ -3717,17 +3760,17 @@ func _open_shop() -> void:
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 200, 150); card.custom_minimum_size = Vector2(400, 0)
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	v.add_child(_lbl("💎 МАГАЗИН АЛМАЗОВ  (есть: %d)" % diamonds, 18, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl("(покупка за реал — подключится в сборке под Google Play / App Store)", 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("shop_title") % diamonds, 18, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("shop_note"), 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
 	for pack in [[100, "0.99$"], [550, "4.99$"], [1200, "9.99$"], [6500, "49.99$"]]:
 		var amt: int = pack[0]
 		var bp := Button.new(); bp.text = "💎 %d — %s" % [amt, pack[1]]; bp.custom_minimum_size = Vector2(0, 44); bp.add_theme_font_size_override("font_size", 15)
-		bp.pressed.connect(func(): diamonds += amt; _save(); _refresh_hud(); _popup_center("💎 +%d (стаб покупки)" % amt, Color("#ffd24a"), 1.6); panel.queue_free())
+		bp.pressed.connect(func(): diamonds += amt; _save(); _refresh_hud(); _popup_center(_t("shop_buy_pop") % amt, Color("#ffd24a"), 1.6); panel.queue_free())
 		v.add_child(bp)
 	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
-	var bg := Button.new(); bg.text = "🎰 ГАЧА — призыв шмота"; bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
+	var bg := Button.new(); bg.text = _t("shop_gacha_btn"); bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
 	bg.pressed.connect(func(): panel.queue_free(); _open_gacha()); v.add_child(bg)
-	var ba := Button.new(); ba.text = "📺 БОНУСЫ ЗА РЕКЛАМУ"; ba.custom_minimum_size = Vector2(0, 46); ba.add_theme_font_size_override("font_size", 15); ba.add_theme_color_override("font_color", Color("#3ad97a"))
+	var ba := Button.new(); ba.text = _t("ad_bonuses"); ba.custom_minimum_size = Vector2(0, 46); ba.add_theme_font_size_override("font_size", 15); ba.add_theme_color_override("font_color", Color("#3ad97a"))
 	ba.pressed.connect(func(): panel.queue_free(); _open_ad_boosts()); v.add_child(ba)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
@@ -3780,32 +3823,32 @@ func _open_gacha() -> void:
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 110); card.custom_minimum_size = Vector2(420, 0)
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 9); card.add_child(v)
-	v.add_child(_lbl("🎰 ГАЧА — призыв снаряжения", 19, Color("#ff7adf"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl("💎 %d   ·   до гаранта Эпического: %d пуллов" % [diamonds, max(0, 90 - gacha_pity)], 13, Color("#d9c7ff"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl("Шансы: Обычный 50% · Необычный 30% · Редкий 15% · Эпический 5%\n(с 74-го пулла шанс Эпического растёт, на 90-м — гарант)", 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("gacha_title"), 19, Color("#ff7adf"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("gacha_pity") % [diamonds, max(0, 90 - gacha_pity)], 13, Color("#d9c7ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("gacha_rates"), 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
 	var res := _lbl("", 13, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); res.custom_minimum_size = Vector2(0, 90); res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(res)
-	var p1 := Button.new(); p1.text = "🎲 ПУЛЛ x1 — %d 💎" % GACHA_COST1; p1.custom_minimum_size = Vector2(0, 46); p1.add_theme_font_size_override("font_size", 15)
+	var p1 := Button.new(); p1.text = _t("gacha_pull1") % GACHA_COST1; p1.custom_minimum_size = Vector2(0, 46); p1.add_theme_font_size_override("font_size", 15)
 	p1.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(1)); _gacha_refresh_hdr(v)); v.add_child(p1)
-	var p10 := Button.new(); p10.text = "🎲 ПУЛЛ x10 — %d 💎" % GACHA_COST10; p10.custom_minimum_size = Vector2(0, 46); p10.add_theme_font_size_override("font_size", 15)
+	var p10 := Button.new(); p10.text = _t("gacha_pull10") % GACHA_COST10; p10.custom_minimum_size = Vector2(0, 46); p10.add_theme_font_size_override("font_size", 15)
 	p10.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(10)); _gacha_refresh_hdr(v)); v.add_child(p10)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _gacha_refresh_hdr(v: VBoxContainer) -> void:
 	# обновить строку алмазов/pity (2-й ребёнок) после пулла
 	if v.get_child_count() > 1 and v.get_child(1) is Label:
-		(v.get_child(1) as Label).text = "💎 %d   ·   до гаранта Эпического: %d пуллов" % [diamonds, max(0, 90 - gacha_pity)]
+		(v.get_child(1) as Label).text = _t("gacha_pity") % [diamonds, max(0, 90 - gacha_pity)]
 
 func _gacha_result_text(results: Array) -> String:
-	if results.is_empty(): return "Недостаточно алмазов 💎"
+	if results.is_empty(): return _t("gacha_no_diamonds")
 	var counts := {1: 0, 2: 0, 3: 0, 4: 0}
 	var best := 1
 	for r in results:
 		counts[r["rar"]] += 1; best = max(best, r["rar"])
 	var parts := []
 	for rr in [4, 3, 2, 1]:
-		if counts[rr] > 0: parts.append("%s ×%d" % [RARITY[rr]["name"], counts[rr]])
-	var head := "🎉 ЭПИЧЕСКИЙ!" if best == 4 else ("✨ Редкий!" if best == 3 else "Выпало:")
-	return "%s\n%s\n(в коллекции бойцов, надень в Экипировке)" % [head, ", ".join(parts)]
+		if counts[rr] > 0: parts.append("%s ×%d" % [_rarity_name(rr), counts[rr]])
+	var head := _t("gacha_epic") if best == 4 else (_t("gacha_rare") if best == 3 else _t("gacha_got"))
+	return "%s\n%s\n%s" % [head, ", ".join(parts), _t("gacha_result_foot")]
 
 # === БАТЛПАС: награды по пройденным стадиям ===
 func _bp_free_reward(m: int) -> Dictionary:
@@ -3960,17 +4003,17 @@ func _quest_reward(loc: Dictionary) -> void:
 	var q: Dictionary = loc["quest"]
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.92); dim.set_anchors_preset(Control.PRESET_FULL_RECT); panel.add_child(dim)
-	var t := _lbl("✅ КВЕСТ ВЫПОЛНЕН", 22, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 180); t.size = Vector2(W, 30); panel.add_child(t)
-	var it := _lbl("Добыто: " + str(q["item"]) + "  (с босса «%s»)" % str(q["boss"]), 14, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); it.position = Vector2(0, 216); it.size = Vector2(W, 22); panel.add_child(it)
-	var rw := _lbl("Награда: +150 💎  +500 🔩  +  ПУШКА НА ВЫБОР ↓", 14, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); rw.position = Vector2(0, 250); rw.size = Vector2(W, 22); panel.add_child(rw)
-	var pick := _lbl("🔫 Выбери пушку одному бойцу (рарность рандом):", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); pick.position = Vector2(0, 286); pick.size = Vector2(W, 20); panel.add_child(pick)
+	var t := _lbl(_t("quest_done"), 22, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 180); t.size = Vector2(W, 30); panel.add_child(t)
+	var it := _lbl(_t("quest_looted") % [str(q["item"]), str(q["boss"])], 14, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); it.position = Vector2(0, 216); it.size = Vector2(W, 22); panel.add_child(it)
+	var rw := _lbl(_t("quest_reward"), 14, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); rw.position = Vector2(0, 250); rw.size = Vector2(W, 22); panel.add_child(rw)
+	var pick := _lbl(_t("quest_pick"), 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); pick.position = Vector2(0, 286); pick.size = Vector2(W, 20); panel.add_child(pick)
 	for i in heroes.size():
 		var hh = heroes[i]
-		var b := Button.new(); b.text = "%s  %s — пушка" % [HEROES[hh["cls"]]["icon"], HEROES[hh["cls"]]["name"]]
+		var b := Button.new(); b.text = _t("quest_weapon_btn") % [HEROES[hh["cls"]]["icon"], _hname(hh["cls"])]
 		b.custom_minimum_size = Vector2(360, 46); b.add_theme_font_size_override("font_size", 15)
 		b.position = Vector2(W * 0.5 - 180, 320 + i * 54)
 		var ii := i
-		b.pressed.connect(func(): _grant_quest_weapon(ii); _popup_center("🔫 Пушка выдана!", Color("#ff2d95"), 1.6); panel.queue_free())
+		b.pressed.connect(func(): _grant_quest_weapon(ii); _popup_center(_t("quest_weapon_granted"), Color("#ff2d95"), 1.6); panel.queue_free())
 		panel.add_child(b)
 
 # === ЕЖЕДНЕВНЫЕ КВЕСТЫ ===
@@ -4875,7 +4918,7 @@ func _refresh_invcol() -> void:
 	for c in ic_list.get_children(): c.queue_free()
 	var slot_name := {"all": "🔫+✨ " + _t("ic_all"), "weapon": "🔫 " + _t("g_weapon"), "module": "✨ " + _t("g_module")}
 	ic_fslot_btn.text = slot_name[ic_fslot]
-	ic_frar_btn.text = "⭐ " + _t("ic_all") if ic_frar == 0 else "⭐%d %s" % [ic_frar, RARITY[ic_frar]["name"]]
+	ic_frar_btn.text = "⭐ " + _t("ic_all") if ic_frar == 0 else "⭐%d %s" % [ic_frar, _rarity_name(ic_frar)]
 	ic_fhero_btn.text = "👥 " + _t("ic_all") if ic_fhero == -1 else "%s %s" % [HEROES[ic_fhero]["icon"], _hname(ic_fhero)]
 	var items := _all_items()
 	var shown := 0
@@ -4899,7 +4942,7 @@ func _ic_card(it: Dictionary) -> Control:
 	var mark := ""
 	if it["fav"]: mark += " ★"
 	var lvltxt := _t("inv_lvl") % inst["lvl"]
-	card.text = "%s %s  %s %s · %s%s\n   %s" % [HEROES[i]["icon"], sicon, RARITY[rar]["name"], _variant(slot, hh["cls"], inst["vid"])["name"], lvltxt, mark, _rolls_text(inst)]
+	card.text = "%s %s  %s %s · %s%s\n   %s" % [HEROES[i]["icon"], sicon, _rarity_name(rar), _variant(slot, hh["cls"], inst["vid"])["name"], lvltxt, mark, _rolls_text(inst)]
 	# «НАДЕТО» — отдельный бейдж справа, выделен (Диана: не сливать с уровнем/статами)
 	if it["equipped"]:
 		var badge := Label.new()
@@ -5015,7 +5058,7 @@ func _rolls_text(it: Dictionary) -> String:
 	var by_fmt := {}
 	var order := []
 	for r in it["rolls"]:
-		var f: String = STAT_ROLL[r["stat"]]["fmt"]
+		var f: String = _tloc(STAT_ROLL[r["stat"]], "fmt")
 		if not by_fmt.has(f):
 			by_fmt[f] = 0; order.append(f)
 		by_fmt[f] = int(by_fmt[f]) + int(r["val"] * mult)
@@ -5118,7 +5161,7 @@ func _refresh_impl() -> void:
 		if wkey != "" and hh["gear"]["weapon"].has(wkey):
 			var winst = hh["gear"]["weapon"][wkey]
 			var wrar: int = winst["rarity"]
-			cell["wlbl"].text = "%s %s\n%s %s · %s%d\n%s" % [hh["data"]["wicon"], ("NEW" if wnew else _t("g_weapon")), RARITY[wrar]["name"], _variant("weapon", hh["cls"], winst["vid"])["name"], _t("lv_dot"), winst["lvl"], _rolls_text(winst)]
+			cell["wlbl"].text = "%s %s\n%s %s · %s%d\n%s" % [hh["data"]["wicon"], ("NEW" if wnew else _t("g_weapon")), _rarity_name(wrar), _variant("weapon", hh["cls"], winst["vid"])["name"], _t("lv_dot"), winst["lvl"], _rolls_text(winst)]
 			cell["wsb"].border_color = Color("#ffd24a") if wnew else Color(RARITY[wrar]["col"])
 		else:
 			cell["wlbl"].text = "%s %s\n%s" % [hh["data"]["wicon"], _t("g_weapon"), _t("g_empty")]
@@ -5133,7 +5176,7 @@ func _refresh_impl() -> void:
 		if mkey != "" and hh["gear"]["module"].has(mkey):
 			var inst = hh["gear"]["module"][mkey]
 			var rar: int = inst["rarity"]
-			cell["mlbl"].text = "%s %s\n%s %s\n%s" % [mdef["icon"], ("NEW" if mnew else mdef["name"]), RARITY[rar]["name"], _module_variant(hh["cls"], inst["vid"])["name"], _rolls_text(inst)]
+			cell["mlbl"].text = "%s %s\n%s %s\n%s" % [mdef["icon"], ("NEW" if mnew else mdef["name"]), _rarity_name(rar), _module_variant(hh["cls"], inst["vid"])["name"], _rolls_text(inst)]
 			cell["msb"].border_color = Color("#ffd24a") if mnew else Color(RARITY[rar]["col"])
 		else:
 			cell["mlbl"].text = "%s %s\n%s" % [mdef["icon"], mdef["name"], _t("g_empty")]
@@ -5304,7 +5347,7 @@ func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	card.add_theme_stylebox_override("panel", sb)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); card.add_child(box)
 	var head := Label.new(); head.add_theme_font_size_override("font_size", 15)
-	head.text = "%s · %s · %s%d%s" % [v["name"], RARITY[rar]["name"], _t("lv_dot"), inst["lvl"], ("  " + _t("g_equipped") if equipped else "")]
+	head.text = "%s · %s · %s%d%s" % [v["name"], _rarity_name(rar), _t("lv_dot"), inst["lvl"], ("  " + _t("g_equipped") if equipped else "")]
 	head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
 	box.add_child(head)
 	var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 14); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
@@ -5349,7 +5392,7 @@ func _drop_into(hh: Dictionary, i: int, slot: String) -> Dictionary:
 			hh["equip"][slot] = key
 		# короткая всплывашка (Диана, вариант Б): редкость + слот, без длинного имени/статов
 		var slotn: String = _t("g_weapon") if slot == "weapon" else _t("g_module")
-		_popup_center("%s %s %s!" % [ic, RARITY[rar]["name"], slotn], Color(RARITY[rar]["col"]), 1.8)
+		_popup_center("%s %s %s!" % [ic, _rarity_name(rar), slotn], Color(RARITY[rar]["col"]), 1.8)
 	_recalc_hero(hh)
 	return it
 
