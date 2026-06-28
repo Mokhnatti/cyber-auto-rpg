@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.13" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.14" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -138,6 +138,12 @@ var _bp_badge_cache := 0
 var loot_badge: Label
 var impl_panel: Control
 var impl_open := false
+# статичные строки экрана ЭКИПИРОВКИ (build-once) → рефреш при смене языка
+var impl_title: Label
+var impl_hdr: Label
+var impl_allitems_btn: Button
+var impl_hint: Label
+var impl_close_btn: Button
 var impl_rows := {}
 # ИМПЛАНТЫ ПЕР-ПЕРСОНАЖ: у каждого бойца свои 5 слотов. IMPL_DEFS — шаблон (иконка/имя/стат).
 # Состояние на героя: hero["impl"][key] = {lvl(звёзды), dupes}. 2 дубля + золото → +1 звезда
@@ -933,6 +939,11 @@ func _fb_write_profile() -> void:
 
 func _clan_name() -> String: return (nick if nick != "" else "Вектор")
 
+# ник для ПОКАЗА: гостевой плейсхолдер локализуем под текущий язык (в сейве он хранится литералом «гость»/«guest»)
+func _disp_nick() -> String:
+	if nick == "" or nick == "гость" or nick == "guest": return _t("guest_nick")
+	return nick
+
 func _clan_create() -> void:
 	if not fb_ready:
 		_popup_center(_t("cl_no_server"), Color("#ff5050"), 2.0); return
@@ -989,7 +1000,7 @@ func _open_clan() -> void:
 		panel.add_child(_clbl(_t("cl_web_only"), 150)); _clan_close_btn(panel); return
 	if not fb_ready:
 		panel.add_child(_clbl(_t("cl_connecting"), 160)); _clan_close_btn(panel); return
-	panel.add_child(_clbl(_t("cl_my_id") % [fb_id, _clan_name()], 144))
+	panel.add_child(_clbl(_t("cl_my_id") % [fb_id, _disp_nick()], 144))
 	panel.add_child(_clbl(_t("cl_peak") % [_gsep(power_peak), _gsep(clan_tokens)], 170, Color("#ffd24a")))
 	if player_clan == "":
 		panel.add_child(_clbl(_t("cl_no_clan"), 210))
@@ -2390,6 +2401,7 @@ func _apply_lang() -> void:   # применить смену языка к по
 	_refresh_settings()
 	if reboot_panel: _refresh_reboot()   # престиж тоже построен однажды — рефрешим строки
 	if inv_panel: _refresh_inv()   # прокачка отряда тоже build-once → рефрешим заголовок/имена/закрыть
+	if impl_panel: _refresh_impl_static()   # экипировка build-once → рефрешим статичные строки (заголовок/шапка/имена/инфо/хинт/закрыть)
 	if inv_btn: inv_btn.tooltip_text = _t("tab_upgrade")
 	if impl_btn: impl_btn.tooltip_text = _t("tab_gear")
 	if more_btn: more_btn.tooltip_text = _t("tab_more")
@@ -5132,15 +5144,18 @@ func _build_implants() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 26); title.size = Vector2(W, 30)
 	impl_panel.add_child(title)
+	impl_title = title
 	_add_help(impl_panel, _t("gear_help_t"), _t("gear_help_b"))
 	var hdr := _lbl(_t("g_hdr"), 12, Color("#5a6080"), HORIZONTAL_ALIGNMENT_CENTER)
 	hdr.position = Vector2(0, 58); hdr.size = Vector2(W, 18)
 	impl_panel.add_child(hdr)
+	impl_hdr = hdr
 	# кнопка → окно ИНВЕНТАРЬ (вся коллекция кучей, разбор в лом)
 	var icb := Button.new(); icb.text = _t("g_allitems"); icb.add_theme_font_size_override("font_size", 13)
 	icb.custom_minimum_size = Vector2(140, 32); icb.position = Vector2(W - 156, 24)
 	icb.pressed.connect(_toggle_invcol)
 	impl_panel.add_child(icb)
+	impl_allitems_btn = icb
 	# СЕТКА 4×3: строка-боец [персонаж | пушка | спецмодуль]
 	impl_grid.clear()
 	for i in HEROES.size():   # героев ещё нет при сборке UI → статику берём из константы HEROES
@@ -5152,8 +5167,10 @@ func _build_implants() -> void:
 		cell["hsb"] = hsb; cell["hcol"] = Color(HEROES[i]["color"])
 		var hic := _lbl(HEROES[i]["icon"], 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); hic.position = Vector2(16, ry + 8); hic.size = Vector2(168, 46); impl_panel.add_child(hic)
 		var hnm := _lbl(_hname(i), 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); hnm.position = Vector2(16, ry + 56); hnm.size = Vector2(168, 20); impl_panel.add_child(hnm)
+		cell["hnm"] = hnm
 		var hlv := _lbl("", 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); hlv.position = Vector2(20, ry + 80); hlv.size = Vector2(160, 48); impl_panel.add_child(hlv)
 		var hinfo := _lbl(_t("g_info"), 11, Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_CENTER); hinfo.position = Vector2(16, ry + 112); hinfo.size = Vector2(168, 16); hinfo.mouse_filter = Control.MOUSE_FILTER_IGNORE; impl_panel.add_child(hinfo)
+		cell["hinfo"] = hinfo
 		var hbtn := Button.new(); hbtn.flat = true; hbtn.position = Vector2(16, ry); hbtn.size = Vector2(168, 134); hbtn.custom_minimum_size = Vector2(168, 134)
 		var hidx := i
 		hbtn.pressed.connect(func(): _show_hero_desc(hidx))
@@ -5179,11 +5196,13 @@ func _build_implants() -> void:
 		impl_grid.append(cell)
 	var hint := _lbl(_t("g_hint"), 12, Color("#5a6080"), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.position = Vector2(0, 84 + 4 * 150 + 8); hint.size = Vector2(W, 18); impl_panel.add_child(hint)
+	impl_hint = hint
 	var close := Button.new()
 	close.text = _t("close_caps"); close.add_theme_font_size_override("font_size", 16)
 	close.custom_minimum_size = Vector2(200, 50); close.position = Vector2(W * 0.5 - 100, H - 110)
 	close.pressed.connect(_toggle_impl)
 	impl_panel.add_child(close)
+	impl_close_btn = close
 	_build_impl_detail()
 
 func _hero_has_new(i: int) -> bool:
@@ -5192,7 +5211,20 @@ func _hero_has_new(i: int) -> bool:
 			return true
 	return false
 
+func _refresh_impl_static() -> void:
+	# статичные строки экрана ЭКИПИРОВКИ (build-once) → пере-применяем под текущий язык
+	if impl_title: impl_title.text = _t("t_gear")
+	if impl_hdr: impl_hdr.text = _t("g_hdr")
+	if impl_allitems_btn: impl_allitems_btn.text = _t("g_allitems")
+	if impl_hint: impl_hint.text = _t("g_hint")
+	if impl_close_btn: impl_close_btn.text = _t("close_caps")
+	for i in impl_grid.size():
+		var cell = impl_grid[i]
+		if cell.has("hnm"): cell["hnm"].text = _hname(i)
+		if cell.has("hinfo"): cell["hinfo"].text = _t("g_info")
+
 func _refresh_impl() -> void:
+	_refresh_impl_static()
 	for i in impl_grid.size():
 		var hh = heroes[i]
 		var cell = impl_grid[i]
