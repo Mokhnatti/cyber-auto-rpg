@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -391,6 +391,9 @@ func _weekly_boss() -> Dictionary: return CLAN_BOSSES[_week_num() % CLAN_BOSSES.
 const TR := {
 	# общие
 	"close": {"ru": "✕ закрыть", "en": "✕ close"},
+	"hud_stage": {"ru": "СТАДИЯ", "en": "STAGE"},
+	"hud_wave": {"ru": "волна", "en": "wave"},
+	"hud_boss": {"ru": "БОСС", "en": "BOSS"},
 	"back": {"ru": "← назад", "en": "← back"},
 	"ready": {"ru": "ГОТОВО", "en": "READY"},
 	"claim": {"ru": "ЗАБРАТЬ ✨", "en": "CLAIM ✨"},
@@ -2859,7 +2862,7 @@ func _refresh_hud() -> void:
 	for e in enemies:
 		if e["alive"] and not e.get("boss", false):
 			etypes[ENEMY_TYPES.get(e.get("type", "grunt"), ENEMY_TYPES["grunt"])["name"]] = true
-	wave_label.text = ("СТАДИЯ %d · 👹 БОСС" % stage if in_boss else "СТАДИЯ %d · волна %d/%d" % [stage, sub, STAGE_WAVES]) + ("   ⚔" if phase == "fight" else "   ▶")
+	wave_label.text = ("%s %d · 👹 %s" % [_t("hud_stage"), stage, _t("hud_boss")] if in_boss else "%s %d · %s %d/%d" % [_t("hud_stage"), stage, _t("hud_wave"), sub, STAGE_WAVES]) + ("   ⚔" if phase == "fight" else "   ▶")
 	if boss_btn:
 		boss_btn.visible = boss_retry and not in_boss   # кнопка только для ретрая (свежий заход = авто)
 	if impl_btn:
