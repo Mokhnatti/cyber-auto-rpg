@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.4" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.5" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -225,13 +225,13 @@ const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 # hp/dmg/atk — множители; atk<1 = чаще бьёт; back=бьёт заднюю линию; heal=хилит союзников-врагов; s=масштаб
 const ENEMY_TYPES := {
 	"grunt":  {"name": "Грунт",      "name_en": "Grunt",    "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0, "icon": ""},
-	"armor":  {"name": "Бронебот",   "name_en": "Armorbot", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "БРОНЯ"},
-	"swift":  {"name": "Шустрый",    "name_en": "Speeder",  "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.80, "icon": "ШУСТР"},
-	"archer": {"name": "Стрелок",    "name_en": "Shooter",  "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true, "icon": "СТРЕЛ"},
-	"healer": {"name": "Лекарь",     "name_en": "Medic",    "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#3ad97a", "s": 1.0, "heal": true, "icon": "ХИЛ"},
-	"shield": {"name": "Щитоносец",  "name_en": "Shielder", "hp": 5.5, "dmg": 0.7, "atk": 1.2, "col": "#4d9bff", "s": 1.18, "icon": "ЩИТ", "shield": true},
-	"bomber": {"name": "Взрывной",   "name_en": "Bomber",   "hp": 0.8, "dmg": 1.0, "atk": 1.0, "col": "#ff7a2d", "s": 1.05, "icon": "БОМБА", "bomb": true},
-	"swarm":  {"name": "Рой",        "name_en": "Swarm",    "hp": 0.25, "dmg": 0.45, "atk": 0.7, "col": "#c06bff", "s": 0.62, "icon": "РОЙ", "swarm": true},
+	"armor":  {"name": "Бронебот",   "name_en": "Armorbot", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "🛡"},
+	"swift":  {"name": "Шустрый",    "name_en": "Speeder",  "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.80, "icon": "⚡"},
+	"archer": {"name": "Стрелок",    "name_en": "Shooter",  "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true, "icon": "🏹"},
+	"healer": {"name": "Лекарь",     "name_en": "Medic",    "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#3ad97a", "s": 1.0, "heal": true, "icon": "💚"},
+	"shield": {"name": "Щитоносец",  "name_en": "Shielder", "hp": 5.5, "dmg": 0.7, "atk": 1.2, "col": "#4d9bff", "s": 1.18, "icon": "🔵", "shield": true},
+	"bomber": {"name": "Взрывной",   "name_en": "Bomber",   "hp": 0.8, "dmg": 1.0, "atk": 1.0, "col": "#ff7a2d", "s": 1.05, "icon": "💣", "bomb": true},
+	"swarm":  {"name": "Рой",        "name_en": "Swarm",    "hp": 0.25, "dmg": 0.45, "atk": 0.7, "col": "#c06bff", "s": 0.62, "icon": "🐝", "swarm": true},
 }
 
 # КАЛИБРОВКА ПАС4 — модель Clicker Heroes (PROGRESSION-RESEARCH.md): per-STAGE экспонента врагов + ЛИНЕЙНАЯ сила бойца с ×2-изломами каждые N уровней. Зазор линейной силы vs экспон.цены = плавное затухание; ×2-изломы = power-spike «волна».
@@ -447,6 +447,7 @@ func _weekly_boss() -> Dictionary: return CLAN_BOSSES[_week_num() % CLAN_BOSSES.
 const TR := {
 	# общие
 	"close": {"ru": "✕ закрыть", "en": "✕ close"},
+	"ic_all": {"ru": "все", "en": "all"},
 	"hud_stage": {"ru": "СТАДИЯ", "en": "STAGE"},
 	"hud_wave": {"ru": "волна", "en": "wave"},
 	"hud_boss": {"ru": "БОСС", "en": "BOSS"},
@@ -527,7 +528,7 @@ const TR := {
 	"g_module": {"ru": "модуль", "en": "module"},
 	"g_empty": {"ru": "— пусто —", "en": "— empty —"},
 	"g_compare": {"ru": "— сравни и надень", "en": "— compare & equip"},
-	"g_equip": {"ru": "НАДЕТЬ", "en": "EQUIP"},
+	"g_equip": {"ru": "✅ НАДЕТЬ", "en": "✅ EQUIP"},
 	"g_equipped": {"ru": "✓ НАДЕТО", "en": "✓ EQUIPPED"},
 	"g_back": {"ru": "НАЗАД", "en": "BACK"},
 	"lv_dot": {"ru": "ур.", "en": "lv."},
@@ -550,7 +551,7 @@ const TR := {
 	"rb_active": {"ru": "● АКТИВНЫЕ (работают сейчас):", "en": "● ACTIVE (working now):"},
 	"rb_spare": {"ru": "○ В ЗАПАСЕ (надень в свободный слот):", "en": "○ SPARE (equip in a free slot):"},
 	"rb_eq_on": {"ru": "  ✓надето", "en": "  ✓equipped"},
-	"rb_unequip": {"ru": "СНЯТЬ", "en": "UNEQUIP"},
+	"rb_unequip": {"ru": "↩ СНЯТЬ", "en": "↩ UNEQUIP"},
 	"rb_slots_full": {"ru": "слоты\nзаняты", "en": "slots\nfull"},
 	"rb_lvlup": {"ru": "+ур\n%d🧬", "en": "+lv\n%d🧬"},
 	"rb_pop_open": {"ru": "🎲 Открыто: %s %s!\n%s", "en": "🎲 Unlocked: %s %s!\n%s"},
@@ -587,7 +588,7 @@ const TR := {
 	"cl_create_btn": {"ru": "🛡 СОЗДАТЬ КЛАН", "en": "🛡 CREATE CLAN"},
 	"cl_or_join": {"ru": "— или вступить по коду —", "en": "— or join by code —"},
 	"cl_code_ph": {"ru": "код", "en": "code"},
-	"cl_join_btn": {"ru": "ВСТУПИТЬ", "en": "JOIN"},
+	"cl_join_btn": {"ru": "🤝 ВСТУПИТЬ", "en": "🤝 JOIN"},
 	"cl_code_label": {"ru": "Код клана: %s", "en": "Clan code: %s"},
 	"cl_share_code": {"ru": "Поделись кодом с друзьями 🤝", "en": "Share the code with friends 🤝"},
 	"cl_loading_members": {"ru": "⏳ загрузка состава…", "en": "⏳ loading members…"},
@@ -4785,10 +4786,10 @@ func _ic_cycle_hero() -> void:
 
 func _refresh_invcol() -> void:
 	for c in ic_list.get_children(): c.queue_free()
-	var slot_name := {"all": "слот: все", "weapon": "слот: 🔫 оружие", "module": "слот: ✨ модули"}
+	var slot_name := {"all": "🔫+✨ " + _t("ic_all"), "weapon": "🔫 " + _t("g_weapon"), "module": "✨ " + _t("g_module")}
 	ic_fslot_btn.text = slot_name[ic_fslot]
-	ic_frar_btn.text = "редкость: все" if ic_frar == 0 else "редкость: " + RARITY[ic_frar]["name"]
-	ic_fhero_btn.text = "боец: все" if ic_fhero == -1 else "боец: %s %s" % [HEROES[ic_fhero]["icon"], HEROES[ic_fhero]["name"]]
+	ic_frar_btn.text = "⭐ " + _t("ic_all") if ic_frar == 0 else "⭐%d %s" % [ic_frar, RARITY[ic_frar]["name"]]
+	ic_fhero_btn.text = "👥 " + _t("ic_all") if ic_fhero == -1 else "%s %s" % [HEROES[ic_fhero]["icon"], HEROES[ic_fhero]["name"]]
 	var items := _all_items()
 	var shown := 0
 	for it in items:
