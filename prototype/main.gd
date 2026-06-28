@@ -1337,7 +1337,7 @@ var scrap := 0             # ♻ ЛОМ: валюта с разбора шмот
 var cores := 0            # 🧬 ЯДРА — валюта престижа (трата на аугменты)
 var cores_total := 0.0    # сумма ВСЕХ добытых ядер за всё время → перма-множитель (√-петля AdCap-стиля, unbounded драйвер бесконечной прогрессии)
 func _prestige_mult() -> float:   # вечно растущий множитель урона от накопленных ядер (не асимптотит)
-	return pow(1.0 + cores_total, 0.5)
+	return pow(1.0 + cores_total, 0.6)  # 0.5→0.6: плато стадий_за_престиж<0.1 → нужен бодрее рост
 # === МОНЕТИЗАЦИЯ (Фаза А) ===
 var diamonds := 999999    # 💎 АЛМАЗЫ — премиум (ВРЕМЕННО: всем 999999 для теста монетизации — Рамиль)
 var x3_unlocked := false  # x3-скорость куплена навсегда (за алмазы)
@@ -2153,8 +2153,8 @@ func _ready() -> void:
 	if bot:
 		auto_battle = true
 		Engine.max_fps = 0          # снять кап fps → CPU свободен, рисует больше кадров → шаг кадра мелкий даже на высоком time_scale (легитимно)
-		Engine.time_scale = 16.0    # ×16: шаг = 16/fps, при ~250fps ≈ 0.06с (мельче прежнего 0.13с) → симуляция точная, вдвое быстрее
-		print("TTBOT enabled tactic=%s slot=%s time_scale=16 maxfps=0" % [bot_tactic, save_slot])
+		Engine.time_scale = 32.0    # ×16: шаг = 16/fps, при ~250fps ≈ 0.06с (мельче прежнего 0.13с) → симуляция точная, вдвое быстрее
+		print("TTBOT enabled tactic=%s slot=%s time_scale=32 maxfps=0" % [bot_tactic, save_slot])
 	elif nick == "":
 		nick_panel.visible = true   # первый вход → спросить ник (ввод через нативный браузерный prompt)
 	elif _offline_gold > 0:
