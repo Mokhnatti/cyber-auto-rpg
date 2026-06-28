@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.7"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.8"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1879,13 +1879,16 @@ func _spawn_wave() -> void:
 	else:
 		var count := clampi(2 + int(stage / 5), 2, 5)
 		for j in count: spawn_types.append(pool[(stage * 7 + sub * 3 + j * 2) % pool.size()])
+	# чиби-враги под локацию (статика): sprites/enemy_<loc>/, фолбэк на старый "enemy"
+	var efolder := "enemy_" + str(_loc()["id"])
+	if not ResourceLoader.exists("res://sprites/%s/idle_0.png" % efolder): efolder = "enemy"
 	for j in spawn_types.size():
 		var etype: String = spawn_types[j]
 		var iboss: bool = etype == "boss"
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
 		var glow := Color("#ff2d95") if iboss else Color(et["col"])
 		var es: float = 1.9 if iboss else (1.3 - j * 0.08) * et["s"]
-		var d := _make_char("enemy", -1, es, glow)
+		var d := _make_char(efolder, -1, es, glow)
 		# 🏷 значок-тип над головой (грейбокс-читаемость). Контр-флип т.к. враг смотрит влево.
 		var eicon: String = "" if iboss else str(et.get("icon", ""))
 		if eicon != "":
