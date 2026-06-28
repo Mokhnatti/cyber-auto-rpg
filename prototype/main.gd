@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.5" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.6" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -634,7 +634,7 @@ const TR := {
 	"cl_boss_default_name": {"ru": "Клан-босс", "en": "Clan Boss"},
 	# дейли-квесты + стрик-награда
 	"dq_title":     {"ru": "📋 ЕЖЕДНЕВНЫЕ КВЕСТЫ", "en": "📋 DAILY QUESTS"},
-	"dq_subtitle":  {"ru": "Обновляются каждый день. Прогресс — за сегодня.", "en": "Resets every day. Progress counted today."},
+	"dq_subtitle":  {"ru": "Обновляются каждый день. Прогресс — за сегодня.", "en": "Resets daily. Only today's progress counts."},
 	"dq_claimed":   {"ru": "✅ Забрано   ", "en": "✅ Claimed   "},
 	"dq_done_pop":  {"ru": "✅ Квест выполнен: ", "en": "✅ Quest complete: "},
 	"m_daily":      {"ru": "📋  Ежедневные квесты", "en": "📋  Daily quests"},
@@ -721,6 +721,56 @@ const TR := {
 	"finale_case_open":  {"ru": "(Тайна девяти секунд так и не раскрыта — собери фрагменты в 📓 Деле.)", "en": "(The mystery of the nine seconds remains unsolved — collect fragments in the 📓 Case.)"},
 	# кнопка обновления в меню «Ещё»
 	"update_btn":        {"ru": "🔄  v%s · обновить игру", "en": "🔄  v%s · update game"},
+	# QA-локализация: дочистка пропусков
+	"nick_prompt":       {"ru": "Введи ник для теста:", "en": "Enter a nickname (for testing):"},
+	"offline_title":     {"ru": "🌙 ОТРЯД РАБОТАЛ БЕЗ ТЕБЯ", "en": "🌙 YOUR SQUAD KEPT WORKING WHILE YOU WERE AWAY"},
+	"offline_body":      {"ru": "Тебя не было: %s\n\n💰 Заработано: %s золота", "en": "You were away: %s\n\n💰 Earned: %s gold"},
+	"offline_collect":   {"ru": "ЗАБРАТЬ", "en": "COLLECT"},
+	"inv_title":         {"ru": "🎒 ИНВЕНТАРЬ", "en": "🎒 INVENTORY"},
+	"inv_all":           {"ru": "☑ ВСЁ", "en": "☑ ALL"},
+	"inv_fav":           {"ru": "★ ИЗБРАННОЕ", "en": "★ FAVORITES"},
+	"inv_scrap":         {"ru": "♻ РАЗОБРАТЬ", "en": "♻ SCRAP"},
+	"inv_close":         {"ru": "✕ ЗАКРЫТЬ", "en": "✕ CLOSE"},
+	"inv_status":        {"ru": "вещей: %d   выбрано: %d   ♻ лом: %s", "en": "items: %d   selected: %d   ♻ scrap: %s"},
+	"inv_equipped":      {"ru": "✓ НАДЕТО", "en": "✓ EQUIPPED"},
+	"inv_lvl":           {"ru": "ур.%d", "en": "lv.%d"},
+	"scrap_confirm":     {"ru": "Разобрать %d вещей в лом?\n(избранное и надетое пропускаются)", "en": "Scrap %d items?\n(favorites and equipped are skipped)"},
+	"scrap_done":        {"ru": "♻ Разобрано → +%s лом", "en": "♻ Scrapped → +%s scrap"},
+	"cancel_btn":        {"ru": "ОТМЕНА", "en": "CANCEL"},
+	"skipped_loot":      {"ru": "🎁 Лут за %d пропущенных боссов:\n+%d в инвентарь · +%d ♻ лом", "en": "🎁 Loot from %d skipped bosses:\n+%d to inventory · +%d ♻ scrap"},
+	"hero_desc_close":   {"ru": "× закрыть", "en": "× close"},
+	"reboot_done":       {"ru": "♻ ПЕРЕЗАГРУЗКА +%d 🧬 ЯДЕР", "en": "♻ REBOOT +%d 🧬 CORES"},
+	"cls_for_30min":     {"ru": "на 30 мин", "en": "for 30 min"},
+	"clan_name_prefix":  {"ru": "Клан ", "en": "Clan "},
+	"more_title":        {"ru": "☰ ЕЩЁ", "en": "☰ MORE"},
+	"force_update_msg":  {"ru": "🔄 Обновление доступно в веб-версии", "en": "🔄 Update is available in the web version"},
+	"story_title":       {"ru": "📖 СЮЖЕТ", "en": "📖 STORY"},
+	"story_messages":    {"ru": "📱  Сообщения / квест", "en": "📱  Messages / quest"},
+	"story_dossier":     {"ru": "📁  Досье: Вектор", "en": "📁  Dossier: Vector"},
+	"story_case":        {"ru": "📓  Дело: 9 секунд", "en": "📓  Case: 9 Seconds"},
+	"story_finale":      {"ru": "🏁  Финал", "en": "🏁  Finale"},
+	"hud_boss_warn":     {"ru": "⚠ БОСС   %d / %d", "en": "⚠ BOSS   %d / %d"},
+	"to_boss":           {"ru": "👹 К БОССУ", "en": "👹 TO BOSS"},
+	"new_loot":          {"ru": "🎁 НОВЫЙ ЛУТ ↓", "en": "🎁 NEW LOOT ↓"},
+	"hero_snipe":        {"ru": "СНАЙП", "en": "SNIPE"},
+	"hero_assault":      {"ru": "ШТУРМ", "en": "ASSAULT"},
+	"hero_tank":         {"ru": "ТАНК", "en": "TANK"},
+	"hero_hacker":       {"ru": "ХАКЕР", "en": "HACKER"},
+	"pick_target":       {"ru": "ВЫБЕРИ ЦЕЛЬ — тапни врага", "en": "PICK A TARGET — tap an enemy"},
+	"hack_done":         {"ru": "💻 ВЗЛОМ! Отряд +20% урона", "en": "💻 HACK! Squad +20% damage"},
+	"qte_start":         {"ru": "⚡ ТАПАЙ МАРКЕРЫ!", "en": "⚡ TAP THE MARKERS!"},
+	"qte_perfect":       {"ru": "⚡ ИДЕАЛЬНЫЙ КОНТЕР! %d/%d", "en": "⚡ PERFECT COUNTER! %d/%d"},
+	"qte_counter":       {"ru": "КОНТЕР %d/%d", "en": "COUNTER %d/%d"},
+	"squad_down_wave":   {"ru": "☠ ОТРЯД ПАЛ — дошли до волны %d", "en": "☠ SQUAD DOWN — reached wave %d"},
+	"you_died":          {"ru": "☠ ТЫ ПОГИБ\nПрокачай отряд и попробуй снова", "en": "☠ YOU DIED\nUpgrade your squad and try again"},
+	"squad_wiped":       {"ru": "☠ Отряд пал — перегруппировка", "en": "☠ Squad wiped — regrouping"},
+	"stage_cleared":     {"ru": "🏆 СТАДИЯ %d ПРОЙДЕНА", "en": "🏆 STAGE %d CLEARED"},
+	"memory_fragment":   {"ru": "🧩 Восстановлен фрагмент памяти — открой 📓 Дело", "en": "🧩 Memory fragment recovered — open the 📓 Case"},
+	"milestone_stage":   {"ru": "🏆 РУБЕЖ: СТАДИЯ %d! +%d🔩 +%d💎", "en": "🏆 MILESTONE: STAGE %d! +%d🔩 +%d💎"},
+	"hint_tank":         {"ru": "💡 Подкачай отряд или вкачай ТАНКА для живучести всех", "en": "💡 Power up your squad or level the TANK for everyone's survivability"},
+	"hint_sniper":       {"ru": "💡 Качай СНАЙПЕРА — он первым бьёт 💊хилеров и 🛡щитоносцев", "en": "💡 Level the SNIPER — he hits 💊healers and 🛡shielders first"},
+	"hint_hacker":       {"ru": "💡 Качай ХАКЕРА — его AoE выкосит 🐝рой", "en": "💡 Level the HACKER — his AoE mows down the 🐝swarm"},
+	"hint_bomber":       {"ru": "💡 Качай ТАНКА — 💥взрывные бьют по отряду, нужен запас HP", "en": "💡 Level the TANK — 💥bombers hit the whole squad, you need HP reserve"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -729,6 +779,11 @@ func _t(k: String) -> String:
 func _tloc(d: Dictionary, key: String) -> String:
 	if lang == "en": return str(d.get(key + "_en", d.get(key, "")))
 	return str(d.get(key, ""))
+# локализованное имя бойца по индексу класса (порядок HEROES: снайп/штурм/танк/хакер)
+const HERO_NAME_KEYS := ["hero_snipe", "hero_assault", "hero_tank", "hero_hacker"]
+func _hname(i: int) -> String:
+	if i >= 0 and i < HERO_NAME_KEYS.size(): return _t(HERO_NAME_KEYS[i])
+	return str(HEROES[i]["name"]) if i >= 0 and i < HEROES.size() else ""
 func _fb_init() -> void:
 	if not OS.has_feature("web"): return
 	var js := """
@@ -778,7 +833,7 @@ func _clan_create() -> void:
 	if not fb_ready:
 		_popup_center(_t("cl_no_server"), Color("#ff5050"), 2.0); return
 	var code := "%06d" % (randi() % 1000000)
-	var clan := {"name": "Клан " + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": power_peak}}, "created": int(Time.get_unix_time_from_system())}
+	var clan := {"name": _t("clan_name_prefix") + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": power_peak}}, "created": int(Time.get_unix_time_from_system())}
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s" % code, JSON.stringify(clan), func(c, _d):
 		if c >= 200 and c < 300:
 			player_clan = code; _fb_write_profile(); _save()
@@ -1026,7 +1081,7 @@ func _open_clan_shop() -> void:
 			row.text = "%s +%d%%\n%s" % [bname, pct, _t("cls_active") % mins]
 			row.add_theme_color_override("font_color", Color("#3ad97a"))
 		else:
-			row.text = "%s\n+%d%% на 30 мин  —  %d🎖" % [bname, pct, cost]
+			row.text = ("%s\n+%d%% " + _t("cls_for_30min") + "  —  %d🎖") % [bname, pct, cost]
 		row.pressed.connect(func():
 			if clan_tokens < cost:
 				_popup_center(_t("cls_no_tokens"), Color("#ff4444"), 1.5); return
@@ -1601,7 +1656,7 @@ func _reboot() -> void:
 	_qte_clear()
 	if reboot_panel: reboot_panel.visible = false
 	print("TTEVENT reboot gain=%d from_stage=%d -> start=%d cores=%d" % [gain, best_stage, stage, cores])
-	_popup_center("♻ ПЕРЕЗАГРУЗКА +%d 🧬 ЯДЕР" % gain, Color("#b46bff"))
+	_popup_center(_t("reboot_done") % gain, Color("#b46bff"))
 	_save()
 	_start_march()
 	_refresh_hud()
@@ -1746,7 +1801,7 @@ func _clear_cache() -> void:   # очистка service worker + кэша → з
 
 func _prompt_nick() -> void:   # нативный ввод браузера — надёжно на мобиле (LineEdit в вебе клаву не цепляет)
 	if OS.has_feature("web"):
-		var r = JavaScriptBridge.eval("(window.prompt('Введи ник для теста:', '') || '').slice(0,20)", true)
+		var r = JavaScriptBridge.eval("(window.prompt('" + _t("nick_prompt") + "', '') || '').slice(0,20)", true)
 		if typeof(r) == TYPE_STRING and r.strip_edges() != "":
 			nick = r.strip_edges()
 	else:
@@ -2216,7 +2271,7 @@ func _save_path() -> String:
 
 func _show_death(was_boss: bool) -> void:
 	if bot: return
-	var msg := "☠ ТЫ ПОГИБ\nПрокачай отряд и попробуй снова" if was_boss else "☠ Отряд пал — перегруппировка"
+	var msg := _t("you_died") if was_boss else _t("squad_wiped")
 	_popup_center(msg, Color("#ff5050"), 3.8)   # висит дольше
 
 func _toggle_settings() -> void:
@@ -2389,7 +2444,7 @@ func _ask_restart() -> void:
 func _show_offline() -> void:
 	var hrs := _offline_secs / 3600
 	var mins := (_offline_secs % 3600) / 60
-	var away := ("%dч %dм" % [hrs, mins]) if hrs > 0 else ("%dм" % mins)
+	var away := ("%d%s %d%s" % [hrs, _t("hr_short"), mins, _t("min_short")]) if hrs > 0 else ("%d%s" % [mins, _t("min_short")])
 	var panel := Control.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3200
 	hud.add_child(panel)
@@ -2404,9 +2459,9 @@ func _show_offline() -> void:
 	card.position = Vector2(W * 0.5 - 200, 400); card.custom_minimum_size = Vector2(400, 0)
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
-	var t := Label.new(); t.text = "🌙 ОТРЯД РАБОТАЛ БЕЗ ТЕБЯ"; t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
-	var d2 := Label.new(); d2.text = "Тебя не было: %s\n\n💰 Заработано: %s золота" % [away, _gsep(_offline_gold)]; d2.add_theme_font_size_override("font_size", 16); d2.add_theme_color_override("font_color", Color("#cfe6ff")); d2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d2)
-	var b := Button.new(); b.text = "ЗАБРАТЬ"; b.add_theme_font_size_override("font_size", 17); b.custom_minimum_size = Vector2(0, 50)
+	var t := Label.new(); t.text = _t("offline_title"); t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var d2 := Label.new(); d2.text = _t("offline_body") % [away, _gsep(_offline_gold)]; d2.add_theme_font_size_override("font_size", 16); d2.add_theme_color_override("font_color", Color("#cfe6ff")); d2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(d2)
+	var b := Button.new(); b.text = _t("offline_collect"); b.add_theme_font_size_override("font_size", 17); b.custom_minimum_size = Vector2(0, 50)
 	b.pressed.connect(func(): panel.queue_free())
 	v.add_child(b)
 	_offline_gold = 0
@@ -2761,12 +2816,12 @@ func _process(delta: float) -> void:
 			sub = 1
 			in_boss = false
 			boss_retry = false
-			_popup_center("🏆 СТАДИЯ %d ПРОЙДЕНА" % (stage - 1), Color("#ffd24a"))
+			_popup_center(_t("stage_cleared") % (stage - 1), Color("#ffd24a"))
 			best_stage = max(best_stage, stage)
 			_update_power_peak()   # пик-мощь для клан-боссов (prestige-proof)
 			if _frags_open() > frags_notified:
 				frags_notified = _frags_open()
-				_popup_center("🧩 Восстановлен фрагмент памяти — открой 📓 Дело", Color("#ff2d95"), 2.6)
+				_popup_center(_t("memory_fragment"), Color("#ff2d95"), 2.6)
 			# РУБЕЖИ: celebration-награда каждые 10 стадий (positive reinforcement, лом+алмазы, БЕЗ DPS-спайка)
 			var ms := int(best_stage / 10)
 			if ms > milestones_hit:
@@ -2774,7 +2829,7 @@ func _process(delta: float) -> void:
 				var msc := ms * 300
 				var msd := ms * 4
 				scrap += msc; diamonds += msd
-				_popup_center("🏆 РУБЕЖ: СТАДИЯ %d! +%d🔩 +%d💎" % [ms * 10, msc, msd], Color("#ffd24a"), 2.8)
+				_popup_center(_t("milestone_stage") % [ms * 10, msc, msd], Color("#ffd24a"), 2.8)
 			_check_quest_complete()   # сюжетный квест локации: предмет упал с босса
 			_start_march()
 		elif sub < STAGE_WAVES:
@@ -2797,10 +2852,10 @@ func _process(delta: float) -> void:
 			if wipe_streak >= 2:
 				var th := {}
 				for e in enemies: th[e.get("type", "")] = true
-				var hint := "💡 Подкачай отряд или вкачай ТАНКА для живучести всех"
-				if "healer" in th or "shield" in th: hint = "💡 Качай СНАЙПЕРА — он первым бьёт 💊хилеров и 🛡щитоносцев"
-				elif "swarm" in th: hint = "💡 Качай ХАКЕРА — его AoE выкосит 🐝рой"
-				elif "bomber" in th: hint = "💡 Качай ТАНКА — 💥взрывные бьют по отряду, нужен запас HP"
+				var hint := _t("hint_tank")
+				if "healer" in th or "shield" in th: hint = _t("hint_sniper")
+				elif "swarm" in th: hint = _t("hint_hacker")
+				elif "bomber" in th: hint = _t("hint_bomber")
 				_popup_center(hint, Color("#ffd24a"), 3.8)
 		for e in enemies:                     # ФИКС стака: убрать оставшихся врагов перед откатом
 			if e["node"]: e["node"].queue_free()
@@ -2915,7 +2970,7 @@ func _use_ult(i: int) -> void:
 		# СНАЙПЕР: вход в режим прицела (ульта тратится при выстреле)
 		aim_mode = true
 		aim_hero = hh
-		status_label.text = "ВЫБЕРИ ЦЕЛЬ — тапни врага"
+		status_label.text = _t("pick_target")
 		status_label.modulate = hh["data"]["color"]
 		return
 	hh["ult_t"] = hh["ult_cd_eff"]
@@ -2933,7 +2988,7 @@ func _use_ult(i: int) -> void:
 				if en["alive"]:
 					_deal(hh, en, int(hh["dmg"] * 5 * aura_dmg * hack_mult))
 			hack_mult = 1.2; hack_t = 5.0   # ВЗЛОМ: отряд бьёт +20% урона 5 сек (Рамиль)
-			_popup_center("💻 ВЗЛОМ! Отряд +20% урона", Color("#ff2d95"), 1.8)
+			_popup_center(_t("hack_done"), Color("#ff2d95"), 1.8)
 	_refresh_hud()
 
 # выстрел снайпер-ульты по цели (общий для ручного тапа и авто-боя)
@@ -3017,7 +3072,7 @@ func _qte_tick(delta: float) -> void:
 		qte_t -= delta
 		if qte_t <= 0.0:
 			qte_seq = 5; qte_idx = 0; qte_total = 5; qte_hits = 0; qte_spawn_t = 0.0
-			_popup_center("⚡ ТАПАЙ МАРКЕРЫ!", Color("#ffd24a"))
+			_popup_center(_t("qte_start"), Color("#ffd24a"))
 
 func _qte_make_marker() -> void:
 	var life: float = max(0.45, 1.25 - qte_idx * 0.16) + aug_qte   # окно сжимается, аугмент удлиняет
@@ -3066,7 +3121,7 @@ func _qte_resolve(boss) -> void:
 	if boss == null:
 		return
 	if qte_hits >= qte_total and qte_total > 0:
-		_popup_center("⚡ ИДЕАЛЬНЫЙ КОНТЕР! %d/%d" % [qte_hits, qte_total], Color("#00f0ff"))
+		_popup_center(_t("qte_perfect") % [qte_hits, qte_total], Color("#00f0ff"))
 	elif qte_hits == 0:
 		var fh = _front_hero()       # прозевал всё → босс бьёт тяжело
 		if fh != null:
@@ -3076,7 +3131,7 @@ func _qte_resolve(boss) -> void:
 			if fh["hp"] <= 0:
 				fh["alive"] = false; fh["fall_tw"] = _fall(fh["node"]); _recalc_auras()
 	else:
-		_popup_center("КОНТЕР %d/%d" % [qte_hits, qte_total], Color("#ffd24a"))
+		_popup_center(_t("qte_counter") % [qte_hits, qte_total], Color("#ffd24a"))
 
 func _toggle_auto() -> void:
 	auto_battle = not auto_battle
@@ -3107,7 +3162,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _die() -> void:
 	phase = "dead"
-	status_label.text = "☠ ОТРЯД ПАЛ — дошли до волны %d" % wave
+	status_label.text = _t("squad_down_wave") % wave
 	status_label.modulate = Color("#ff4d4d")
 
 # --- АНИМАЦИЯ БОЛВАНЧИКОВ ---
@@ -3286,13 +3341,13 @@ func _refresh_hud() -> void:
 	boss_lbl.visible = has_boss
 	if has_boss:
 		boss_fill.size.x = (W - 66) * (float(bz["hp"]) / float(bz["max"]))
-		boss_lbl.text = "⚠ БОСС   %d / %d" % [bz["hp"], bz["max"]]
+		boss_lbl.text = _t("hud_boss_warn") % [bz["hp"], bz["max"]]
 	for i in heroes.size():
 		var hh = heroes[i]
 		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
 		hero_ults[i].disabled = not ready_ult
 		var cdtxt := ("⚡ " + _t("ready") if ready_ult else "⏱ %.0f%s" % [hh["ult_t"], _t("sec")]) if show_cd else ("⚡" if ready_ult else "")
-		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh["data"]["name"], cdtxt]
+		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], _hname(hh["cls"]), cdtxt]
 		# свечение когда ульта готова (border ignite à la AFK Arena)
 		if not hh["alive"]:
 			hero_ults[i].modulate = Color(0.4, 0.4, 0.4, 1)
@@ -3379,7 +3434,7 @@ func _build() -> void:
 	hud.add_child(auto_btn)
 	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
 	boss_btn = Button.new()
-	boss_btn.text = "👹 К БОССУ"
+	boss_btn.text = _t("to_boss")
 	boss_btn.add_theme_font_size_override("font_size", 17)
 	boss_btn.custom_minimum_size = Vector2(190, 42)
 	boss_btn.position = Vector2(W * 0.5 - 95, 60)
@@ -3397,7 +3452,7 @@ func _build() -> void:
 	stage_label.position = Vector2(20, 80)
 	hud.add_child(stage_label)
 	loot_badge = Label.new()
-	loot_badge.text = "🎁 НОВЫЙ ЛУТ ↓"
+	loot_badge.text = _t("new_loot")
 	loot_badge.add_theme_color_override("font_color", Color("#ffd24a"))
 	loot_badge.add_theme_font_size_override("font_size", 16)
 	loot_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -3464,28 +3519,28 @@ func _build() -> void:
 	# UI: иконки вместо текста (универсально, без перевода — идея Рамиля)
 	inv_btn = Button.new()
 	inv_btn.text = "📊"
-	inv_btn.tooltip_text = "Прокачка"
+	inv_btn.tooltip_text = _t("tab_upgrade")
 	inv_btn.add_theme_font_size_override("font_size", 26)
 	inv_btn.custom_minimum_size = Vector2(112, 48)
 	inv_btn.pressed.connect(_toggle_inv)
 	menubar.add_child(inv_btn)
 	impl_btn = Button.new()
 	impl_btn.text = "🦾"
-	impl_btn.tooltip_text = "Экипировка"
+	impl_btn.tooltip_text = _t("tab_gear")
 	impl_btn.add_theme_font_size_override("font_size", 26)
 	impl_btn.custom_minimum_size = Vector2(112, 48)
 	impl_btn.pressed.connect(_toggle_impl)
 	menubar.add_child(impl_btn)
 	var reboot_mb := Button.new()
 	reboot_mb.text = "♻"
-	reboot_mb.tooltip_text = "Престиж"
+	reboot_mb.tooltip_text = _t("tab_prestige")
 	reboot_mb.add_theme_font_size_override("font_size", 26)
 	reboot_mb.custom_minimum_size = Vector2(112, 48)
 	reboot_mb.pressed.connect(_toggle_reboot)
 	menubar.add_child(reboot_mb)
 	more_btn = Button.new()
 	more_btn.text = "☰"
-	more_btn.tooltip_text = "Ещё"
+	more_btn.tooltip_text = _t("tab_more")
 	more_btn.add_theme_font_size_override("font_size", 26)
 	more_btn.custom_minimum_size = Vector2(112, 48)
 	more_btn.pressed.connect(_open_more)
@@ -4200,7 +4255,7 @@ func _open_more() -> void:
 	_dq_refresh()
 	var rew_n := _dq_ready_count() + _bp_unclaimed_count() + _ach_claimable()
 	var rew_b := "   ●%d" % rew_n if rew_n > 0 else ""
-	_open_submenu("☰ ЕЩЁ", [
+	_open_submenu(_t("more_title"), [
 		[_t("m_story") + story_b, Callable(self, "_open_story_group")],
 		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
 		[_t("m_map"), Callable(self, "_open_map")],
@@ -4214,15 +4269,15 @@ func _force_update() -> void:
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("(async()=>{try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs){await r.unregister();}}if(self.caches){const ks=await caches.keys();for(const k of ks){await caches.delete(k);}}}catch(e){}location.reload(true);})();", true)
 	else:
-		_popup_center("🔄 Обновление доступно в веб-версии", Color("#9aa0b5"), 1.6)
+		_popup_center(_t("force_update_msg"), Color("#9aa0b5"), 1.6)
 
 func _open_story_group() -> void:
 	var msg_new: bool = not (str(_loc()["id"]) in quest_done)
-	_open_submenu("📖 СЮЖЕТ", [
-		["📱  Сообщения / квест" + ("   📨" if msg_new else ""), Callable(self, "_open_messages")],
-		["📁  Досье: Вектор", Callable(self, "_open_dossier")],
-		["📓  Дело: 9 секунд" + ("   ✅" if case_solved else ("   🧩%d" % _frags_open() if _frags_open() > 0 else "")), Callable(self, "_open_case")],
-		["🏁  Финал" + ("   %s" % str(ENDINGS[endgame_mode]["icon"]) if endgame_mode != "" else ("   ✦" if _all_quests_done() else "   🔒")), Callable(self, "_open_finale")],
+	_open_submenu(_t("story_title"), [
+		[_t("story_messages") + ("   📨" if msg_new else ""), Callable(self, "_open_messages")],
+		[_t("story_dossier"), Callable(self, "_open_dossier")],
+		[_t("story_case") + ("   ✅" if case_solved else ("   🧩%d" % _frags_open() if _frags_open() > 0 else "")), Callable(self, "_open_case")],
+		[_t("story_finale") + ("   %s" % str(ENDINGS[endgame_mode]["icon"]) if endgame_mode != "" else ("   ✦" if _all_quests_done() else "   🔒")), Callable(self, "_open_finale")],
 	])
 
 func _open_rewards_group() -> void:
@@ -4477,11 +4532,11 @@ func _show_hero_desc(i: int) -> void:
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 260); card.custom_minimum_size = Vector2(420, 0)
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	v.add_child(_lbl("%s %s" % [h["icon"], h["name"]], 22, h["color"], HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("%s %s" % [h["icon"], _hname(i)], 22, h["color"], HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(h["role"], 14, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
 	var d := _lbl(h["desc"], 14, Color("#c7ccea"), HORIZONTAL_ALIGNMENT_CENTER); d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; d.custom_minimum_size = Vector2(384, 0); v.add_child(d)
 	v.add_child(_lbl("🔫 %s   ❤ %d   ⚔ %d   🎯 %d%%" % [h["wname"], h["hp"], h["dmg"], int(h["crit"] * 100)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 44); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := Button.new(); bc.text = _t("hero_desc_close"); bc.custom_minimum_size = Vector2(0, 44); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 # === ОБУЧЕНИЕ / ПОДСКАЗКИ (Рамиль) ===
 # маленькая кнопка «?» в углу панели → попап-объяснение
@@ -4600,7 +4655,7 @@ func _build_inventory() -> void:
 		hb.add_theme_constant_override("separation", 10)
 		row.add_child(hb)
 		var nm := Label.new()
-		nm.text = h["icon"] + "\n" + h["name"]
+		nm.text = h["icon"] + "\n" + _hname(i)
 		nm.add_theme_color_override("font_color", h["color"])
 		nm.add_theme_font_size_override("font_size", 15)
 		nm.custom_minimum_size = Vector2(92, 0)
@@ -4739,7 +4794,7 @@ func _build_invcol() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color(0.03, 0.04, 0.07, 0.995); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	ic_panel.add_child(bg)
-	var title := _lbl("🎒 ИНВЕНТАРЬ", 22, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER)
+	var title := _lbl(_t("inv_title"), 22, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER)
 	title.position = Vector2(0, 22); title.size = Vector2(W, 30); ic_panel.add_child(title)
 	ic_info = _lbl("", 14, Color("#c7ccea"), HORIZONTAL_ALIGNMENT_CENTER)
 	ic_info.position = Vector2(0, 54); ic_info.size = Vector2(W, 20); ic_panel.add_child(ic_info)
@@ -4755,9 +4810,9 @@ func _build_invcol() -> void:
 	# действия
 	var abar := HBoxContainer.new(); abar.add_theme_constant_override("separation", 6); abar.alignment = BoxContainer.ALIGNMENT_CENTER
 	abar.position = Vector2(0, 118); abar.size = Vector2(W, 34); ic_panel.add_child(abar)
-	var allb := Button.new(); allb.text = "☑ ВСЁ"; allb.add_theme_font_size_override("font_size", 13); allb.custom_minimum_size = Vector2(96, 32); allb.pressed.connect(_ic_select_all); abar.add_child(allb)
-	var favb := Button.new(); favb.text = "★ ИЗБРАННОЕ"; favb.add_theme_font_size_override("font_size", 13); favb.custom_minimum_size = Vector2(150, 32); favb.pressed.connect(_ic_fav_selected); abar.add_child(favb)
-	var scrb := Button.new(); scrb.text = "♻ РАЗОБРАТЬ"; scrb.add_theme_font_size_override("font_size", 13); scrb.custom_minimum_size = Vector2(150, 32); scrb.pressed.connect(_ic_ask_scrap); abar.add_child(scrb)
+	var allb := Button.new(); allb.text = _t("inv_all"); allb.add_theme_font_size_override("font_size", 13); allb.custom_minimum_size = Vector2(96, 32); allb.pressed.connect(_ic_select_all); abar.add_child(allb)
+	var favb := Button.new(); favb.text = _t("inv_fav"); favb.add_theme_font_size_override("font_size", 13); favb.custom_minimum_size = Vector2(150, 32); favb.pressed.connect(_ic_fav_selected); abar.add_child(favb)
+	var scrb := Button.new(); scrb.text = _t("inv_scrap"); scrb.add_theme_font_size_override("font_size", 13); scrb.custom_minimum_size = Vector2(150, 32); scrb.pressed.connect(_ic_ask_scrap); abar.add_child(scrb)
 	# список (скролл)
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(16, 158); scroll.size = Vector2(W - 32, H - 158 - 78)
@@ -4766,7 +4821,7 @@ func _build_invcol() -> void:
 	ic_list = VBoxContainer.new(); ic_list.add_theme_constant_override("separation", 6)
 	ic_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(ic_list)
-	var close := Button.new(); close.text = "✕ ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16)
+	var close := Button.new(); close.text = _t("inv_close"); close.add_theme_font_size_override("font_size", 16)
 	close.custom_minimum_size = Vector2(200, 50); close.position = Vector2(W * 0.5 - 100, H - 64)
 	close.pressed.connect(_toggle_invcol); ic_panel.add_child(close)
 	_build_ic_confirm()
@@ -4789,14 +4844,14 @@ func _refresh_invcol() -> void:
 	var slot_name := {"all": "🔫+✨ " + _t("ic_all"), "weapon": "🔫 " + _t("g_weapon"), "module": "✨ " + _t("g_module")}
 	ic_fslot_btn.text = slot_name[ic_fslot]
 	ic_frar_btn.text = "⭐ " + _t("ic_all") if ic_frar == 0 else "⭐%d %s" % [ic_frar, RARITY[ic_frar]["name"]]
-	ic_fhero_btn.text = "👥 " + _t("ic_all") if ic_fhero == -1 else "%s %s" % [HEROES[ic_fhero]["icon"], HEROES[ic_fhero]["name"]]
+	ic_fhero_btn.text = "👥 " + _t("ic_all") if ic_fhero == -1 else "%s %s" % [HEROES[ic_fhero]["icon"], _hname(ic_fhero)]
 	var items := _all_items()
 	var shown := 0
 	for it in items:
 		if not _ic_passes(it): continue
 		shown += 1
 		ic_list.add_child(_ic_card(it))
-	ic_info.text = "вещей: %d   выбрано: %d   ♻ лом: %s" % [shown, ic_sel.size(), _gsep(scrap)]
+	ic_info.text = _t("inv_status") % [shown, ic_sel.size(), _gsep(scrap)]
 
 func _ic_card(it: Dictionary) -> Control:
 	var i: int = it["i"]; var slot: String = it["slot"]; var key: String = it["key"]
@@ -4811,11 +4866,12 @@ func _ic_card(it: Dictionary) -> Control:
 	var sicon: String = "🔫" if slot == "weapon" else "✨"
 	var mark := ""
 	if it["fav"]: mark += " ★"
-	card.text = "%s %s  %s %s · ур.%d%s\n   %s" % [HEROES[i]["icon"], sicon, RARITY[rar]["name"], _variant(slot, hh["cls"], inst["vid"])["name"], inst["lvl"], mark, _rolls_text(inst)]
+	var lvltxt := _t("inv_lvl") % inst["lvl"]
+	card.text = "%s %s  %s %s · %s%s\n   %s" % [HEROES[i]["icon"], sicon, RARITY[rar]["name"], _variant(slot, hh["cls"], inst["vid"])["name"], lvltxt, mark, _rolls_text(inst)]
 	# «НАДЕТО» — отдельный бейдж справа, выделен (Диана: не сливать с уровнем/статами)
 	if it["equipped"]:
 		var badge := Label.new()
-		badge.text = "✓ НАДЕТО"
+		badge.text = _t("inv_equipped")
 		badge.add_theme_font_size_override("font_size", 15)
 		badge.add_theme_color_override("font_color", Color("#3ad97a"))
 		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -4864,7 +4920,7 @@ func _ic_ask_scrap() -> void:
 	for id in ic_sel:
 		if not fav.has(id): n += 1   # избранное пропускаем
 	if n <= 0: return
-	ic_conf_lbl.text = "Разобрать %d вещей в лом?\n(избранное и надетое пропускаются)" % n
+	ic_conf_lbl.text = _t("scrap_confirm") % n
 	ic_confirm.visible = true
 
 func _ic_do_scrap() -> void:
@@ -4885,7 +4941,7 @@ func _ic_do_scrap() -> void:
 	_save()
 	_refresh_invcol()
 	_refresh_impl()
-	_popup_center("♻ Разобрано → +%s лом" % _gsep(got), Color("#3ad97a"), 1.8)
+	_popup_center(_t("scrap_done") % _gsep(got), Color("#3ad97a"), 1.8)
 
 func _build_ic_confirm() -> void:
 	ic_confirm = Control.new()
@@ -4902,8 +4958,8 @@ func _build_ic_confirm() -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
 	ic_conf_lbl = _lbl("", 16, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); v.add_child(ic_conf_lbl)
 	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 10); hb.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_child(hb)
-	var no := Button.new(); no.text = "ОТМЕНА"; no.add_theme_font_size_override("font_size", 14); no.custom_minimum_size = Vector2(150, 44); no.pressed.connect(func(): ic_confirm.visible = false); hb.add_child(no)
-	var yes := Button.new(); yes.text = "♻ РАЗОБРАТЬ"; yes.add_theme_font_size_override("font_size", 14); yes.custom_minimum_size = Vector2(150, 44); yes.pressed.connect(_ic_do_scrap); hb.add_child(yes)
+	var no := Button.new(); no.text = _t("cancel_btn"); no.add_theme_font_size_override("font_size", 14); no.custom_minimum_size = Vector2(150, 44); no.pressed.connect(func(): ic_confirm.visible = false); hb.add_child(no)
+	var yes := Button.new(); yes.text = _t("inv_scrap"); yes.add_theme_font_size_override("font_size", 14); yes.custom_minimum_size = Vector2(150, 44); yes.pressed.connect(_ic_do_scrap); hb.add_child(yes)
 
 func _reroll(slot: String, key: String) -> void:
 	var hh = heroes[impl_sel]
@@ -4973,7 +5029,7 @@ func _build_implants() -> void:
 		impl_panel.add_child(hp)
 		cell["hsb"] = hsb; cell["hcol"] = Color(HEROES[i]["color"])
 		var hic := _lbl(HEROES[i]["icon"], 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); hic.position = Vector2(16, ry + 8); hic.size = Vector2(168, 46); impl_panel.add_child(hic)
-		var hnm := _lbl(HEROES[i]["name"], 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); hnm.position = Vector2(16, ry + 56); hnm.size = Vector2(168, 20); impl_panel.add_child(hnm)
+		var hnm := _lbl(_hname(i), 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); hnm.position = Vector2(16, ry + 56); hnm.size = Vector2(168, 20); impl_panel.add_child(hnm)
 		var hlv := _lbl("", 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); hlv.position = Vector2(20, ry + 80); hlv.size = Vector2(160, 48); impl_panel.add_child(hlv)
 		var hinfo := _lbl(_t("g_info"), 11, Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_CENTER); hinfo.position = Vector2(16, ry + 112); hinfo.size = Vector2(168, 16); hinfo.mouse_filter = Control.MOUSE_FILTER_IGNORE; impl_panel.add_child(hinfo)
 		var hbtn := Button.new(); hbtn.flat = true; hbtn.position = Vector2(16, ry); hbtn.size = Vector2(168, 134); hbtn.custom_minimum_size = Vector2(168, 134)
@@ -5300,7 +5356,7 @@ func _grant_skipped_loot(upto_stage: int) -> void:
 	for hh in heroes:
 		_recalc_hero(hh)
 	if kept > 0 or scr > 0:
-		_popup_center("🎁 Лут за %d пропущенных боссов:\n+%d в инвентарь · +%d ♻ лом" % [upto_stage - 1, kept, scr], Color("#ffd24a"), 2.8)
+		_popup_center(_t("skipped_loot") % [upto_stage - 1, kept, scr], Color("#ffd24a"), 2.8)
 
 func _popup_center(txt: String, col: Color, life := 1.4) -> void:
 	var l := Label.new()
