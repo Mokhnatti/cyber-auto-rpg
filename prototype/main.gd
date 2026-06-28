@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.0" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.1" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -615,6 +615,14 @@ const TR := {
 	"map_qget":     {"ru": "📜 Квест: добыть %s с босса", "en": "📜 Quest: get %s from boss"},
 	"map_go":       {"ru": "▶ ОТПРАВИТЬСЯ", "en": "▶ GO THERE"},
 	"map_new_msg":  {"ru": "📨 Новое сообщение от %s", "en": "📨 New message from %s"},
+	# help-подсказки (кнопка «?»)
+	"help_ok":      {"ru": "Понятно 👍", "en": "Got it 👍"},
+	"wc_help_t":    {"ru": "Добро пожаловать!", "en": "Welcome!"},
+	"wc_help_b":    {"ru": "Твой отряд из 4 бойцов АВТО-бьётся с волнами врагов.\n\n• 📊 ПРОКАЧКА — повышай уровни бойцов за золото 💰\n• 🦾 ЭКИПИРОВКА — надевай выпавший лут (оружие/модули)\n• ⚡ Тапай ульты бойцов внизу когда готовы\n• ♻ ПРЕСТИЖ — когда застрял: сброс ради ЯДЕР → усиления навсегда\n\nЦель: бей волны → собирай лут → прокачивайся → проходи стадии глубже. У каждого экрана есть «?» с подсказкой.", "en": "Your squad of 4 fighters AUTO-fights waves of enemies.\n\n• 📊 UPGRADE — level up fighters for gold 💰\n• 🦾 GEAR — equip dropped loot (weapons/modules)\n• ⚡ Tap fighter ultimates at the bottom when ready\n• ♻ PRESTIGE — when stuck: reset for CORES → permanent upgrades\n\nGoal: beat waves → collect loot → power up → push stages deeper. Every screen has a «?» tip."},
+	"upg_help_t":   {"ru": "Прокачка отряда", "en": "Squad Upgrade"},
+	"upg_help_b":   {"ru": "Повышай УРОВЕНЬ бойцов за золото 💰. Уровень множит их урон и здоровье — основа силы.\n\n• Чем выше уровень — тем дороже следующий.\n• Кнопка ×1/×10/×100 — сколько уровней брать за раз.\n• Качай отстающих или вливай в любимца под свой билд.\n\nЗолото капает само + падает с врагов. Не хватает — фарми текущую стадию.", "en": "Level up FIGHTERS for gold 💰. Level multiplies their damage and HP — foundation of power.\n\n• Higher level = more expensive next level.\n• ×1/×10/×100 button — how many levels to buy at once.\n• Upgrade laggards or pour into your favorite for your build.\n\nGold trickles in + drops from enemies. Not enough — farm the current stage."},
+	"gear_help_t":  {"ru": "Экипировка", "en": "Gear"},
+	"gear_help_b":  {"ru": "Надевай выпавший ЛУТ бойцам.\n\n• Выбери бойца портретом слева (подсветка = активный).\n• ОРУЖИЕ 🔫 = урон. МОДУЛЬ 🦾 = защита/утилита (HP, заряд ульты).\n• Тап по предмету в списке → сравнить и надеть лучший.\n• Цвет = редкость (серый→зелёный→синий→фиолет). «НАДЕТО» = то что носишь.\n• ℹ на портрете = описание класса и ульты.\n\nЛут падает с волн и боссов под конкретного бойца.", "en": "Equip dropped LOOT to fighters.\n\n• Choose a fighter by portrait on the left (highlight = active).\n• WEAPON 🔫 = damage. MODULE 🦾 = defense/utility (HP, ult charge).\n• Tap an item → compare and equip the best.\n• Color = rarity (grey→green→blue→purple). «EQUIPPED» = what you're wearing.\n• ℹ on portrait = class and ult description.\n\nLoot drops from waves and bosses for a specific fighter."},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -4306,11 +4314,11 @@ func _show_help(title: String, body: String) -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
 	v.add_child(_lbl("❓ " + title, 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
 	var t := _lbl(body, 15, Color("#d7dcf0"), HORIZONTAL_ALIGNMENT_LEFT); t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; t.custom_minimum_size = Vector2(394, 0); v.add_child(t)
-	var bc := Button.new(); bc.text = "Понятно 👍"; bc.custom_minimum_size = Vector2(0, 46); bc.add_theme_font_size_override("font_size", 16); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := Button.new(); bc.text = _t("help_ok"); bc.custom_minimum_size = Vector2(0, 46); bc.add_theme_font_size_override("font_size", 16); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 # первый запуск — короткое интро по основной петле
 func _show_intro() -> void:
-	_show_help("Добро пожаловать!", "Твой отряд из 4 бойцов АВТО-бьётся с волнами врагов.\n\n• 📊 ПРОКАЧКА — повышай уровни бойцов за золото 💰\n• 🦾 ЭКИПИРОВКА — надевай выпавший лут (оружие/модули)\n• ⚡ Тапай ульты бойцов внизу когда готовы\n• ♻ ПРЕСТИЖ — когда застрял: сброс ради ЯДЕР → усиления навсегда\n\nЦель: бей волны → собирай лут → прокачивайся → проходи стадии глубже. У каждого экрана есть «?» с подсказкой.")
+	_show_help(_t("wc_help_t"), _t("wc_help_b"))
 	seen_intro = true; _save()
 
 func _toggle_inv() -> void:
@@ -4362,7 +4370,7 @@ func _build_inventory() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 40); title.size = Vector2(W, 34)
 	inv_panel.add_child(title)
-	_add_help(inv_panel, "Прокачка отряда", "Повышай УРОВЕНЬ бойцов за золото 💰. Уровень множит их урон и здоровье — основа силы.\n\n• Чем выше уровень — тем дороже следующий.\n• Кнопка ×1/×10/×100 — сколько уровней брать за раз.\n• Качай отстающих или вливай в любимца под свой билд.\n\nЗолото капает само + падает с врагов. Не хватает — фарми текущую стадию.")
+	_add_help(inv_panel, _t("upg_help_t"), _t("upg_help_b"))
 	inv_gold = Label.new()
 	inv_gold.add_theme_color_override("font_color", Color("#ffe14d"))
 	inv_gold.add_theme_font_size_override("font_size", 18)
@@ -4753,7 +4761,7 @@ func _build_implants() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 26); title.size = Vector2(W, 30)
 	impl_panel.add_child(title)
-	_add_help(impl_panel, "Экипировка", "Надевай выпавший ЛУТ бойцам.\n\n• Выбери бойца портретом слева (подсветка = активный).\n• ОРУЖИЕ 🔫 = урон. МОДУЛЬ 🦾 = защита/утилита (HP, заряд ульты).\n• Тап по предмету в списке → сравнить и надеть лучший.\n• Цвет = редкость (серый→зелёный→синий→фиолет). «НАДЕТО» = то что носишь.\n• ℹ на портрете = описание класса и ульты.\n\nЛут падает с волн и боссов под конкретного бойца.")
+	_add_help(impl_panel, _t("gear_help_t"), _t("gear_help_b"))
 	var hdr := _lbl(_t("g_hdr"), 12, Color("#5a6080"), HORIZONTAL_ALIGNMENT_CENTER)
 	hdr.position = Vector2(0, 58); hdr.size = Vector2(W, 18)
 	impl_panel.add_child(hdr)
