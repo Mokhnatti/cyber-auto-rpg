@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.4.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.5.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -368,6 +368,22 @@ var fb_t := 0.0
 var player_clan := ""       # код клана игрока (6 цифр), "" = без клана
 var boss_my_dmg := 0        # мой накопленный урон по клан-боссу (локально → пишу свой узел contrib, без гонки)
 var boss_atk_cd := 0.0      # кулдаун кнопки «Ударить»
+var clan_tokens := 0        # 🎖 клан-жетоны (НЕ продаются за деньги → клан-магаз, награда за клан-боссов)
+var boss_claimed := 0       # started-ts последнего босса, с которого забрал награду (анти-дабл-клейм)
+# 9 клан-боссов из 3 фракций (имена-заглушки Рамиля), недельная ротация
+const CLAN_BOSSES := [
+	{"name": "Корпорат Биба Бобович", "fac": "🏢 ZenoCore", "icon": "🏢"},
+	{"name": "Топ-Менеджер Квартальный Удой", "fac": "🏢 ZenoCore", "icon": "🏢"},
+	{"name": "Директор по Оптимизации Душ", "fac": "🏢 ZenoCore", "icon": "🏢"},
+	{"name": "Крыс-Бугор Тройная Доза", "fac": "🔪 Трущобные банды", "icon": "🔪"},
+	{"name": "Психоз-Гена Бензопила", "fac": "🔪 Трущобные банды", "icon": "🔪"},
+	{"name": "Барыга Лысый Череп", "fac": "🔪 Трущобные банды", "icon": "🔪"},
+	{"name": "Боцман Ржавый Крюк", "fac": "⚓ Доковый синдикат", "icon": "⚓"},
+	{"name": "Контрабандист Жирный Тук", "fac": "⚓ Доковый синдикат", "icon": "⚓"},
+	{"name": "Док-Барон Мокрый", "fac": "⚓ Доковый синдикат", "icon": "⚓"},
+]
+func _week_num() -> int: return int(Time.get_unix_time_from_system() / 604800.0)
+func _weekly_boss() -> Dictionary: return CLAN_BOSSES[_week_num() % CLAN_BOSSES.size()]
 func _fb_init() -> void:
 	if not OS.has_feature("web"): return
 	var js := """
@@ -470,7 +486,7 @@ func _open_clan() -> void:
 	if not fb_ready:
 		panel.add_child(_clbl("⏳ Подключение к серверу кланов…", 160)); _clan_close_btn(panel); return
 	panel.add_child(_clbl("Твой ID: %s    ник: %s" % [fb_id, _clan_name()], 144))
-	panel.add_child(_clbl("⚡ Пик-мощь: %s" % _gsep(power_peak), 170, Color("#ffd24a")))
+	panel.add_child(_clbl("⚡ Пик-мощь: %s    🎖 Жетоны: %s" % [_gsep(power_peak), _gsep(clan_tokens)], 170, Color("#ffd24a")))
 	if player_clan == "":
 		panel.add_child(_clbl("Ты без клана. Создай свой или вступи по коду друга:", 210))
 		var bc := Button.new(); bc.text = "🛡 СОЗДАТЬ КЛАН"; bc.custom_minimum_size = Vector2(280, 48); bc.position = Vector2(W * 0.5 - 140, 252)
@@ -513,11 +529,12 @@ func _open_clan() -> void:
 # === КЛАН-БОСС: общий HP = hpMax − сумма вкладов (без гонки, каждый пишет свой узел) ===
 func _clan_boss_spawn() -> void:
 	if player_clan == "" or not fb_ready: return
+	var wb := _weekly_boss()
 	var hpmax: int = max(5000000, power_peak * 250)
-	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(Time.get_unix_time_from_system())}), func(c, _d):
+	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(Time.get_unix_time_from_system()), "name": wb["name"], "fac": wb["fac"], "week": _week_num()}), func(c, _d):
 		if c >= 200 and c < 300:
 			boss_my_dmg = 0
-			_popup_center("👹 Клан-босс призван! Бейте все!", Color("#ff2d95"), 2.6))
+			_popup_center("%s призван! Бейте все!" % wb["name"], Color("#ff2d95"), 2.8))
 
 func _clan_boss_attack() -> void:
 	if player_clan == "" or not fb_ready or boss_atk_cd > 0.0: return
@@ -558,7 +575,19 @@ func _open_clan_boss() -> void:
 			var hp: int = max(0, hpmax - total)
 			barfill.size = Vector2(400.0 * float(hp) / float(max(1, hpmax)), 30)
 			hplbl.text = "HP: %s / %s" % [_gsep(hp), _gsep(hpmax)]
-			info.text = "💥 ПОВЕРЖЕН! Награды раздадим." if hp <= 0 else "Бейте босса всем кланом!"
+			var bname := str(boss.get("name", "Клан-босс"))
+			if hp <= 0:
+				info.text = "💥 %s ПОВЕРЖЕН!" % bname
+				var bstarted := int(boss.get("started", 0))
+				if bstarted != boss_claimed and total > 0 and boss_my_dmg > 0:   # награда один раз с этого босса, по вкладу
+					boss_claimed = bstarted
+					var share := float(boss_my_dmg) / float(total)
+					var dia: int = clampi(int(round(50.0 * share)) + 5, 5, 50)   # скромные алмазы (5-50, не вредят монетизации)
+					var tok: int = int(round(800.0 * share)) + 50               # клан-жетоны щедро
+					diamonds += dia; clan_tokens += tok; _save(); _refresh_hud()
+					_popup_center("🏆 Награда клана: +%d💎  +%d🎖" % [dia, tok], Color("#7ee08a"), 3.6)
+			else:
+				info.text = "%s\n%s" % [bname, str(boss.get("fac", "Бейте всем кланом!"))]
 			ranked.sort_custom(func(a, b): return a[1] > b[1])
 			var lt := "🏆 ЛИДЕРБОРД ВКЛАДА:\n"
 			for i in min(ranked.size(), 8):
@@ -566,7 +595,8 @@ func _open_clan_boss() -> void:
 			lead.text = lt)
 	refresh.call()
 	# кнопка призыва (если босса нет) + бить
-	var bspawn := Button.new(); bspawn.text = "🔮 Призвать клан-босса"; bspawn.custom_minimum_size = Vector2(260, 44); bspawn.position = Vector2(W * 0.5 - 130, 600)
+	panel.add_child(_clbl("👹 Босс недели: %s" % _weekly_boss()["name"], 124, Color("#ff9a3c"), 13))
+	var bspawn := Button.new(); bspawn.text = "🔮 Призвать босса недели"; bspawn.custom_minimum_size = Vector2(260, 44); bspawn.position = Vector2(W * 0.5 - 130, 600)
 	bspawn.pressed.connect(func(): _clan_boss_spawn(); await get_tree().create_timer(1.0).timeout; refresh.call())
 	panel.add_child(bspawn)
 	var batk := Button.new(); batk.text = "⚔ УДАРИТЬ"; batk.custom_minimum_size = Vector2(260, 56); batk.position = Vector2(W * 0.5 - 130, 540); batk.add_theme_font_size_override("font_size", 22)
@@ -1979,7 +2009,7 @@ func _save() -> void:
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
-		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan,
+		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -2040,6 +2070,8 @@ func _load() -> void:
 	milestones_hit = int(d.get("milestones_hit", 0))
 	power_peak = int(d.get("power_peak", 0))
 	player_clan = str(d.get("player_clan", ""))
+	clan_tokens = int(d.get("clan_tokens", 0))
+	boss_claimed = int(d.get("boss_claimed", 0))
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = _arr(d.get("dq_idx", [])).map(func(x): return int(x))
