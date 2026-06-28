@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.3.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.4.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -497,11 +497,15 @@ func _open_clan() -> void:
 				var m = mem[u]
 				txt += "• %s — ⚡%s%s\n" % [str(m.get("nick", "?")), _gsep(int(m.get("power", 0))), ("  👑" if str(clan.get("leader", "")) == str(u) else "")]
 			ml.text = txt)
-		var bb := Button.new(); bb.text = "👹 КЛАН-БОСС"; bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 560)
+		var bb := Button.new(); bb.text = "👹 КЛАН-БОСС"; bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 540)
 		bb.add_theme_font_size_override("font_size", 18)
 		bb.pressed.connect(func(): panel.queue_free(); _open_clan_boss())
 		panel.add_child(bb)
-		var bl := Button.new(); bl.text = "🚪 Выйти из клана"; bl.custom_minimum_size = Vector2(200, 40); bl.position = Vector2(W * 0.5 - 100, 620)
+		var bch := Button.new(); bch.text = "💬 ЧАТ КЛАНА"; bch.custom_minimum_size = Vector2(280, 44); bch.position = Vector2(W * 0.5 - 140, 596)
+		bch.add_theme_font_size_override("font_size", 17)
+		bch.pressed.connect(func(): panel.queue_free(); _open_clan_chat())
+		panel.add_child(bch)
+		var bl := Button.new(); bl.text = "🚪 Выйти из клана"; bl.custom_minimum_size = Vector2(200, 40); bl.position = Vector2(W * 0.5 - 100, 656)
 		bl.pressed.connect(func(): _clan_leave(); panel.queue_free(); await get_tree().create_timer(0.6).timeout; _open_clan())
 		panel.add_child(bl)
 	_clan_close_btn(panel)
@@ -569,6 +573,48 @@ func _open_clan_boss() -> void:
 	batk.pressed.connect(func(): _clan_boss_attack(); await get_tree().create_timer(0.5).timeout; refresh.call())
 	panel.add_child(batk)
 	# авто-обновление HP-бара каждые 3с (realtime ощущение)
+	var tmr := Timer.new(); tmr.wait_time = 3.0; tmr.autostart = true; panel.add_child(tmr)
+	tmr.timeout.connect(func(): refresh.call())
+	_clan_close_btn(panel)
+
+# === ЧАТ КЛАНА: сообщения в /clans/<код>/chat (push), опрос каждые 3с ===
+func _clan_chat_send(txt: String) -> void:
+	var t := txt.strip_edges()
+	if player_clan == "" or not fb_ready or t == "": return
+	_fb_rest(HTTPClient.METHOD_POST, "/clans/%s/chat" % player_clan, JSON.stringify({"nick": _clan_name(), "text": t.substr(0, 200), "t": int(Time.get_unix_time_from_system())}))
+
+func _open_clan_chat() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.93); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	panel.add_child(_clbl("💬 ЧАТ КЛАНА %s" % player_clan, 96, Color("#00f0ff"), 20))
+	var box := ColorRect.new(); box.color = Color(0.06, 0.07, 0.1, 0.95); box.position = Vector2(W * 0.5 - 250, 140); box.size = Vector2(500, 560); panel.add_child(box)
+	var msgs := _clbl("⏳ загрузка…", 152); msgs.position = Vector2(W * 0.5 - 240, 152); msgs.size = Vector2(480, 540)
+	msgs.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM; msgs.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT; panel.add_child(msgs)
+	var refresh := func():
+		if not is_instance_valid(panel): return
+		_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/chat" % player_clan, "", func(_c, d):
+			if not is_instance_valid(msgs): return
+			var ch = JSON.parse_string(d)
+			if typeof(ch) != TYPE_DICTIONARY: msgs.text = "Сообщений пока нет.\nНапиши первым 👋"; return
+			var keys: Array = ch.keys(); keys.sort()
+			var start: int = max(0, keys.size() - 18)
+			var txt := ""
+			for i in range(start, keys.size()):
+				var m = ch[keys[i]]
+				txt += "%s: %s\n" % [str(m.get("nick", "?")), str(m.get("text", ""))]
+			msgs.text = txt)
+	refresh.call()
+	var inp := LineEdit.new(); inp.placeholder_text = "сообщение…"; inp.max_length = 200
+	inp.custom_minimum_size = Vector2(360, 44); inp.position = Vector2(W * 0.5 - 250, 712); inp.add_theme_font_size_override("font_size", 15); panel.add_child(inp)
+	var send := func():
+		if inp.text.strip_edges() == "": return
+		_clan_chat_send(inp.text); inp.text = ""
+		await get_tree().create_timer(0.6).timeout; refresh.call()
+	var bs := Button.new(); bs.text = "▶"; bs.custom_minimum_size = Vector2(80, 44); bs.position = Vector2(W * 0.5 + 120, 712); bs.add_theme_font_size_override("font_size", 20)
+	bs.pressed.connect(func(): send.call()); panel.add_child(bs)
+	inp.text_submitted.connect(func(_t): send.call())
 	var tmr := Timer.new(); tmr.wait_time = 3.0; tmr.autostart = true; panel.add_child(tmr)
 	tmr.timeout.connect(func(): refresh.call())
 	_clan_close_btn(panel)
