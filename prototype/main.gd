@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.0.3"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.0.5"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -1769,6 +1769,7 @@ func _load() -> void:
 	for k in ff: frag_flags[int(k)] = bool(ff[k])
 	case_solved = bool(d.get("case_solved", false))
 	endgame_mode = str(d.get("endgame_mode", ""))
+	if endgame_mode != "" and not ENDINGS.has(endgame_mode): endgame_mode = ""   # хардениг: невалидный режим (старый сейв) → "" (иначе ENDINGS[mode] краш в меню/финале)
 	milestones_hit = int(d.get("milestones_hit", 0))
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
@@ -3199,6 +3200,7 @@ func _open_daily_quests() -> void:
 			var qii := qi
 			b.pressed.connect(func(): _dq_claim(qii); panel.queue_free(); _open_daily_quests())
 			v.add_child(b)
+		panel.add_child(box)   # ← ФИКС: коробки квестов не добавлялись в панель → дейли были ПУСТЫЕ (Диана)
 	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 196 + 3 * 92 + 16); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
