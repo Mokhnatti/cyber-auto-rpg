@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.1.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.1.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -365,6 +365,7 @@ var fb_uid := ""
 var fb_id := ""             # короткий #ID (из uid)
 var fb_ready := false
 var fb_t := 0.0
+var player_clan := ""       # код клана игрока (6 цифр), "" = без клана
 func _fb_init() -> void:
 	if not OS.has_feature("web"): return
 	var js := """
@@ -390,6 +391,23 @@ func _fb_poll(delta: float) -> void:
 		fb_id = "#%06d" % (abs(hash(uid)) % 1000000)
 		fb_ready = true
 		print("FB ready uid=%s id=%s" % [fb_uid, fb_id])
+		_fb_write_profile()
+
+# REST к Realtime DB (test mode = открыто, токен не нужен). Метод HTTPClient.METHOD_*
+func _fb_rest(method: int, path: String, body: String, cb: Callable = Callable()) -> void:
+	if not OS.has_feature("web"): return
+	var http := HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(func(_r, code, _h, data):
+		if http.is_inside_tree(): http.queue_free()
+		if cb.is_valid(): cb.call(int(code), data.get_string_from_utf8()))
+	var headers := PackedStringArray(["Content-Type: application/json"])
+	http.request(FB_DB_URL + path + ".json", headers, method, body)
+
+func _fb_write_profile() -> void:
+	if fb_uid == "": return
+	var prof := {"id": fb_id, "nick": (nick if nick != "" else "Вектор"), "power": power_peak, "best": best_stage, "clan": player_clan, "t": Time.get_unix_time_from_system()}
+	_fb_rest(HTTPClient.METHOD_PUT, "/players/%s" % fb_uid, JSON.stringify(prof))
 # нарративный пульс фарма (анти-выгорание): редкие реплики мира/Сигнала во время гринда
 const PULSE_LINES := [
 	"📡 Сигнал: «…всё ещё слышу тебя. Не оборачивайся.»",
@@ -1750,7 +1768,7 @@ func _save() -> void:
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
-		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak,
+		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
@@ -1810,6 +1828,7 @@ func _load() -> void:
 	if endgame_mode != "" and not ENDINGS.has(endgame_mode): endgame_mode = ""   # хардениг: невалидный режим (старый сейв) → "" (иначе ENDINGS[mode] краш в меню/финале)
 	milestones_hit = int(d.get("milestones_hit", 0))
 	power_peak = int(d.get("power_peak", 0))
+	player_clan = str(d.get("player_clan", ""))
 	frags_notified = _frags_open()
 	dq_day = int(d.get("dq_day", 0))
 	dq_idx = _arr(d.get("dq_idx", [])).map(func(x): return int(x))
