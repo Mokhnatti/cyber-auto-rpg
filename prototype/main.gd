@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.9" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.0" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -432,6 +432,39 @@ const TR := {
 	"set_lang": {"ru": "🌐 Язык", "en": "🌐 Language"},
 	"set_sci": {"ru": "Научные числа", "en": "Scientific numbers"},
 	"set_reset": {"ru": "Сбросить прогресс", "en": "Reset progress"},
+	"set_version": {"ru": "версия", "en": "version"},
+	"set_lang_btn": {"ru": "🌐 Язык: %s", "en": "🌐 Language: %s"},
+	"set_dmg_btn": {"ru": "Цифры урона над врагами: %s", "en": "Damage numbers above enemies: %s"},
+	"set_cd_btn": {"ru": "Цифры КД ульт: %s", "en": "Ult cooldown numbers: %s"},
+	"on": {"ru": "ВКЛ ✅", "en": "ON ✅"},
+	"off": {"ru": "ВЫКЛ ⬜", "en": "OFF ⬜"},
+	"set_records": {"ru": "🏆 РЕКОРДЫ / СТАТИСТИКА", "en": "🏆 RECORDS / STATS"},
+	"set_refresh": {"ru": "🔄 ОБНОВИТЬ ИГРУ (свежая версия)", "en": "🔄 REFRESH GAME (latest version)"},
+	"set_nick_lbl": {"ru": "Твой ник (для теста):", "en": "Your nickname (for testing):"},
+	"set_nick_btn": {"ru": "✏ Сменить ник", "en": "✏ Change nickname"},
+	"set_nick_saved": {"ru": "Ник: %s", "en": "Nickname: %s"},
+	# панель статистики
+	"st_panel_title": {"ru": "🏆 РЕКОРДЫ И СТАТИСТИКА", "en": "🏆 RECORDS AND STATS"},
+	"st_power_title": {"ru": "💪 СИЛА ОТРЯДА (сейчас)", "en": "💪 SQUAD POWER (now)"},
+	"st_combat_power": {"ru": "⚔ Боевая мощь", "en": "⚔ Combat power"},
+	"st_rec_title": {"ru": "🏆 РЕКОРДЫ (за всё время)", "en": "🏆 RECORDS (all time)"},
+	"st_best_stage": {"ru": "🌊 Лучшая стадия", "en": "🌊 Best stage"},
+	"st_max_lv": {"ru": "⬆ Макс. уровень бойца", "en": "⬆ Max fighter level"},
+	"st_prestiges": {"ru": "♻ Престижей сделано", "en": "♻ Prestiges done"},
+	"st_maxhit": {"ru": "💥 Самый большой удар", "en": "💥 Biggest hit"},
+	"st_stats_title": {"ru": "📊 СТАТИСТИКА", "en": "📊 STATISTICS"},
+	"st_col_run": {"ru": "забег", "en": "run"},
+	"st_col_all": {"ru": "всего", "en": "total"},
+	"st_mobs": {"ru": "☠ Убито мобов", "en": "☠ Mobs killed"},
+	"st_bosses": {"ru": "👹 Убито боссов", "en": "👹 Bosses killed"},
+	"st_dmg": {"ru": "⚔ Нанесено урона", "en": "⚔ Damage dealt"},
+	"st_crits": {"ru": "🎯 Критов нанесено", "en": "🎯 Crits dealt"},
+	"st_gold": {"ru": "💰 Золота добыто", "en": "💰 Gold earned"},
+	"st_scrap": {"ru": "♻ Лома добыто", "en": "♻ Scrap earned"},
+	"st_cores": {"ru": "🧬 Ядер добыто", "en": "🧬 Cores earned"},
+	"st_time": {"ru": "⏱ Время в игре", "en": "⏱ Time played"},
+	"hr_short": {"ru": "ч", "en": "h"},
+	"min_short": {"ru": "м", "en": "m"},
 	# панель ЭКИПИРОВКА
 	"g_hdr": {"ru": "боец              оружие            спецмодуль", "en": "fighter            weapon            module"},
 	"g_allitems": {"ru": "🎒 ВСЕ ВЕЩИ", "en": "🎒 ALL ITEMS"},
@@ -2010,11 +2043,11 @@ func _apply_lang() -> void:   # применить смену языка к по
 
 func _refresh_settings() -> void:
 	if lang_btn:
-		lang_btn.text = "🌐 Язык / Language:  %s" % ("Русский 🇷🇺" if lang == "ru" else "English 🇬🇧")
+		lang_btn.text = _t("set_lang_btn") % ("Русский 🇷🇺" if lang == "ru" else "English 🇬🇧")
 	if set_dmg_btn:
-		set_dmg_btn.text = "Цифры урона над врагами: %s" % ("ВКЛ ✅" if show_dmg else "ВЫКЛ ⬜")
+		set_dmg_btn.text = _t("set_dmg_btn") % (_t("on") if show_dmg else _t("off"))
 	if set_cd_btn:
-		set_cd_btn.text = "Цифры КД ульт: %s" % ("ВКЛ ✅" if show_cd else "ВЫКЛ ⬜")
+		set_cd_btn.text = _t("set_cd_btn") % (_t("on") if show_cd else _t("off"))
 	if set_nick_input and nick != "" and nick != "гость":
 		set_nick_input.text = nick
 
@@ -2028,9 +2061,9 @@ func _build_settings() -> void:
 	bg.color = Color(0.04, 0.04, 0.08, 0.99); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: settings_panel.visible = false)
 	settings_panel.add_child(bg)
-	var t := Label.new(); t.text = "⚙ НАСТРОЙКИ"; t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; t.position = Vector2(0, 50); t.size = Vector2(W, 34)
+	var t := Label.new(); t.text = _t("t_settings"); t.add_theme_font_size_override("font_size", 26); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; t.position = Vector2(0, 50); t.size = Vector2(W, 34)
 	settings_panel.add_child(t)
-	var sver := Label.new(); sver.text = "версия " + VERSION; sver.add_theme_font_size_override("font_size", 14); sver.add_theme_color_override("font_color", Color("#ffd24a")); sver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sver.position = Vector2(0, 86); sver.size = Vector2(W, 20)
+	var sver := Label.new(); sver.text = _t("set_version") + " " + VERSION; sver.add_theme_font_size_override("font_size", 14); sver.add_theme_color_override("font_color", Color("#ffd24a")); sver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sver.position = Vector2(0, 86); sver.size = Vector2(W, 20)
 	settings_panel.add_child(sver)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14)
 	v.position = Vector2(30, 130); v.size = Vector2(W - 60, 0)
@@ -2044,20 +2077,20 @@ func _build_settings() -> void:
 	set_cd_btn = Button.new(); set_cd_btn.add_theme_font_size_override("font_size", 16); set_cd_btn.custom_minimum_size = Vector2(0, 52)
 	set_cd_btn.pressed.connect(func(): show_cd = not show_cd; _save(); _refresh_settings())
 	v.add_child(set_cd_btn)
-	var recs_btn := Button.new(); recs_btn.text = "🏆 РЕКОРДЫ / СТАТИСТИКА"; recs_btn.add_theme_font_size_override("font_size", 16); recs_btn.custom_minimum_size = Vector2(0, 52)
+	var recs_btn := Button.new(); recs_btn.text = _t("set_records"); recs_btn.add_theme_font_size_override("font_size", 16); recs_btn.custom_minimum_size = Vector2(0, 52)
 	recs_btn.pressed.connect(_toggle_stats)
 	v.add_child(recs_btn)
-	var cache_btn := Button.new(); cache_btn.text = "🔄 ОБНОВИТЬ ИГРУ (свежая версия)"; cache_btn.add_theme_font_size_override("font_size", 15); cache_btn.custom_minimum_size = Vector2(0, 50)
+	var cache_btn := Button.new(); cache_btn.text = _t("set_refresh"); cache_btn.add_theme_font_size_override("font_size", 15); cache_btn.custom_minimum_size = Vector2(0, 50)
 	cache_btn.pressed.connect(_clear_cache)
 	v.add_child(cache_btn)
 	# смена ника (нативный браузерный ввод)
-	var nl := Label.new(); nl.text = "Твой ник (для теста):"; nl.add_theme_font_size_override("font_size", 14); nl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nl)
-	var save_nick := Button.new(); save_nick.text = "✏ Сменить ник"; save_nick.add_theme_font_size_override("font_size", 15); save_nick.custom_minimum_size = Vector2(0, 46)
+	var nl := Label.new(); nl.text = _t("set_nick_lbl"); nl.add_theme_font_size_override("font_size", 14); nl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nl)
+	var save_nick := Button.new(); save_nick.text = _t("set_nick_btn"); save_nick.add_theme_font_size_override("font_size", 15); save_nick.custom_minimum_size = Vector2(0, 46)
 	save_nick.pressed.connect(func():
 		_prompt_nick()
-		_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center("Ник: " + nick, Color("#00f0ff")))
+		_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center(_t("set_nick_saved") % nick, Color("#00f0ff")))
 	v.add_child(save_nick)
-	var close := Button.new(); close.text = "× ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16); close.custom_minimum_size = Vector2(0, 50)
+	var close := Button.new(); close.text = _t("close_caps"); close.add_theme_font_size_override("font_size", 16); close.custom_minimum_size = Vector2(0, 50)
 	close.pressed.connect(func(): settings_panel.visible = false)
 	v.add_child(close)
 
@@ -2065,9 +2098,9 @@ func _build_settings() -> void:
 func _fmt_time(sec) -> String:
 	var s := int(sec)
 	var h := s / 3600; var m := (s % 3600) / 60; var ss := s % 60
-	if h > 0: return "%dч %dм" % [h, m]
-	if m > 0: return "%dм %dс" % [m, ss]
-	return "%dс" % ss
+	if h > 0: return "%d%s %d%s" % [h, _t("hr_short"), m, _t("min_short")]
+	if m > 0: return "%d%s %d%s" % [m, _t("min_short"), ss, _t("sec")]
+	return "%d%s" % [ss, _t("sec")]
 
 func _fmt_n(n) -> String:
 	var v := float(n)
@@ -2113,7 +2146,7 @@ func _build_stats() -> void:
 	bg.color = Color(0.03, 0.04, 0.07, 0.995); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: stats_panel.visible = false)
 	stats_panel.add_child(bg)
-	var t := _lbl("🏆 РЕКОРДЫ И СТАТИСТИКА", 22, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER)
+	var t := _lbl(_t("st_panel_title"), 22, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER)
 	t.position = Vector2(0, 30); t.size = Vector2(W, 32); stats_panel.add_child(t)
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(20, 76); scroll.size = Vector2(W - 40, H - 76 - 80)
@@ -2121,7 +2154,7 @@ func _build_stats() -> void:
 	stats_panel.add_child(scroll)
 	stats_box = VBoxContainer.new(); stats_box.add_theme_constant_override("separation", 8); stats_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(stats_box)
-	var close := Button.new(); close.text = "✕ ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16)
+	var close := Button.new(); close.text = _t("close_caps"); close.add_theme_font_size_override("font_size", 16)
 	close.custom_minimum_size = Vector2(200, 50); close.position = Vector2(W * 0.5 - 100, H - 66)
 	close.pressed.connect(func(): stats_panel.visible = false); stats_panel.add_child(close)
 
@@ -2139,24 +2172,24 @@ func _stat_3col(name: String, run_v: String, all_v: String, col := Color("#cfe6f
 func _refresh_stats() -> void:
 	for c in stats_box.get_children(): c.queue_free()
 	# --- Рекорды ---
-	_stat_section("💪 СИЛА ОТРЯДА (сейчас)")
-	_stat_3col("⚔ Боевая мощь", "", _gsep(_party_power()), Color("#ff7a3a"))
-	_stat_section("🏆 РЕКОРДЫ (за всё время)")
-	_stat_3col("🌊 Лучшая стадия", "", str(best_stage), Color("#ffd24a"))
-	_stat_3col("⬆ Макс. уровень бойца", "", str(_max_hero_level()), Color("#ffd24a"))
-	_stat_3col("♻ Престижей сделано", "", str(rec_prestiges), Color("#ffd24a"))
-	_stat_3col("💥 Самый большой удар", "", _fmt_n(rec_maxhit), Color("#ffd24a"))
+	_stat_section(_t("st_power_title"))
+	_stat_3col(_t("st_combat_power"), "", _gsep(_party_power()), Color("#ff7a3a"))
+	_stat_section(_t("st_rec_title"))
+	_stat_3col(_t("st_best_stage"), "", str(best_stage), Color("#ffd24a"))
+	_stat_3col(_t("st_max_lv"), "", str(_max_hero_level()), Color("#ffd24a"))
+	_stat_3col(_t("st_prestiges"), "", str(rec_prestiges), Color("#ffd24a"))
+	_stat_3col(_t("st_maxhit"), "", _fmt_n(rec_maxhit), Color("#ffd24a"))
 	# --- Статистика (две колонки) ---
-	_stat_section("📊 СТАТИСТИКА")
-	_stat_3col("", "забег", "всего", Color("#7a7f99"))
-	_stat_3col("☠ Убито мобов", _fmt_n(stats_run["mobs"]), _fmt_n(stats_all["mobs"]))
-	_stat_3col("👹 Убито боссов", _fmt_n(stats_run["bosses"]), _fmt_n(stats_all["bosses"]))
-	_stat_3col("⚔ Нанесено урона", _fmt_n(stats_run["dmg"]), _fmt_n(stats_all["dmg"]))
-	_stat_3col("🎯 Критов нанесено", _fmt_n(stats_run["crits"]), _fmt_n(stats_all["crits"]))
-	_stat_3col("💰 Золота добыто", _fmt_n(stats_run["gold"]), _fmt_n(stats_all["gold"]))
-	_stat_3col("♻ Лома добыто", _fmt_n(stats_run["scrap"]), _fmt_n(stats_all["scrap"]))
-	_stat_3col("🧬 Ядер добыто", _fmt_n(stats_run["cores"]), _fmt_n(stats_all["cores"]))
-	_stat_3col("⏱ Время в игре", _fmt_time(stats_run["time"]), _fmt_time(stats_all["time"]))
+	_stat_section(_t("st_stats_title"))
+	_stat_3col("", _t("st_col_run"), _t("st_col_all"), Color("#7a7f99"))
+	_stat_3col(_t("st_mobs"), _fmt_n(stats_run["mobs"]), _fmt_n(stats_all["mobs"]))
+	_stat_3col(_t("st_bosses"), _fmt_n(stats_run["bosses"]), _fmt_n(stats_all["bosses"]))
+	_stat_3col(_t("st_dmg"), _fmt_n(stats_run["dmg"]), _fmt_n(stats_all["dmg"]))
+	_stat_3col(_t("st_crits"), _fmt_n(stats_run["crits"]), _fmt_n(stats_all["crits"]))
+	_stat_3col(_t("st_gold"), _fmt_n(stats_run["gold"]), _fmt_n(stats_all["gold"]))
+	_stat_3col(_t("st_scrap"), _fmt_n(stats_run["scrap"]), _fmt_n(stats_all["scrap"]))
+	_stat_3col(_t("st_cores"), _fmt_n(stats_run["cores"]), _fmt_n(stats_all["cores"]))
+	_stat_3col(_t("st_time"), _fmt_time(stats_run["time"]), _fmt_time(stats_all["time"]))
 
 func _ask_restart() -> void:
 	if restart_confirm:
