@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.7" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.8" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -549,6 +549,25 @@ const TR := {
 	"dr_day_short": {"ru": "Д%d", "en": "D%d"},
 	"dr_claim_btn": {"ru": "🎁 ЗАБРАТЬ ДЕНЬ %d (+%s)", "en": "🎁 CLAIM DAY %d (+%s)"},
 	"dr_pop":       {"ru": "🎁 День %d: +%s!", "en": "🎁 Day %d: +%s!"},
+	# батлпас
+	"bp_title":     {"ru": "🎟 БАТЛПАС — награды за стадии", "en": "🎟 BATTLE PASS — stage rewards"},
+	"bp_sub":       {"ru": "Текущая лучшая стадия: %d   ·   до след. тира: %d стадий", "en": "Best stage: %d   ·   next tier in: %d stages"},
+	"bp_buy_btn":   {"ru": "💎 Премиум-батлпас (жирнее награды) — %d 💎", "en": "💎 Premium pass (better rewards) — %d 💎"},
+	"bp_free_hdr":  {"ru": "🆓 БЕСПЛАТНО", "en": "🆓 FREE"},
+	"bp_prem_hdr":  {"ru": "💎 ПРЕМИУМ", "en": "💎 PREMIUM"},
+	"bp_prem_cost": {"ru": "(за 500💎)", "en": "(for 500💎)"},
+	"bp_stage_n":   {"ru": "ст.%d", "en": "stg %d"},
+	# ачивки
+	"ach_title":     {"ru": "📖 ДОСТИЖЕНИЯ", "en": "📖 ACHIEVEMENTS"},
+	"ach_sub":       {"ru": "Готово к забору: %d   ·   награда → 💎/🧬/♻", "en": "Ready to claim: %d   ·   reward → 💎/🧬/♻"},
+	"ach_claim_all": {"ru": "✨ ЗАБРАТЬ ВСЁ (%d)", "en": "✨ CLAIM ALL (%d)"},
+	"ach_all_done":  {"ru": "✓ ВСЁ ВЫПОЛНЕНО", "en": "✓ ALL COMPLETED"},
+	"ach_progress":  {"ru": "%s / %s  → награда %s", "en": "%s / %s  → reward %s"},
+	"ach_claim_btn": {"ru": "ЗАБРАТЬ ✨", "en": "CLAIM ✨"},
+	"ach_tier":      {"ru": "Тир %d/%d", "en": "Tier %d/%d"},
+	"ach_rew_dia":   {"ru": "+%d💎 алмазов", "en": "+%d💎 diamonds"},
+	"ach_rew_cores": {"ru": "+%d🧬 ядер", "en": "+%d🧬 cores"},
+	"ach_rew_scrap": {"ru": "+%d♻ скрапа", "en": "+%d♻ scrap"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -928,18 +947,18 @@ var seen_intro := false   # показано ли интро-обучение (1
 # === АЧИВКИ (Рамиль): журнал-книжка, тиры ×10, награды дрипом (лом→ядра→алмазы). Ретроактив: значения живые.
 var ach_claimed := {}     # id → сколько тиров забрано
 const ACHIEVEMENTS := [
-	{"id": "mobs",    "name": "Истребитель",       "icon": "🗡", "key": "mobs",     "desc": "Убей врагов в бою",          "tiers": [100, 1000, 10000, 100000]},
-	{"id": "bosses",  "name": "Босс-киллер",        "icon": "👑", "key": "bosses",   "desc": "Победи боссов",              "tiers": [10, 50, 250, 1000]},
-	{"id": "gold",    "name": "Магнат",             "icon": "💰", "key": "gold",     "desc": "Накопи золота (всего)",      "tiers": [10000, 1000000, 100000000, 10000000000]},
-	{"id": "dmg",     "name": "Разрушитель",        "icon": "⚔", "key": "dmg",      "desc": "Нанеси урона (всего)",       "tiers": [100000, 10000000, 1000000000, 100000000000]},
-	{"id": "drops",   "name": "Барахольщик",        "icon": "🎁", "key": "drops",    "desc": "Собери предметов лута",      "tiers": [50, 500, 5000, 50000]},
-	{"id": "ads",     "name": "Рекламный",          "icon": "📺", "key": "ads",      "desc": "Посмотри реклам-бустов",     "tiers": [5, 25, 100, 500]},
-	{"id": "pulls",   "name": "Гачамен",            "icon": "🎰", "key": "pulls",    "desc": "Сделай круток гачи",         "tiers": [1, 10, 50, 200]},
-	{"id": "stage",   "name": "Покоритель глубин",  "icon": "📈", "key": "stage",    "desc": "Дойди до стадии",            "tiers": [10, 25, 50, 100]},
-	{"id": "prestige","name": "Перезагрузка",       "icon": "♻", "key": "prestige", "desc": "Сделай перезагрузок",        "tiers": [1, 10, 50, 200]},
-	{"id": "sing",    "name": "Сингулярность",      "icon": "🌌", "key": "sing",     "desc": "Сделай сингулярностей",      "tiers": [1, 5, 25, 100]},
-	{"id": "hlvl",    "name": "Чемпион",            "icon": "⭐", "key": "hlvl",     "desc": "Прокачай бойца до уровня",   "tiers": [25, 50, 100, 200]},
-	{"id": "allhlvl", "name": "Командир",           "icon": "🎖", "key": "allhlvl",  "desc": "Прокачай ВСЕХ бойцов до ур.","tiers": [20, 50, 100]},
+	{"id": "mobs",    "name": "Истребитель",       "name_en": "Exterminator",    "icon": "🗡", "key": "mobs",     "desc": "Убей врагов в бою",           "desc_en": "Kill enemies in battle",       "tiers": [100, 1000, 10000, 100000]},
+	{"id": "bosses",  "name": "Босс-киллер",        "name_en": "Boss Killer",     "icon": "👑", "key": "bosses",   "desc": "Победи боссов",               "desc_en": "Defeat bosses",                "tiers": [10, 50, 250, 1000]},
+	{"id": "gold",    "name": "Магнат",             "name_en": "Magnate",         "icon": "💰", "key": "gold",     "desc": "Накопи золота (всего)",        "desc_en": "Earn total gold",              "tiers": [10000, 1000000, 100000000, 10000000000]},
+	{"id": "dmg",     "name": "Разрушитель",        "name_en": "Destroyer",       "icon": "⚔", "key": "dmg",      "desc": "Нанеси урона (всего)",         "desc_en": "Deal total damage",            "tiers": [100000, 10000000, 1000000000, 100000000000]},
+	{"id": "drops",   "name": "Барахольщик",        "name_en": "Scavenger",       "icon": "🎁", "key": "drops",    "desc": "Собери предметов лута",        "desc_en": "Collect loot items",           "tiers": [50, 500, 5000, 50000]},
+	{"id": "ads",     "name": "Рекламный",          "name_en": "Ad Watcher",      "icon": "📺", "key": "ads",      "desc": "Посмотри реклам-бустов",       "desc_en": "Watch ad boosts",              "tiers": [5, 25, 100, 500]},
+	{"id": "pulls",   "name": "Гачамен",            "name_en": "Gacha Man",       "icon": "🎰", "key": "pulls",    "desc": "Сделай круток гачи",           "desc_en": "Do gacha pulls",               "tiers": [1, 10, 50, 200]},
+	{"id": "stage",   "name": "Покоритель глубин",  "name_en": "Depth Conqueror", "icon": "📈", "key": "stage",    "desc": "Дойди до стадии",              "desc_en": "Reach stage",                  "tiers": [10, 25, 50, 100]},
+	{"id": "prestige","name": "Перезагрузка",       "name_en": "Reboot",          "icon": "♻", "key": "prestige", "desc": "Сделай перезагрузок",          "desc_en": "Perform prestiges",            "tiers": [1, 10, 50, 200]},
+	{"id": "sing",    "name": "Сингулярность",      "name_en": "Singularity",     "icon": "🌌", "key": "sing",     "desc": "Сделай сингулярностей",        "desc_en": "Perform singularities",        "tiers": [1, 5, 25, 100]},
+	{"id": "hlvl",    "name": "Чемпион",            "name_en": "Champion",        "icon": "⭐", "key": "hlvl",     "desc": "Прокачай бойца до уровня",     "desc_en": "Upgrade a fighter to level",   "tiers": [25, 50, 100, 200]},
+	{"id": "allhlvl", "name": "Командир",           "name_en": "Commander",       "icon": "🎖", "key": "allhlvl",  "desc": "Прокачай ВСЕХ бойцов до ур.", "desc_en": "Upgrade ALL fighters to lv.", "tiers": [20, 50, 100]},
 ]
 var wipe_streak := 0      # подряд вайпов на одной стадии (для коуч-подсказок)
 var last_wipe_stage := 0
@@ -3991,17 +4010,17 @@ func _open_battlepass() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var title := _lbl("🎟 БАТЛПАС — награды за стадии", 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 30); title.size = Vector2(W, 30); panel.add_child(title)
+	var title := _lbl(_t("bp_title"), 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 30); title.size = Vector2(W, 30); panel.add_child(title)
 	var nextm: int = (int(best_stage / BP_STEP) + 1) * BP_STEP
-	var sub := _lbl("Текущая лучшая стадия: %d   ·   до след. тира: %d стадий" % [best_stage, nextm - best_stage], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 62); sub.size = Vector2(W, 20); panel.add_child(sub)
+	var sub := _lbl(_t("bp_sub") % [best_stage, nextm - best_stage], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 62); sub.size = Vector2(W, 20); panel.add_child(sub)
 	if not bp_premium:
-		var pb := Button.new(); pb.text = "💎 Премиум-батлпас (жирнее награды) — %d 💎" % BP_PREMIUM_COST; pb.add_theme_font_size_override("font_size", 14); pb.add_theme_color_override("font_color", Color("#ffd24a"))
+		var pb := Button.new(); pb.text = _t("bp_buy_btn") % BP_PREMIUM_COST; pb.add_theme_font_size_override("font_size", 14); pb.add_theme_color_override("font_color", Color("#ffd24a"))
 		pb.position = Vector2(W * 0.5 - 200, 88); pb.size = Vector2(400, 38); pb.disabled = diamonds < BP_PREMIUM_COST
 		pb.pressed.connect(func(): if diamonds >= BP_PREMIUM_COST: diamonds -= BP_PREMIUM_COST; bp_premium = true; _bp_cache_stage = -1; _save(); panel.queue_free(); _open_battlepass())
 		panel.add_child(pb)
 	# заголовки колонок (фидбэк Дианы: непонятно где бесплатно/премиум)
-	var fh := _lbl("🆓 БЕСПЛАТНО", 12, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); fh.position = Vector2(W * 0.5 - 176, 128); fh.size = Vector2(190, 18); panel.add_child(fh)
-	var ph := _lbl("💎 ПРЕМИУМ" + (" ✓" if bp_premium else " (за 500💎)"), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); ph.position = Vector2(W * 0.5 + 22, 128); ph.size = Vector2(190, 18); panel.add_child(ph)
+	var fh := _lbl(_t("bp_free_hdr"), 12, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); fh.position = Vector2(W * 0.5 - 176, 128); fh.size = Vector2(190, 18); panel.add_child(fh)
+	var ph := _lbl(_t("bp_prem_hdr") + (" ✓" if bp_premium else " " + _t("bp_prem_cost")), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); ph.position = Vector2(W * 0.5 + 22, 128); ph.size = Vector2(190, 18); panel.add_child(ph)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 150); scroll.custom_minimum_size = Vector2(440, 544); scroll.size = Vector2(440, 544); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
 	# показать тиры от 5 до best_stage+25 (несколько вперёд как тизер)
@@ -4010,7 +4029,7 @@ func _open_battlepass() -> void:
 	while m <= top:
 		list.add_child(_bp_tier_row(m, panel))
 		m += BP_STEP
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
 func _bp_tier_row(m: int, panel: Control) -> Control:
 	var reached: bool = best_stage >= m
@@ -4019,7 +4038,7 @@ func _bp_tier_row(m: int, panel: Control) -> Control:
 	sb.border_color = Color("#ffd24a") if reached else Color("#2a2f45"); sb.set_border_width_all(1)
 	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
 	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); box.add_child(row)
-	row.add_child(_lbl("ст.%d" % m, 14, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT))
+	row.add_child(_lbl(_t("bp_stage_n") % m, 14, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT))
 	# бесплатная награда
 	var fclaimed: bool = m in bp_claimed
 	var fb := Button.new(); fb.custom_minimum_size = Vector2(190, 40); fb.add_theme_font_size_override("font_size", 12)
@@ -4085,20 +4104,20 @@ func _ach_claim(a: Dictionary) -> void:
 
 func _ach_reward_text(idx: int) -> String:
 	var r := _ach_reward(idx)
-	if r.has("diamonds"): return "+%d💎 алмазов" % r["diamonds"]
-	if r.has("cores"): return "+%d🧬 ядер" % r["cores"]
-	return "+%d♻ скрапа" % r.get("scrap", 0)
+	if r.has("diamonds"): return _t("ach_rew_dia") % r["diamonds"]
+	if r.has("cores"): return _t("ach_rew_cores") % r["cores"]
+	return _t("ach_rew_scrap") % r.get("scrap", 0)
 
 func _open_achievements() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	panel.add_child(_lbl_at("📖 ДОСТИЖЕНИЯ", 20, Color("#ffd24a"), 30))
+	panel.add_child(_lbl_at(_t("ach_title"), 20, Color("#ffd24a"), 30))
 	var claimable := _ach_claimable()
-	panel.add_child(_lbl_at("Готово к забору: %d   ·   награда → 💎/🧬/♻" % claimable, 13, Color("#cfe6ff") if claimable > 0 else Color("#9aa0b5"), 60))
+	panel.add_child(_lbl_at(_t("ach_sub") % claimable, 13, Color("#cfe6ff") if claimable > 0 else Color("#9aa0b5"), 60))
 	if claimable > 0:
-		var ca := Button.new(); ca.text = "✨ ЗАБРАТЬ ВСЁ (%d)" % claimable; ca.add_theme_font_size_override("font_size", 15); ca.add_theme_color_override("font_color", Color("#ffd24a"))
+		var ca := Button.new(); ca.text = _t("ach_claim_all") % claimable; ca.add_theme_font_size_override("font_size", 15); ca.add_theme_color_override("font_color", Color("#ffd24a"))
 		ca.position = Vector2(W * 0.5 - 130, 84); ca.size = Vector2(260, 38)
 		ca.pressed.connect(func(): _ach_claim_all(); panel.queue_free(); _open_achievements())
 		panel.add_child(ca)
@@ -4106,7 +4125,7 @@ func _open_achievements() -> void:
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(444, 0); scroll.add_child(list)
 	for a in ACHIEVEMENTS:
 		list.add_child(_ach_row(a, panel))
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 720); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 720); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
 func _lbl_at(t: String, sz: int, col: Color, y: float) -> Label:
 	var l := _lbl(t, sz, col, HORIZONTAL_ALIGNMENT_CENTER); l.position = Vector2(0, y); l.size = Vector2(W, sz + 8); return l
@@ -4125,16 +4144,16 @@ func _ach_row(a: Dictionary, panel: Control) -> Control:
 	# тир: сколько уровней достижения уже забрано из всех
 	var nextidx: int = min(reached if canclaim else claimed, maxt - 1)
 	var nextt: int = a["tiers"][nextidx]
-	var head := "%s %s · Тир %d/%d" % [a["icon"], a["name"], claimed, maxt]
+	var head := "%s %s · %s" % [a["icon"], _tloc(a, "name"), _t("ach_tier") % [claimed, maxt]]
 	v2.add_child(_lbl(head, 14, Color("#ffd24a") if canclaim else Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT))
-	v2.add_child(_lbl(a.get("desc", ""), 11, Color("#8a90a5"), HORIZONTAL_ALIGNMENT_LEFT))   # что качает достижение (фидбэк Дианы)
+	v2.add_child(_lbl(_tloc(a, "desc"), 11, Color("#8a90a5"), HORIZONTAL_ALIGNMENT_LEFT))   # что качает достижение (фидбэк Дианы)
 	if claimed >= maxt:
-		v2.add_child(_lbl("✓ ВСЁ ВЫПОЛНЕНО", 12, Color("#3ad97a"), HORIZONTAL_ALIGNMENT_LEFT))
+		v2.add_child(_lbl(_t("ach_all_done"), 12, Color("#3ad97a"), HORIZONTAL_ALIGNMENT_LEFT))
 	else:
 		var hrow := HBoxContainer.new(); hrow.add_theme_constant_override("separation", 8); v2.add_child(hrow)
-		hrow.add_child(_lbl("%s / %s  → награда %s" % [_gsep(v), _gsep(nextt), _ach_reward_text(nextidx)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
+		hrow.add_child(_lbl(_t("ach_progress") % [_gsep(v), _gsep(nextt), _ach_reward_text(nextidx)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
 		if canclaim:
-			var cb := Button.new(); cb.text = "ЗАБРАТЬ ✨"; cb.custom_minimum_size = Vector2(110, 30); cb.add_theme_font_size_override("font_size", 12)
+			var cb := Button.new(); cb.text = _t("ach_claim_btn"); cb.custom_minimum_size = Vector2(110, 30); cb.add_theme_font_size_override("font_size", 12)
 			var aa: Dictionary = a
 			cb.pressed.connect(func(): _ach_claim(aa); panel.queue_free(); _open_achievements())
 			hrow.add_child(cb)
