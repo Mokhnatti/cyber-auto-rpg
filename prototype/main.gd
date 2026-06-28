@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.1.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.2.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -408,6 +408,99 @@ func _fb_write_profile() -> void:
 	if fb_uid == "": return
 	var prof := {"id": fb_id, "nick": (nick if nick != "" else "Вектор"), "power": power_peak, "best": best_stage, "clan": player_clan, "t": Time.get_unix_time_from_system()}
 	_fb_rest(HTTPClient.METHOD_PUT, "/players/%s" % fb_uid, JSON.stringify(prof))
+
+func _clan_name() -> String: return (nick if nick != "" else "Вектор")
+
+func _clan_create() -> void:
+	if not fb_ready:
+		_popup_center("Нет связи с сервером кланов", Color("#ff5050"), 2.0); return
+	var code := "%06d" % (randi() % 1000000)
+	var clan := {"name": "Клан " + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": power_peak}}, "created": int(Time.get_unix_time_from_system())}
+	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s" % code, JSON.stringify(clan), func(c, _d):
+		if c >= 200 and c < 300:
+			player_clan = code; _fb_write_profile(); _save()
+			_popup_center("🛡 Клан создан! Код: %s" % code, Color("#7ee08a"), 3.0)
+		else:
+			_popup_center("Ошибка создания (%d)" % c, Color("#ff5050"), 2.0))
+
+func _clan_join(code: String) -> void:
+	if not fb_ready:
+		_popup_center("Нет связи с сервером", Color("#ff5050"), 2.0); return
+	if code.length() != 6:
+		_popup_center("Код = 6 цифр", Color("#ff5050"), 2.0); return
+	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s" % code, "", func(_c, d):
+		var clan = JSON.parse_string(d)
+		if typeof(clan) != TYPE_DICTIONARY:
+			_popup_center("Клан %s не найден" % code, Color("#ff5050"), 2.2); return
+		var members: Dictionary = clan.get("members", {})
+		if members.size() >= 20:
+			_popup_center("Клан полон (20/20)", Color("#ff5050"), 2.2); return
+		_fb_rest(HTTPClient.METHOD_PATCH, "/clans/%s/members" % code, JSON.stringify({fb_uid: {"nick": _clan_name(), "power": power_peak}}), func(c2, _d2):
+			if c2 >= 200 and c2 < 300:
+				player_clan = code; _fb_write_profile(); _save()
+				_popup_center("🛡 Вступил в клан %s!" % code, Color("#7ee08a"), 3.0)
+			else:
+				_popup_center("Ошибка вступления (%d)" % c2, Color("#ff5050"), 2.0)))
+
+func _clan_leave() -> void:
+	if player_clan == "": return
+	_fb_rest(HTTPClient.METHOD_DELETE, "/clans/%s/members/%s" % [player_clan, fb_uid], "")
+	player_clan = ""; _fb_write_profile(); _save()
+	_popup_center("Вышел из клана", Color("#9aa0b5"), 1.8)
+
+func _clbl(txt: String, y: int, col := Color("#cfe6ff"), sz := 14) -> Label:
+	var l := _lbl(txt, sz, col, HORIZONTAL_ALIGNMENT_CENTER); l.position = Vector2(0, y); l.size = Vector2(W, 24)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return l
+
+func _clan_close_btn(panel: Control) -> void:
+	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	close.position = Vector2(W * 0.5 - 100, 770); close.pressed.connect(panel.queue_free); panel.add_child(close)
+
+func _open_clan() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var t := _lbl("🛡 КЛАН", 22, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 100); t.size = Vector2(W, 30); panel.add_child(t)
+	if not OS.has_feature("web"):
+		panel.add_child(_clbl("Кланы работают в веб-версии", 150)); _clan_close_btn(panel); return
+	if not fb_ready:
+		panel.add_child(_clbl("⏳ Подключение к серверу кланов…", 160)); _clan_close_btn(panel); return
+	panel.add_child(_clbl("Твой ID: %s    ник: %s" % [fb_id, _clan_name()], 144))
+	panel.add_child(_clbl("⚡ Пик-мощь: %s" % _gsep(power_peak), 170, Color("#ffd24a")))
+	if player_clan == "":
+		panel.add_child(_clbl("Ты без клана. Создай свой или вступи по коду друга:", 210))
+		var bc := Button.new(); bc.text = "🛡 СОЗДАТЬ КЛАН"; bc.custom_minimum_size = Vector2(280, 48); bc.position = Vector2(W * 0.5 - 140, 252)
+		bc.pressed.connect(func(): _clan_create(); panel.queue_free(); await get_tree().create_timer(0.9).timeout; _open_clan())
+		panel.add_child(bc)
+		panel.add_child(_clbl("— или вступить по коду —", 322))
+		var inp := LineEdit.new(); inp.placeholder_text = "код"; inp.max_length = 6; inp.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		inp.custom_minimum_size = Vector2(170, 44); inp.position = Vector2(W * 0.5 - 145, 356); inp.add_theme_font_size_override("font_size", 18)
+		panel.add_child(inp)
+		var bj := Button.new(); bj.text = "ВСТУПИТЬ"; bj.custom_minimum_size = Vector2(120, 44); bj.position = Vector2(W * 0.5 + 40, 356)
+		bj.pressed.connect(func(): _clan_join(inp.text.strip_edges()); panel.queue_free(); await get_tree().create_timer(1.0).timeout; _open_clan())
+		panel.add_child(bj)
+	else:
+		panel.add_child(_clbl("Код клана: %s" % player_clan, 212, Color("#ffd24a"), 19))
+		panel.add_child(_clbl("Поделись кодом с друзьями 🤝", 242))
+		var ml := _clbl("⏳ загрузка состава…", 290); ml.size = Vector2(W, 240); panel.add_child(ml)
+		_fb_rest(HTTPClient.METHOD_GET, "/clans/%s" % player_clan, "", func(_c, d):
+			if not is_instance_valid(ml): return
+			var clan = JSON.parse_string(d)
+			if typeof(clan) != TYPE_DICTIONARY: ml.text = "Клан распался."; return
+			var mem: Dictionary = clan.get("members", {})
+			var txt := "👥 Состав (%d/20):\n" % mem.size()
+			for u in mem:
+				var m = mem[u]
+				txt += "• %s — ⚡%s%s\n" % [str(m.get("nick", "?")), _gsep(int(m.get("power", 0))), ("  👑" if str(clan.get("leader", "")) == str(u) else "")]
+			ml.text = txt)
+		var bb := Button.new(); bb.text = "👹 КЛАН-БОСС (скоро)"; bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 560); bb.disabled = true
+		panel.add_child(bb)
+		var bl := Button.new(); bl.text = "🚪 Выйти из клана"; bl.custom_minimum_size = Vector2(200, 40); bl.position = Vector2(W * 0.5 - 100, 620)
+		bl.pressed.connect(func(): _clan_leave(); panel.queue_free(); await get_tree().create_timer(0.6).timeout; _open_clan())
+		panel.add_child(bl)
+	_clan_close_btn(panel)
 # нарративный пульс фарма (анти-выгорание): редкие реплики мира/Сигнала во время гринда
 const PULSE_LINES := [
 	"📡 Сигнал: «…всё ещё слышу тебя. Не оборачивайся.»",
@@ -3500,6 +3593,7 @@ func _open_more() -> void:
 		["📖  Сюжет" + story_b, Callable(self, "_open_story_group")],
 		["🎁  Награды" + rew_b, Callable(self, "_open_rewards_group")],
 		["🗺  Карта локаций", Callable(self, "_open_map")],
+		["🛡  Кланы" + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 		["⚙  Настройки", Callable(self, "_toggle_settings")],
 		["🔄  v%s · обновить игру" % VERSION, Callable(self, "_force_update")],
 	])
