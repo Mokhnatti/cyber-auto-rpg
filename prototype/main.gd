@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "0.9.8"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "0.9.9"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -3421,7 +3421,7 @@ func _open_more() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var t := _lbl("☰ ЕЩЁ", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 420); t.size = Vector2(W, 30); panel.add_child(t)
+	var t := _lbl("☰ ЕЩЁ", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 376); t.size = Vector2(W, 30); panel.add_child(t)
 	var bpn := _bp_unclaimed_count()
 	var acn := _ach_claimable()
 	_dq_refresh()
@@ -3438,9 +3438,14 @@ func _open_more() -> void:
 		["🗺  Карта локаций", Callable(self, "_open_map")],
 		["⚙  Настройки", Callable(self, "_toggle_settings")],
 	]
-	for i in items.size():
-		var b := Button.new(); b.text = items[i][0]; b.custom_minimum_size = Vector2(300, 54); b.add_theme_font_size_override("font_size", 17)
-		b.position = Vector2(W * 0.5 - 150, 462 + i * 62)
+	# фикс переполнения: 9 пунктов раскладываем так, чтобы ВСЕ влезли над навбаром (было 462+i*62 → ⚙ уезжал за экран)
+	var n_items := items.size()
+	var item_h := 50
+	var gap := 4
+	var top := int(H) - 60 - n_items * (item_h + gap)   # снизу вверх от навбара
+	for i in n_items:
+		var b := Button.new(); b.text = items[i][0]; b.custom_minimum_size = Vector2(300, item_h); b.add_theme_font_size_override("font_size", 16)
+		b.position = Vector2(W * 0.5 - 150, top + i * (item_h + gap))
 		var cb: Callable = items[i][1]
 		b.pressed.connect(func(): panel.queue_free(); cb.call())
 		panel.add_child(b)
