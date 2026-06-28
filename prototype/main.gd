@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.0.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.0.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -3456,7 +3456,9 @@ func _open_submenu(title: String, items: Array) -> void:
 	var n_items := items.size()
 	var item_h := 56
 	var gap := 8
-	var top := int(H) - 72 - n_items * (item_h + gap)
+	# ЦЕНТРИРУЕМ по вертикали (Рамиль): блок = титул(46) + пункты
+	var block_h := 46 + n_items * (item_h + gap)
+	var top := int((H - block_h) / 2.0) + 46
 	var t := _lbl(title, 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, top - 46); t.size = Vector2(W, 30); panel.add_child(t)
 	for i in n_items:
 		var b := Button.new(); b.text = items[i][0]; b.custom_minimum_size = Vector2(320, item_h); b.add_theme_font_size_override("font_size", 18)
