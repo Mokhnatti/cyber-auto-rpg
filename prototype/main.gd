@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.7.12" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.7.13" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -876,6 +876,31 @@ func _fb_init() -> void:
 	  });});});}
 	""" % FB_DB_URL
 	JavaScriptBridge.eval(js, true)
+
+# === QA-МОСТ ЛОКАЛИЗАЦИИ: открыть любую панель командой из JS (window._qa="имя") — для скрин-сканера языков ===
+func _qa_poll() -> void:
+	if bot or not OS.has_feature("web"): return
+	var cmd = JavaScriptBridge.eval("window._qa||''", true)
+	if typeof(cmd) != TYPE_STRING or cmd == "": return
+	JavaScriptBridge.eval("window._qa=''", true)
+	cmd = str(cmd)
+	if cmd == "close":
+		for c in hud.get_children():
+			if c is Control and c.z_index >= 2500: c.queue_free()
+		if settings_panel: settings_panel.visible = false
+		return
+	if cmd == "lang":
+		lang = ("en" if lang == "ru" else "ru"); _apply_lang(); return
+	var m := {
+		"upgrade": "_toggle_inv", "gear": "_toggle_impl", "prestige": "_toggle_reboot",
+		"singularity": "_open_singularity", "settings": "_toggle_settings", "stats": "_toggle_stats",
+		"clan": "_open_clan", "clanboss": "_open_clan_boss", "clanchat": "_open_clan_chat", "clanshop": "_open_clan_shop",
+		"speed": "_open_speed_menu", "ads": "_open_ad_boosts", "shop": "_open_shop", "gacha": "_open_gacha",
+		"map": "_open_map", "daily": "_open_daily_quests", "messages": "_open_messages",
+		"dossier": "_open_dossier", "case": "_open_case", "finale": "_open_finale",
+		"battlepass": "_open_battlepass", "achievements": "_open_achievements",
+	}
+	if m.has(cmd) and has_method(m[cmd]): call(m[cmd])
 
 func _fb_poll(delta: float) -> void:
 	if fb_ready or bot or not OS.has_feature("web"): return
@@ -2829,6 +2854,7 @@ func _process(delta: float) -> void:
 			pulse_t = 0.0
 			_farm_pulse()
 	_fb_poll(delta)   # Firebase: дождаться анонимного uid → #ID
+	_qa_poll()        # QA-мост: открыть панель по команде window._qa (скрин-сканер локализации)
 	if boss_atk_cd > 0.0: boss_atk_cd -= delta
 	# реклама-бусты урона/скорости истекли → пересчитать героев (золото считается живьём)
 	var _adon: bool = _ad_active("dmg") or _ad_active("atk")
