@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.5" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.6" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -488,6 +488,53 @@ const TR := {
 	"sg_locked": {"ru": "🔒 Доступно со стадии %d (сейчас %d)", "en": "🔒 Unlocks at stage %d (now %d)"},
 	"sg_pop": {"ru": "🌌 СИНГУЛЯРНОСТЬ #%d\n+%d ⚛ КВАНТОВ", "en": "🌌 SINGULARITY #%d\n+%d ⚛ QUANTA"},
 	"rb_owned_row": {"ru": "%s %s  %s%d%s", "en": "%s %s  %s%d%s"},
+	# панель КЛАНЫ
+	"cl_title": {"ru": "🛡 КЛАН", "en": "🛡 CLAN"},
+	"cl_web_only": {"ru": "Кланы работают в веб-версии", "en": "Clans work in web version"},
+	"cl_connecting": {"ru": "⏳ Подключение к серверу кланов…", "en": "⏳ Connecting to clan server…"},
+	"cl_my_id": {"ru": "Твой ID: %s    ник: %s", "en": "Your ID: %s    nick: %s"},
+	"cl_peak": {"ru": "⚡ Пик-мощь: %s    🎖 Жетоны: %s", "en": "⚡ Peak power: %s    🎖 Tokens: %s"},
+	"cl_no_clan": {"ru": "Ты без клана. Создай свой или вступи по коду друга:", "en": "You have no clan. Create one or join by a friend's code:"},
+	"cl_create_btn": {"ru": "🛡 СОЗДАТЬ КЛАН", "en": "🛡 CREATE CLAN"},
+	"cl_or_join": {"ru": "— или вступить по коду —", "en": "— or join by code —"},
+	"cl_code_ph": {"ru": "код", "en": "code"},
+	"cl_join_btn": {"ru": "ВСТУПИТЬ", "en": "JOIN"},
+	"cl_code_label": {"ru": "Код клана: %s", "en": "Clan code: %s"},
+	"cl_share_code": {"ru": "Поделись кодом с друзьями 🤝", "en": "Share the code with friends 🤝"},
+	"cl_loading_members": {"ru": "⏳ загрузка состава…", "en": "⏳ loading members…"},
+	"cl_disbanded": {"ru": "Клан распался.", "en": "Clan has disbanded."},
+	"cl_members": {"ru": "👥 Состав (%d/20):\n", "en": "👥 Members (%d/20):\n"},
+	"cl_boss_btn": {"ru": "👹 КЛАН-БОСС", "en": "👹 CLAN BOSS"},
+	"cl_chat_btn": {"ru": "💬 ЧАТ КЛАНА", "en": "💬 CLAN CHAT"},
+	"cl_leave_btn": {"ru": "🚪 Выйти из клана", "en": "🚪 Leave clan"},
+	"cl_no_server": {"ru": "Нет связи с сервером кланов", "en": "No connection to clan server"},
+	"cl_no_server_j": {"ru": "Нет связи с сервером", "en": "No server connection"},
+	"cl_code_6d": {"ru": "Код = 6 цифр", "en": "Code = 6 digits"},
+	"cl_not_found": {"ru": "Клан %s не найден", "en": "Clan %s not found"},
+	"cl_full": {"ru": "Клан полон (20/20)", "en": "Clan is full (20/20)"},
+	"cl_created": {"ru": "🛡 Клан создан! Код: %s", "en": "🛡 Clan created! Code: %s"},
+	"cl_err_create": {"ru": "Ошибка создания (%d)", "en": "Create error (%d)"},
+	"cl_joined": {"ru": "🛡 Вступил в клан %s!", "en": "🛡 Joined clan %s!"},
+	"cl_err_join": {"ru": "Ошибка вступления (%d)", "en": "Join error (%d)"},
+	"cl_left": {"ru": "Вышел из клана", "en": "Left the clan"},
+	# клан-босс
+	"cl_boss_title": {"ru": "👹 КЛАН-БОСС", "en": "👹 CLAN BOSS"},
+	"cl_loading": {"ru": "⏳ загрузка…", "en": "⏳ loading…"},
+	"cl_no_boss": {"ru": "Босса нет. Призовите его!", "en": "No boss. Summon one!"},
+	"cl_boss_killed": {"ru": "💥 %s ПОВЕРЖЕН!", "en": "💥 %s DEFEATED!"},
+	"cl_boss_reward": {"ru": "🏆 Награда клана: +%d💎  +%d🎖", "en": "🏆 Clan reward: +%d💎  +%d🎖"},
+	"cl_boss_fac_default": {"ru": "Бейте всем кланом!", "en": "Attack with the whole clan!"},
+	"cl_leaderboard": {"ru": "🏆 ЛИДЕРБОРД ВКЛАДА:\n", "en": "🏆 CONTRIBUTION LEADERBOARD:\n"},
+	"cl_boss_weekly": {"ru": "👹 Босс недели: %s", "en": "👹 Weekly boss: %s"},
+	"cl_spawn_btn": {"ru": "🔮 Призвать босса недели", "en": "🔮 Summon weekly boss"},
+	"cl_atk_btn": {"ru": "⚔ УДАРИТЬ", "en": "⚔ ATTACK"},
+	"cl_boss_summoned": {"ru": "%s призван! Бейте все!", "en": "%s summoned! Attack!"},
+	"cl_boss_hit": {"ru": "⚔ −%s урона боссу!", "en": "⚔ −%s dmg to boss!"},
+	# чат клана
+	"cl_chat_title": {"ru": "💬 ЧАТ КЛАНА %s", "en": "💬 CLAN CHAT %s"},
+	"cl_chat_empty": {"ru": "Сообщений пока нет.\nНапиши первым 👋", "en": "No messages yet.\nBe the first 👋"},
+	"cl_chat_ph": {"ru": "сообщение…", "en": "message…"},
+	"cl_boss_default_name": {"ru": "Клан-босс", "en": "Clan Boss"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -543,40 +590,40 @@ func _clan_name() -> String: return (nick if nick != "" else "Вектор")
 
 func _clan_create() -> void:
 	if not fb_ready:
-		_popup_center("Нет связи с сервером кланов", Color("#ff5050"), 2.0); return
+		_popup_center(_t("cl_no_server"), Color("#ff5050"), 2.0); return
 	var code := "%06d" % (randi() % 1000000)
 	var clan := {"name": "Клан " + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": power_peak}}, "created": int(Time.get_unix_time_from_system())}
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s" % code, JSON.stringify(clan), func(c, _d):
 		if c >= 200 and c < 300:
 			player_clan = code; _fb_write_profile(); _save()
-			_popup_center("🛡 Клан создан! Код: %s" % code, Color("#7ee08a"), 3.0)
+			_popup_center(_t("cl_created") % code, Color("#7ee08a"), 3.0)
 		else:
-			_popup_center("Ошибка создания (%d)" % c, Color("#ff5050"), 2.0))
+			_popup_center(_t("cl_err_create") % c, Color("#ff5050"), 2.0))
 
 func _clan_join(code: String) -> void:
 	if not fb_ready:
-		_popup_center("Нет связи с сервером", Color("#ff5050"), 2.0); return
+		_popup_center(_t("cl_no_server_j"), Color("#ff5050"), 2.0); return
 	if code.length() != 6:
-		_popup_center("Код = 6 цифр", Color("#ff5050"), 2.0); return
+		_popup_center(_t("cl_code_6d"), Color("#ff5050"), 2.0); return
 	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s" % code, "", func(_c, d):
 		var clan = JSON.parse_string(d)
 		if typeof(clan) != TYPE_DICTIONARY:
-			_popup_center("Клан %s не найден" % code, Color("#ff5050"), 2.2); return
+			_popup_center(_t("cl_not_found") % code, Color("#ff5050"), 2.2); return
 		var members: Dictionary = clan.get("members", {})
 		if members.size() >= 20:
-			_popup_center("Клан полон (20/20)", Color("#ff5050"), 2.2); return
+			_popup_center(_t("cl_full"), Color("#ff5050"), 2.2); return
 		_fb_rest(HTTPClient.METHOD_PATCH, "/clans/%s/members" % code, JSON.stringify({fb_uid: {"nick": _clan_name(), "power": power_peak}}), func(c2, _d2):
 			if c2 >= 200 and c2 < 300:
 				player_clan = code; _fb_write_profile(); _save()
-				_popup_center("🛡 Вступил в клан %s!" % code, Color("#7ee08a"), 3.0)
+				_popup_center(_t("cl_joined") % code, Color("#7ee08a"), 3.0)
 			else:
-				_popup_center("Ошибка вступления (%d)" % c2, Color("#ff5050"), 2.0)))
+				_popup_center(_t("cl_err_join") % c2, Color("#ff5050"), 2.0)))
 
 func _clan_leave() -> void:
 	if player_clan == "": return
 	_fb_rest(HTTPClient.METHOD_DELETE, "/clans/%s/members/%s" % [player_clan, fb_uid], "")
 	player_clan = ""; _fb_write_profile(); _save()
-	_popup_center("Вышел из клана", Color("#9aa0b5"), 1.8)
+	_popup_center(_t("cl_left"), Color("#9aa0b5"), 1.8)
 
 func _clbl(txt: String, y: int, col := Color("#cfe6ff"), sz := 14) -> Label:
 	var l := _lbl(txt, sz, col, HORIZONTAL_ALIGNMENT_CENTER); l.position = Vector2(0, y); l.size = Vector2(W, 24)
@@ -584,7 +631,7 @@ func _clbl(txt: String, y: int, col := Color("#cfe6ff"), sz := 14) -> Label:
 	return l
 
 func _clan_close_btn(panel: Control) -> void:
-	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	var close := Button.new(); close.text = _t("close"); close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 770); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
 func _open_clan() -> void:
@@ -592,48 +639,48 @@ func _open_clan() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var t := _lbl("🛡 КЛАН", 22, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 100); t.size = Vector2(W, 30); panel.add_child(t)
+	var t := _lbl(_t("cl_title"), 22, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 100); t.size = Vector2(W, 30); panel.add_child(t)
 	if not OS.has_feature("web"):
-		panel.add_child(_clbl("Кланы работают в веб-версии", 150)); _clan_close_btn(panel); return
+		panel.add_child(_clbl(_t("cl_web_only"), 150)); _clan_close_btn(panel); return
 	if not fb_ready:
-		panel.add_child(_clbl("⏳ Подключение к серверу кланов…", 160)); _clan_close_btn(panel); return
-	panel.add_child(_clbl("Твой ID: %s    ник: %s" % [fb_id, _clan_name()], 144))
-	panel.add_child(_clbl("⚡ Пик-мощь: %s    🎖 Жетоны: %s" % [_gsep(power_peak), _gsep(clan_tokens)], 170, Color("#ffd24a")))
+		panel.add_child(_clbl(_t("cl_connecting"), 160)); _clan_close_btn(panel); return
+	panel.add_child(_clbl(_t("cl_my_id") % [fb_id, _clan_name()], 144))
+	panel.add_child(_clbl(_t("cl_peak") % [_gsep(power_peak), _gsep(clan_tokens)], 170, Color("#ffd24a")))
 	if player_clan == "":
-		panel.add_child(_clbl("Ты без клана. Создай свой или вступи по коду друга:", 210))
-		var bc := Button.new(); bc.text = "🛡 СОЗДАТЬ КЛАН"; bc.custom_minimum_size = Vector2(280, 48); bc.position = Vector2(W * 0.5 - 140, 252)
+		panel.add_child(_clbl(_t("cl_no_clan"), 210))
+		var bc := Button.new(); bc.text = _t("cl_create_btn"); bc.custom_minimum_size = Vector2(280, 48); bc.position = Vector2(W * 0.5 - 140, 252)
 		bc.pressed.connect(func(): _clan_create(); panel.queue_free(); await get_tree().create_timer(0.9).timeout; _open_clan())
 		panel.add_child(bc)
-		panel.add_child(_clbl("— или вступить по коду —", 322))
-		var inp := LineEdit.new(); inp.placeholder_text = "код"; inp.max_length = 6; inp.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		panel.add_child(_clbl(_t("cl_or_join"), 322))
+		var inp := LineEdit.new(); inp.placeholder_text = _t("cl_code_ph"); inp.max_length = 6; inp.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		inp.custom_minimum_size = Vector2(170, 44); inp.position = Vector2(W * 0.5 - 145, 356); inp.add_theme_font_size_override("font_size", 18)
 		panel.add_child(inp)
-		var bj := Button.new(); bj.text = "ВСТУПИТЬ"; bj.custom_minimum_size = Vector2(120, 44); bj.position = Vector2(W * 0.5 + 40, 356)
+		var bj := Button.new(); bj.text = _t("cl_join_btn"); bj.custom_minimum_size = Vector2(120, 44); bj.position = Vector2(W * 0.5 + 40, 356)
 		bj.pressed.connect(func(): _clan_join(inp.text.strip_edges()); panel.queue_free(); await get_tree().create_timer(1.0).timeout; _open_clan())
 		panel.add_child(bj)
 	else:
-		panel.add_child(_clbl("Код клана: %s" % player_clan, 212, Color("#ffd24a"), 19))
-		panel.add_child(_clbl("Поделись кодом с друзьями 🤝", 242))
-		var ml := _clbl("⏳ загрузка состава…", 290); ml.size = Vector2(W, 240); panel.add_child(ml)
+		panel.add_child(_clbl(_t("cl_code_label") % player_clan, 212, Color("#ffd24a"), 19))
+		panel.add_child(_clbl(_t("cl_share_code"), 242))
+		var ml := _clbl(_t("cl_loading_members"), 290); ml.size = Vector2(W, 240); panel.add_child(ml)
 		_fb_rest(HTTPClient.METHOD_GET, "/clans/%s" % player_clan, "", func(_c, d):
 			if not is_instance_valid(ml): return
 			var clan = JSON.parse_string(d)
-			if typeof(clan) != TYPE_DICTIONARY: ml.text = "Клан распался."; return
+			if typeof(clan) != TYPE_DICTIONARY: ml.text = _t("cl_disbanded"); return
 			var mem: Dictionary = clan.get("members", {})
-			var txt := "👥 Состав (%d/20):\n" % mem.size()
+			var txt := _t("cl_members") % mem.size()
 			for u in mem:
 				var m = mem[u]
 				txt += "• %s — ⚡%s%s\n" % [str(m.get("nick", "?")), _gsep(int(m.get("power", 0))), ("  👑" if str(clan.get("leader", "")) == str(u) else "")]
 			ml.text = txt)
-		var bb := Button.new(); bb.text = "👹 КЛАН-БОСС"; bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 540)
+		var bb := Button.new(); bb.text = _t("cl_boss_btn"); bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 540)
 		bb.add_theme_font_size_override("font_size", 18)
 		bb.pressed.connect(func(): panel.queue_free(); _open_clan_boss())
 		panel.add_child(bb)
-		var bch := Button.new(); bch.text = "💬 ЧАТ КЛАНА"; bch.custom_minimum_size = Vector2(280, 44); bch.position = Vector2(W * 0.5 - 140, 596)
+		var bch := Button.new(); bch.text = _t("cl_chat_btn"); bch.custom_minimum_size = Vector2(280, 44); bch.position = Vector2(W * 0.5 - 140, 596)
 		bch.add_theme_font_size_override("font_size", 17)
 		bch.pressed.connect(func(): panel.queue_free(); _open_clan_chat())
 		panel.add_child(bch)
-		var bl := Button.new(); bl.text = "🚪 Выйти из клана"; bl.custom_minimum_size = Vector2(200, 40); bl.position = Vector2(W * 0.5 - 100, 656)
+		var bl := Button.new(); bl.text = _t("cl_leave_btn"); bl.custom_minimum_size = Vector2(200, 40); bl.position = Vector2(W * 0.5 - 100, 656)
 		bl.pressed.connect(func(): _clan_leave(); panel.queue_free(); await get_tree().create_timer(0.6).timeout; _open_clan())
 		panel.add_child(bl)
 	_clan_close_btn(panel)
@@ -646,7 +693,7 @@ func _clan_boss_spawn() -> void:
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(Time.get_unix_time_from_system()), "name": wb["name"], "fac": wb["fac"], "week": _week_num()}), func(c, _d):
 		if c >= 200 and c < 300:
 			boss_my_dmg = 0
-			_popup_center("%s призван! Бейте все!" % wb["name"], Color("#ff2d95"), 2.8))
+			_popup_center(_t("cl_boss_summoned") % wb["name"], Color("#ff2d95"), 2.8))
 
 func _clan_boss_attack() -> void:
 	if player_clan == "" or not fb_ready or boss_atk_cd > 0.0: return
@@ -654,27 +701,27 @@ func _clan_boss_attack() -> void:
 	var hit: int = max(1, int(power_peak * randf_range(0.8, 1.4)))
 	boss_my_dmg += hit
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss/contrib/%s" % [player_clan, fb_uid], JSON.stringify({"nick": _clan_name(), "dmg": boss_my_dmg}))
-	_popup_center("⚔ −%s урона боссу!" % _gsep(hit), Color("#ff5050"), 0.9)
+	_popup_center(_t("cl_boss_hit") % _gsep(hit), Color("#ff5050"), 0.9)
 
 func _open_clan_boss() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.92); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	panel.add_child(_clbl("👹 КЛАН-БОСС", 96, Color("#ff2d95"), 22))
-	var info := _clbl("⏳ загрузка…", 140); info.size = Vector2(W, 24); panel.add_child(info)
+	panel.add_child(_clbl(_t("cl_boss_title"), 96, Color("#ff2d95"), 22))
+	var info := _clbl(_t("cl_loading"), 140); info.size = Vector2(W, 24); panel.add_child(info)
 	# HP-бар
 	var barbg := ColorRect.new(); barbg.color = Color(0.1, 0.05, 0.08, 1); barbg.position = Vector2(W * 0.5 - 200, 180); barbg.size = Vector2(400, 30); panel.add_child(barbg)
 	var barfill := ColorRect.new(); barfill.color = Color("#ff2d95"); barfill.position = Vector2(W * 0.5 - 200, 180); barfill.size = Vector2(0, 30); panel.add_child(barfill)
 	var hplbl := _clbl("", 216, Color("#ffd24a")); panel.add_child(hplbl)
-	var lead := _clbl("⏳ загрузка…", 260); lead.size = Vector2(W, 300); panel.add_child(lead)
+	var lead := _clbl(_t("cl_loading"), 260); lead.size = Vector2(W, 300); panel.add_child(lead)
 	var refresh := func():
 		if not is_instance_valid(panel): return
 		_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/boss" % player_clan, "", func(_c, d):
 			if not is_instance_valid(panel): return
 			var boss = JSON.parse_string(d)
 			if typeof(boss) != TYPE_DICTIONARY:
-				info.text = "Босса нет. Призовите его!"; hplbl.text = ""; lead.text = ""; barfill.size = Vector2(0, 30); return
+				info.text = _t("cl_no_boss"); hplbl.text = ""; lead.text = ""; barfill.size = Vector2(0, 30); return
 			var hpmax: int = int(boss.get("hpMax", 1))
 			var contrib: Dictionary = boss.get("contrib", {})
 			if contrib.has(fb_uid): boss_my_dmg = max(boss_my_dmg, int(contrib[fb_uid].get("dmg", 0)))   # синк своего вклада из БД (реоткрытие не обнулит)
@@ -687,9 +734,9 @@ func _open_clan_boss() -> void:
 			var hp: int = max(0, hpmax - total)
 			barfill.size = Vector2(400.0 * float(hp) / float(max(1, hpmax)), 30)
 			hplbl.text = "HP: %s / %s" % [_gsep(hp), _gsep(hpmax)]
-			var bname := str(boss.get("name", "Клан-босс"))
+			var bname := str(boss.get("name", _t("cl_boss_default_name")))
 			if hp <= 0:
-				info.text = "💥 %s ПОВЕРЖЕН!" % bname
+				info.text = _t("cl_boss_killed") % bname
 				var bstarted := int(boss.get("started", 0))
 				if bstarted != boss_claimed and total > 0 and boss_my_dmg > 0:   # награда один раз с этого босса, по вкладу
 					boss_claimed = bstarted
@@ -697,21 +744,21 @@ func _open_clan_boss() -> void:
 					var dia: int = clampi(int(round(50.0 * share)) + 5, 5, 50)   # скромные алмазы (5-50, не вредят монетизации)
 					var tok: int = int(round(800.0 * share)) + 50               # клан-жетоны щедро
 					diamonds += dia; clan_tokens += tok; _save(); _refresh_hud()
-					_popup_center("🏆 Награда клана: +%d💎  +%d🎖" % [dia, tok], Color("#7ee08a"), 3.6)
+					_popup_center(_t("cl_boss_reward") % [dia, tok], Color("#7ee08a"), 3.6)
 			else:
-				info.text = "%s\n%s" % [bname, str(boss.get("fac", "Бейте всем кланом!"))]
+				info.text = "%s\n%s" % [bname, str(boss.get("fac", _t("cl_boss_fac_default")))]
 			ranked.sort_custom(func(a, b): return a[1] > b[1])
-			var lt := "🏆 ЛИДЕРБОРД ВКЛАДА:\n"
+			var lt := _t("cl_leaderboard")
 			for i in min(ranked.size(), 8):
 				lt += "%d. %s — ⚔%s\n" % [i + 1, ranked[i][0], _gsep(ranked[i][1])]
 			lead.text = lt)
 	refresh.call()
 	# кнопка призыва (если босса нет) + бить
-	panel.add_child(_clbl("👹 Босс недели: %s" % _weekly_boss()["name"], 124, Color("#ff9a3c"), 13))
-	var bspawn := Button.new(); bspawn.text = "🔮 Призвать босса недели"; bspawn.custom_minimum_size = Vector2(260, 44); bspawn.position = Vector2(W * 0.5 - 130, 600)
+	panel.add_child(_clbl(_t("cl_boss_weekly") % _weekly_boss()["name"], 124, Color("#ff9a3c"), 13))
+	var bspawn := Button.new(); bspawn.text = _t("cl_spawn_btn"); bspawn.custom_minimum_size = Vector2(260, 44); bspawn.position = Vector2(W * 0.5 - 130, 600)
 	bspawn.pressed.connect(func(): _clan_boss_spawn(); await get_tree().create_timer(1.0).timeout; refresh.call())
 	panel.add_child(bspawn)
-	var batk := Button.new(); batk.text = "⚔ УДАРИТЬ"; batk.custom_minimum_size = Vector2(260, 56); batk.position = Vector2(W * 0.5 - 130, 540); batk.add_theme_font_size_override("font_size", 22)
+	var batk := Button.new(); batk.text = _t("cl_atk_btn"); batk.custom_minimum_size = Vector2(260, 56); batk.position = Vector2(W * 0.5 - 130, 540); batk.add_theme_font_size_override("font_size", 22)
 	batk.pressed.connect(func(): _clan_boss_attack(); await get_tree().create_timer(0.5).timeout; refresh.call())
 	panel.add_child(batk)
 	# авто-обновление HP-бара каждые 3с (realtime ощущение)
@@ -730,16 +777,16 @@ func _open_clan_chat() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.93); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	panel.add_child(_clbl("💬 ЧАТ КЛАНА %s" % player_clan, 96, Color("#00f0ff"), 20))
+	panel.add_child(_clbl(_t("cl_chat_title") % player_clan, 96, Color("#00f0ff"), 20))
 	var box := ColorRect.new(); box.color = Color(0.06, 0.07, 0.1, 0.95); box.position = Vector2(W * 0.5 - 250, 140); box.size = Vector2(500, 560); panel.add_child(box)
-	var msgs := _clbl("⏳ загрузка…", 152); msgs.position = Vector2(W * 0.5 - 240, 152); msgs.size = Vector2(480, 540)
+	var msgs := _clbl(_t("cl_loading"), 152); msgs.position = Vector2(W * 0.5 - 240, 152); msgs.size = Vector2(480, 540)
 	msgs.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM; msgs.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT; panel.add_child(msgs)
 	var refresh := func():
 		if not is_instance_valid(panel): return
 		_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/chat" % player_clan, "", func(_c, d):
 			if not is_instance_valid(msgs): return
 			var ch = JSON.parse_string(d)
-			if typeof(ch) != TYPE_DICTIONARY: msgs.text = "Сообщений пока нет.\nНапиши первым 👋"; return
+			if typeof(ch) != TYPE_DICTIONARY: msgs.text = _t("cl_chat_empty"); return
 			var keys: Array = ch.keys(); keys.sort()
 			var start: int = max(0, keys.size() - 18)
 			var txt := ""
@@ -748,7 +795,7 @@ func _open_clan_chat() -> void:
 				txt += "%s: %s\n" % [str(m.get("nick", "?")), str(m.get("text", ""))]
 			msgs.text = txt)
 	refresh.call()
-	var inp := LineEdit.new(); inp.placeholder_text = "сообщение…"; inp.max_length = 200
+	var inp := LineEdit.new(); inp.placeholder_text = _t("cl_chat_ph"); inp.max_length = 200
 	inp.custom_minimum_size = Vector2(360, 44); inp.position = Vector2(W * 0.5 - 250, 712); inp.add_theme_font_size_override("font_size", 15); panel.add_child(inp)
 	var send := func():
 		if inp.text.strip_edges() == "": return
