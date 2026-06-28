@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -396,6 +396,7 @@ const TR := {
 	"hud_boss": {"ru": "БОСС", "en": "BOSS"},
 	"back": {"ru": "← назад", "en": "← back"},
 	"ready": {"ru": "ГОТОВО", "en": "READY"},
+	"sec": {"ru": "с", "en": "s"},
 	"claim": {"ru": "ЗАБРАТЬ ✨", "en": "CLAIM ✨"},
 	"locked": {"ru": "🔒 закрыто", "en": "🔒 locked"},
 	# нижнее меню / тултипы
@@ -2900,7 +2901,7 @@ func _refresh_hud() -> void:
 		var hh = heroes[i]
 		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
 		hero_ults[i].disabled = not ready_ult
-		var cdtxt := ("⚡ ГОТОВО" if ready_ult else "⏱ %.0fс" % hh["ult_t"]) if show_cd else ("⚡" if ready_ult else "")
+		var cdtxt := ("⚡ " + _t("ready") if ready_ult else "⏱ %.0f%s" % [hh["ult_t"], _t("sec")]) if show_cd else ("⚡" if ready_ult else "")
 		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh["data"]["name"], cdtxt]
 		# свечение когда ульта готова (border ignite à la AFK Arena)
 		if not hh["alive"]:
