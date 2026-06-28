@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.4"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.5" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -443,10 +443,59 @@ const TR := {
 	"g_back": {"ru": "НАЗАД", "en": "BACK"},
 	"lv_dot": {"ru": "ур.", "en": "lv."},
 	"close_caps": {"ru": "✕ ЗАКРЫТЬ", "en": "✕ CLOSE"},
+	"close_x": {"ru": "× закрыть", "en": "× close"},
+	# панель ПРЕСТИЖ (перезагрузка/усиления)
+	"rb_title": {"ru": "♻ ПЕРЕЗАГРУЗКА · УСИЛЕНИЯ", "en": "♻ REBOOT · AUGMENTS"},
+	"rb_help_t": {"ru": "Престиж и усиления", "en": "Prestige & augments"},
+	"rb_help_b": {"ru": "Застрял? ПЕРЕЗАГРУЗКА ♻ обнуляет стадии и уровни, но даёт ЯДРА 🧬 (тем больше, чем глубже зашёл).\n\n• На ядра ОТКРЫВАЕШЬ случайные УСИЛЕНИЯ и качаешь их. Они остаются НАВСЕГДА.\n• Усиления = множители урона/HP/крита/скорости. Следующий заход — сильно мощнее → проходишь дальше.\n• 🎯 КОМБИНИРУЙ разные усиления (урон+крит+скорость+HP) — это выгоднее, чем качать одно. Без HP бойцы дохнут на глубине!\n• Не везёт с усилением — перебрось за алмазы 💎.\n\nСо стадии 40 откроется 🌌 СИНГУЛЯРНОСТЬ — второй слой с вечными мета-бонусами.", "en": "Stuck? REBOOT ♻ wipes stages and levels but grants CORES 🧬 (more the deeper you got).\n\n• Spend cores to UNLOCK random AUGMENTS and level them. They stay FOREVER.\n• Augments = multipliers for damage/HP/crit/speed. Next run is far stronger → you push deeper.\n• 🎯 COMBINE different augments (dmg+crit+speed+HP) — better than maxing one. Without HP your fighters die deep!\n• Bad roll on an augment — reroll it for diamonds 💎.\n\nFrom stage 40 the 🌌 SINGULARITY unlocks — a second layer with permanent meta-bonuses."},
+	"rb_reboot_btn": {"ru": "♻ ПЕРЕЗАГРУЗИТЬСЯ", "en": "♻ REBOOT"},
+	"rb_info": {"ru": "💪 Мощь: %s    🧬 Ядра: %d", "en": "💪 Power: %s    🧬 Cores: %d"},
+	"rb_reboot_gain": {"ru": "♻ ПЕРЕЗАГРУЗИТЬСЯ  (+%d 🧬, старт стадия %d)", "en": "♻ REBOOT  (+%d 🧬, start stage %d)"},
+	"rb_lock_above": {"ru": "🔒 Продвинься выше стадии %d, чтобы престижнуть снова", "en": "🔒 Advance past stage %d to prestige again"},
+	"rb_lock_req": {"ru": "🔒 Престиж: стадия %d или %d ур.", "en": "🔒 Prestige: stage %d or %d lv."},
+	"rb_sng_btn": {"ru": "🌌 СИНГУЛЯРНОСТЬ — мета-прокачка (⚛ %d)%s", "en": "🌌 SINGULARITY — meta upgrades (⚛ %d)%s"},
+	"rb_discover": {"ru": "🎲 ОТКРЫТЬ СЛУЧАЙНОЕ УСИЛЕНИЕ  (%d 🧬)", "en": "🎲 UNLOCK RANDOM AUGMENT  (%d 🧬)"},
+	"rb_all_open": {"ru": "✓ Все усиления открыты — качай их ниже", "en": "✓ All augments unlocked — level them below"},
+	"rb_reroll": {"ru": "🎲 Перебросить «%s» — %d 💎", "en": "🎲 Reroll \"%s\" — %d 💎"},
+	"rb_slot": {"ru": "➕ Слот лоадаута %d/%d  (%d 🧬)", "en": "➕ Loadout slot %d/%d  (%d 🧬)"},
+	"rb_active": {"ru": "● АКТИВНЫЕ (работают сейчас):", "en": "● ACTIVE (working now):"},
+	"rb_spare": {"ru": "○ В ЗАПАСЕ (надень в свободный слот):", "en": "○ SPARE (equip in a free slot):"},
+	"rb_eq_on": {"ru": "  ✓надето", "en": "  ✓equipped"},
+	"rb_unequip": {"ru": "СНЯТЬ", "en": "UNEQUIP"},
+	"rb_slots_full": {"ru": "слоты\nзаняты", "en": "slots\nfull"},
+	"rb_lvlup": {"ru": "+ур\n%d🧬", "en": "+lv\n%d🧬"},
+	"rb_pop_open": {"ru": "🎲 Открыто: %s %s!\n%s", "en": "🎲 Unlocked: %s %s!\n%s"},
+	"rb_pop_reroll": {"ru": "🎲 Переброс → %s %s!\n%s", "en": "🎲 Reroll → %s %s!\n%s"},
+	# эффекты усилений
+	"ae_dmg": {"ru": "%s урона", "en": "%s damage"},
+	"ae_hp": {"ru": "%s здоровья", "en": "%s HP"},
+	"ae_gold": {"ru": "+%d%% золота/лома", "en": "+%d%% gold/scrap"},
+	"ae_core": {"ru": "+%d%% ядер", "en": "+%d%% cores"},
+	"ae_atk": {"ru": "+%d%% скор.атаки", "en": "+%d%% atk speed"},
+	"ae_crit": {"ru": "+%.1f%% шанс крита", "en": "+%.1f%% crit chance"},
+	"ae_critx": {"ru": "+%.2f× крит-урон", "en": "+%.2f× crit dmg"},
+	"ae_ultcd": {"ru": "−%d%% КД ульт", "en": "−%d%% ult CD"},
+	"ae_qte": {"ru": "+%.2fс окно QTE", "en": "+%.2fs QTE window"},
+	"ae_density": {"ru": "−%d%% HP врагов", "en": "−%d%% enemy HP"},
+	# панель СИНГУЛЯРНОСТЬ (2-й слой)
+	"sg_title": {"ru": "🌌 СИНГУЛЯРНОСТЬ", "en": "🌌 SINGULARITY"},
+	"sg_stat": {"ru": "⚛ Кванты: %d   ·   Сингулярностей: %d", "en": "⚛ Quanta: %d   ·   Singularities: %d"},
+	"sg_perma": {"ru": "Мета-бонусы ПЕРМАНЕНТНЫ — не сбрасываются ни Перезагрузкой, ни Сингулярностью.", "en": "Meta-bonuses are PERMANENT — reset by neither Reboot nor Singularity."},
+	"sg_max": {"ru": "макс", "en": "max"},
+	"sg_row_max": {"ru": "%s — %s%d (%s) · %s", "en": "%s — %s%d (%s) · %s"},
+	"sg_row": {"ru": "%s %s%d → %d  ·  %s  ·  %d ⚛", "en": "%s %s%d → %d  ·  %s  ·  %d ⚛"},
+	"sg_do": {"ru": "🌌 СДЕЛАТЬ СИНГУЛЯРНОСТЬ  (+%d ⚛)\nсброс 1-го слоя · шмот и алмазы целы", "en": "🌌 DO SINGULARITY  (+%d ⚛)\nresets layer 1 · gear & diamonds safe"},
+	"sg_locked": {"ru": "🔒 Доступно со стадии %d (сейчас %d)", "en": "🔒 Unlocks at stage %d (now %d)"},
+	"sg_pop": {"ru": "🌌 СИНГУЛЯРНОСТЬ #%d\n+%d ⚛ КВАНТОВ", "en": "🌌 SINGULARITY #%d\n+%d ⚛ QUANTA"},
+	"rb_owned_row": {"ru": "%s %s  %s%d%s", "en": "%s %s  %s%d%s"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
 	return str(e.get(lang, e.get("ru", k)))
+# локализованное поле контент-словаря: _tloc(a,"name") → name_en при EN, иначе name
+func _tloc(d: Dictionary, key: String) -> String:
+	if lang == "en": return str(d.get(key + "_en", d.get(key, "")))
+	return str(d.get(key, ""))
 func _fb_init() -> void:
 	if not OS.has_feature("web"): return
 	var js := """
@@ -768,24 +817,24 @@ func _enemy_pool() -> Array:
 	return pool
 # === ПРЕСТИЖ-АУГМЕНТЫ (LOOT-RULES §12): детерминированный выбор, перма-множители ===
 const AUGMENTS := [
-	{"id": "neuro", "icon": "🧬", "name": "Нейросеть-протокол", "stat": "core", "per": 0.15, "desc": "+15%/ур к приходу ЯДЕР"},
-	{"id": "qcore", "icon": "🔮", "name": "Квантовое ядро", "stat": "core", "per": 0.10, "desc": "+10%/ур к приходу ЯДЕР"},
-	{"id": "coproc", "icon": "🗲", "name": "Боевой ко-процессор", "stat": "dmg", "per": 0.12, "desc": "+12%/ур урон всему отряду"},
-	{"id": "blade", "icon": "🔪", "name": "Перегрузочный клинок", "stat": "dmg", "per": 0.10, "desc": "+10%/ур урон всему отряду"},
-	{"id": "oclock", "icon": "♨", "name": "Разгон ядра", "stat": "dmg", "per": 0.08, "desc": "+8%/ур урон всему отряду"},
-	{"id": "reactor", "icon": "🛡", "name": "Перегрузка реактора", "stat": "hp", "per": 0.10, "desc": "+10%/ур HP отряду"},
-	{"id": "armor", "icon": "🧱", "name": "Композитная броня", "stat": "hp", "per": 0.08, "desc": "+8%/ур HP отряду"},
-	{"id": "scope", "icon": "✷", "name": "Оптический прицел", "stat": "crit", "per": 0.02, "desc": "+2%/ур шанс крита"},
-	{"id": "snchip", "icon": "🎯", "name": "Снайпер-чип", "stat": "crit", "per": 0.015, "desc": "+1.5%/ур шанс крита"},
-	{"id": "burst", "icon": "💥", "name": "Разрывные импланты", "stat": "critx", "per": 0.11, "desc": "+11%/ур множитель крит-урона"},
-	{"id": "hyper", "icon": "⚙", "name": "Гиперпривод", "stat": "atk", "per": 0.11, "desc": "+11%/ур скорость атаки"},
-	{"id": "turbo", "icon": "🌀", "name": "Турбо-сервы", "stat": "atk", "per": 0.09, "desc": "+9%/ур скорость атаки"},
-	{"id": "miner", "icon": "💰", "name": "Майнинг-демон", "stat": "gold", "per": 0.15, "desc": "+15%/ур золото и лом"},
-	{"id": "scrapc", "icon": "♻", "name": "Скрап-коллектор", "stat": "gold", "per": 0.10, "desc": "+10%/ур золото и лом"},
-	{"id": "exploit", "icon": "⏱", "name": "Эксплойт ядра", "stat": "ultcd", "per": 0.04, "desc": "−4%/ур КД ульт"},
-	{"id": "recoil", "icon": "🔁", "name": "Контур перезаряда", "stat": "ultcd", "per": 0.03, "desc": "−3%/ур КД ульт"},
-	{"id": "reflex", "icon": "⚡", "name": "Рефлекс-усилитель", "stat": "qte", "per": 0.06, "desc": "+0.06с/ур окно QTE"},
-	{"id": "sweep", "icon": "👾", "name": "Эксплойт зачистки", "stat": "density", "per": 0.04, "desc": "−4%/ур HP врагов"},
+	{"id": "neuro", "icon": "🧬", "name": "Нейросеть-протокол", "name_en": "Neuralnet Protocol", "stat": "core", "per": 0.15, "desc": "+15%/ур к приходу ЯДЕР"},
+	{"id": "qcore", "icon": "🔮", "name": "Квантовое ядро", "name_en": "Quantum Core", "stat": "core", "per": 0.10, "desc": "+10%/ур к приходу ЯДЕР"},
+	{"id": "coproc", "icon": "🗲", "name": "Боевой ко-процессор", "name_en": "Combat Coprocessor", "stat": "dmg", "per": 0.12, "desc": "+12%/ур урон всему отряду"},
+	{"id": "blade", "icon": "🔪", "name": "Перегрузочный клинок", "name_en": "Overload Blade", "stat": "dmg", "per": 0.10, "desc": "+10%/ур урон всему отряду"},
+	{"id": "oclock", "icon": "♨", "name": "Разгон ядра", "name_en": "Core Overclock", "stat": "dmg", "per": 0.08, "desc": "+8%/ур урон всему отряду"},
+	{"id": "reactor", "icon": "🛡", "name": "Перегрузка реактора", "name_en": "Reactor Overload", "stat": "hp", "per": 0.10, "desc": "+10%/ур HP отряду"},
+	{"id": "armor", "icon": "🧱", "name": "Композитная броня", "name_en": "Composite Armor", "stat": "hp", "per": 0.08, "desc": "+8%/ур HP отряду"},
+	{"id": "scope", "icon": "✷", "name": "Оптический прицел", "name_en": "Optical Scope", "stat": "crit", "per": 0.02, "desc": "+2%/ур шанс крита"},
+	{"id": "snchip", "icon": "🎯", "name": "Снайпер-чип", "name_en": "Sniper Chip", "stat": "crit", "per": 0.015, "desc": "+1.5%/ур шанс крита"},
+	{"id": "burst", "icon": "💥", "name": "Разрывные импланты", "name_en": "Explosive Implants", "stat": "critx", "per": 0.11, "desc": "+11%/ур множитель крит-урона"},
+	{"id": "hyper", "icon": "⚙", "name": "Гиперпривод", "name_en": "Hyperdrive", "stat": "atk", "per": 0.11, "desc": "+11%/ур скорость атаки"},
+	{"id": "turbo", "icon": "🌀", "name": "Турбо-сервы", "name_en": "Turbo Servos", "stat": "atk", "per": 0.09, "desc": "+9%/ур скорость атаки"},
+	{"id": "miner", "icon": "💰", "name": "Майнинг-демон", "name_en": "Mining Daemon", "stat": "gold", "per": 0.15, "desc": "+15%/ур золото и лом"},
+	{"id": "scrapc", "icon": "♻", "name": "Скрап-коллектор", "name_en": "Scrap Collector", "stat": "gold", "per": 0.10, "desc": "+10%/ур золото и лом"},
+	{"id": "exploit", "icon": "⏱", "name": "Эксплойт ядра", "name_en": "Core Exploit", "stat": "ultcd", "per": 0.04, "desc": "−4%/ур КД ульт"},
+	{"id": "recoil", "icon": "🔁", "name": "Контур перезаряда", "name_en": "Reload Circuit", "stat": "ultcd", "per": 0.03, "desc": "−3%/ур КД ульт"},
+	{"id": "reflex", "icon": "⚡", "name": "Рефлекс-усилитель", "name_en": "Reflex Booster", "stat": "qte", "per": 0.06, "desc": "+0.06с/ур окно QTE"},
+	{"id": "sweep", "icon": "👾", "name": "Эксплойт зачистки", "name_en": "Cleanup Exploit", "stat": "density", "per": 0.04, "desc": "−4%/ур HP врагов"},
 ]
 var impl_sel := 0          # выбранный боец (для окна сравнения)
 var impl_grid := []        # ячейки сетки 4×3: на бойца {hpl, wbtn,wlbl,wsb, mbtn,mlbl,msb}
@@ -865,9 +914,9 @@ var singularity_count := 0
 var meta_unlocked := false   # видел ли игрок Сингулярность (раз увидел — кнопка остаётся)
 const SINGULARITY_STAGE := 40
 const META_UP := {
-	"mcore": {"name": "⛏ Квантовый майнинг", "per": 0.5, "desc": "+50%/ур приход ядер"},
-	"mpow":  {"name": "💥 Перегрузка ядра",   "per": 0.3, "desc": "+30%/ур мощь отряда"},
-	"mslot": {"name": "🎒 Расширение лоадаута", "per": 1,  "desc": "+1 слот усилений/ур", "max": 5},
+	"mcore": {"name": "⛏ Квантовый майнинг", "name_en": "⛏ Quantum Mining", "per": 0.5, "desc": "+50%/ур приход ядер", "desc_en": "+50%/lv core income"},
+	"mpow":  {"name": "💥 Перегрузка ядра",   "name_en": "💥 Core Overload",   "per": 0.3, "desc": "+30%/ур мощь отряда", "desc_en": "+30%/lv squad power"},
+	"mslot": {"name": "🎒 Расширение лоадаута", "name_en": "🎒 Loadout Expansion", "per": 1,  "desc": "+1 слот усилений/ур", "desc_en": "+1 augment slot/lv", "max": 5},
 }
 var meta_core := 1.0      # вычисленные мета-множители
 var meta_pow := 1.0
@@ -1286,7 +1335,7 @@ func _singularity() -> void:
 	_qte_clear()
 	if reboot_panel: reboot_panel.visible = false
 	print("TTEVENT singularity gain=%d total=%d quanta=%d" % [gain, singularity_count, quanta])
-	_popup_center("🌌 СИНГУЛЯРНОСТЬ #%d\n+%d ⚛ КВАНТОВ" % [singularity_count, gain], Color("#7adfff"), 3.0)
+	_popup_center(_t("sg_pop") % [singularity_count, gain], Color("#7adfff"), 3.0)
 	_save(); _start_march(); _refresh_hud()
 
 func _open_singularity() -> void:
@@ -1299,9 +1348,9 @@ func _open_singularity() -> void:
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 215, 90); card.custom_minimum_size = Vector2(430, 0)
 	panel.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 9); card.add_child(v)
-	v.add_child(_lbl("🌌 СИНГУЛЯРНОСТЬ", 20, Color("#7adfff"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl("⚛ Кванты: %d   ·   Сингулярностей: %d" % [quanta, singularity_count], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl("Мета-бонусы ПЕРМАНЕНТНЫ — не сбрасываются ни Перезагрузкой, ни Сингулярностью.", 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("sg_title"), 20, Color("#7adfff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("sg_stat") % [quanta, singularity_count], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("sg_perma"), 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
 	# мета-апгрейды
 	for id in ["mcore", "mpow", "mslot"]:
 		var mid: String = id
@@ -1310,10 +1359,10 @@ func _open_singularity() -> void:
 		var c := _meta_cost(id)
 		var row := Button.new(); row.custom_minimum_size = Vector2(0, 52); row.add_theme_font_size_override("font_size", 14)
 		if capped:
-			row.text = "%s — ур.%d (макс) · %s" % [META_UP[id]["name"], lvl, META_UP[id]["desc"]]
+			row.text = _t("sg_row_max") % [_tloc(META_UP[id], "name"), _t("lv_dot"), lvl, _t("sg_max"), _tloc(META_UP[id], "desc")]
 			row.disabled = true
 		else:
-			row.text = "%s ур.%d → %d  ·  %s  ·  %d ⚛" % [META_UP[id]["name"], lvl, lvl + 1, META_UP[id]["desc"], c]
+			row.text = _t("sg_row") % [_tloc(META_UP[id], "name"), _t("lv_dot"), lvl, lvl + 1, _tloc(META_UP[id], "desc"), c]
 			row.disabled = quanta < c
 		row.pressed.connect(func(): _buy_meta(mid); panel.queue_free(); _open_singularity())
 		v.add_child(row)
@@ -1321,14 +1370,14 @@ func _open_singularity() -> void:
 	var sgn := _quanta_gain()
 	var rb := Button.new(); rb.custom_minimum_size = Vector2(0, 56); rb.add_theme_font_size_override("font_size", 15)
 	if _singularity_ready():
-		rb.text = "🌌 СДЕЛАТЬ СИНГУЛЯРНОСТЬ  (+%d ⚛)\nсброс 1-го слоя · шмот и алмазы целы" % sgn
+		rb.text = _t("sg_do") % sgn
 		rb.add_theme_color_override("font_color", Color("#7adfff"))
 		rb.pressed.connect(func(): panel.queue_free(); _singularity())
 	else:
-		rb.text = "🔒 Доступно со стадии %d (сейчас %d)" % [SINGULARITY_STAGE, max(best_stage, stage)]
+		rb.text = _t("sg_locked") % [SINGULARITY_STAGE, max(best_stage, stage)]
 		rb.disabled = true
 	v.add_child(rb)
-	var bc := Button.new(); bc.text = "× закрыть"; bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _toggle_reboot() -> void:
 	reboot_panel.visible = not reboot_panel.visible
@@ -1396,19 +1445,19 @@ func _build_reboot() -> void:
 	bg.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: _toggle_reboot())
 	reboot_panel.add_child(bg)
 	var title := Label.new()
-	title.text = "♻ ПЕРЕЗАГРУЗКА · УСИЛЕНИЯ"
+	title.text = _t("rb_title")
 	title.add_theme_color_override("font_color", Color("#b46bff")); title.add_theme_font_size_override("font_size", 21)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 24); title.size = Vector2(W, 30)
 	reboot_panel.add_child(title)
-	_add_help(reboot_panel, "Престиж и усиления", "Застрял? ПЕРЕЗАГРУЗКА ♻ обнуляет стадии и уровни, но даёт ЯДРА 🧬 (тем больше, чем глубже зашёл).\n\n• На ядра ОТКРЫВАЕШЬ случайные УСИЛЕНИЯ и качаешь их. Они остаются НАВСЕГДА.\n• Усиления = множители урона/HP/крита/скорости. Следующий заход — сильно мощнее → проходишь дальше.\n• 🎯 КОМБИНИРУЙ разные усиления (урон+крит+скорость+HP) — это выгоднее, чем качать одно. Без HP бойцы дохнут на глубине!\n• Не везёт с усилением — перебрось за алмазы 💎.\n\nСо стадии 40 откроется 🌌 СИНГУЛЯРНОСТЬ — второй слой с вечными мета-бонусами.")
+	_add_help(reboot_panel, _t("rb_help_t"), _t("rb_help_b"))
 	reboot_info = Label.new()
 	reboot_info.add_theme_font_size_override("font_size", 14); reboot_info.add_theme_color_override("font_color", Color("#cdbbe8"))
 	reboot_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	reboot_info.position = Vector2(0, 60); reboot_info.size = Vector2(W, 60)
 	reboot_panel.add_child(reboot_info)
 	var rb := Button.new()
-	rb.text = "♻ ПЕРЕЗАГРУЗИТЬСЯ"; rb.add_theme_font_size_override("font_size", 17)
+	rb.text = _t("rb_reboot_btn"); rb.add_theme_font_size_override("font_size", 17)
 	rb.custom_minimum_size = Vector2(300, 50); rb.position = Vector2(W * 0.5 - 150, 124)
 	var rsb := StyleBoxFlat.new(); rsb.bg_color = Color(0.25, 0.1, 0.4, 0.96); rsb.set_corner_radius_all(10)
 	rsb.border_color = Color("#b46bff"); rsb.set_border_width_all(2)
@@ -1423,7 +1472,7 @@ func _build_reboot() -> void:
 	reboot_list.custom_minimum_size = Vector2(540, 0)
 	sc.add_child(reboot_list)
 	var close := Button.new()
-	close.text = "✕ ЗАКРЫТЬ"; close.add_theme_font_size_override("font_size", 16)
+	close.text = _t("close_caps"); close.add_theme_font_size_override("font_size", 16)
 	close.custom_minimum_size = Vector2(200, 48); close.position = Vector2(W * 0.5 - 100, H - 56)
 	close.pressed.connect(_toggle_reboot)
 	reboot_panel.add_child(close)
@@ -1431,16 +1480,16 @@ func _build_reboot() -> void:
 func _refresh_reboot() -> void:
 	var unlocked := _can_prestige()
 	# чисто: только мощь + ядра. Условие перезагрузки — на самой кнопке (не грузим экран).
-	reboot_info.text = "💪 Мощь: %s    🧬 Ядра: %d" % [_gsep(_party_power()), cores]
+	reboot_info.text = _t("rb_info") % [_gsep(_party_power()), cores]
 	rb_main.disabled = not unlocked
 	if unlocked:
-		rb_main.text = "♻ ПЕРЕЗАГРУЗИТЬСЯ  (+%d 🧬, старт стадия %d)" % [_cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5)))]
+		rb_main.text = _t("rb_reboot_gain") % [_cores_gain(), max(1, int(floor(max(best_stage, stage) * 0.5)))]
 	else:
 		var minst: int = int(floor(float(best_stage) * 0.5))
 		if stage <= minst and (stage >= PRESTIGE_STAGE or _total_levels() >= PRESTIGE_TOTAL_LVL):
-			rb_main.text = "🔒 Продвинься выше стадии %d, чтобы престижнуть снова" % minst
+			rb_main.text = _t("rb_lock_above") % minst
 		else:
-			rb_main.text = "🔒 Престиж: стадия %d или %d ур." % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
+			rb_main.text = _t("rb_lock_req") % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
 	for c in reboot_list.get_children():
 		c.queue_free()
 	# === 2-Й СЛОЙ: кнопка Сингулярности — ПОЯВЛЯЕТСЯ только со стадии 40 (новичку не грузим) ===
@@ -1449,7 +1498,7 @@ func _refresh_reboot() -> void:
 		var sng := Button.new(); sng.custom_minimum_size = Vector2(516, 50); sng.add_theme_font_size_override("font_size", 15)
 		sng.add_theme_color_override("font_color", Color("#7adfff"))
 		var sgn := _quanta_gain()
-		sng.text = "🌌 СИНГУЛЯРНОСТЬ — мета-прокачка (⚛ %d)%s" % [quanta, ("  +%d⚛" % sgn) if _singularity_ready() else ""]
+		sng.text = _t("rb_sng_btn") % [quanta, ("  +%d⚛" % sgn) if _singularity_ready() else ""]
 		sng.pressed.connect(_open_singularity)
 		reboot_list.add_child(sng)
 	# === TAP TITANS-МОДЕЛЬ: открыть СЛУЧАЙНОЕ усиление за ядра ===
@@ -1460,23 +1509,23 @@ func _refresh_reboot() -> void:
 		else: n_owned += 1
 	var disc := Button.new(); disc.custom_minimum_size = Vector2(516, 52); disc.add_theme_font_size_override("font_size", 15)
 	if n_unowned > 0:
-		disc.text = "🎲 ОТКРЫТЬ СЛУЧАЙНОЕ УСИЛЕНИЕ  (%d 🧬)" % _discover_cost()
+		disc.text = _t("rb_discover") % _discover_cost()
 		disc.disabled = cores < _discover_cost()
 	else:
-		disc.text = "✓ Все усиления открыты — качай их ниже"; disc.disabled = true
+		disc.text = _t("rb_all_open"); disc.disabled = true
 	disc.pressed.connect(_discover_aug)
 	reboot_list.add_child(disc)
 	# ПЕРЕРОЛЛ за алмазы (монетизация): не понравилось открытое усиление → перебросить на другое случайное
 	if last_discovered != "" and _al(last_discovered) == 1 and n_unowned > 0:
 		var rb := Button.new(); rb.custom_minimum_size = Vector2(516, 40); rb.add_theme_font_size_override("font_size", 13)
-		rb.text = "🎲 Перебросить «%s» — %d 💎" % [_aug_def(last_discovered)["name"], REROLL_COST]
+		rb.text = _t("rb_reroll") % [_tloc(_aug_def(last_discovered), "name"), REROLL_COST]
 		rb.disabled = diamonds < REROLL_COST
 		rb.pressed.connect(_reroll_discovered)
 		reboot_list.add_child(rb)
 	# слот-докупка — только когда есть хотя бы одно усиление (Диана: не грузить новичка)
 	if n_owned > 0 and _slot_total() < 10:
 		var sbtn := Button.new(); sbtn.custom_minimum_size = Vector2(516, 38); sbtn.add_theme_font_size_override("font_size", 12)
-		sbtn.text = "➕ Слот лоадаута %d/%d  (%d 🧬)" % [equipped_augs.size(), _slot_total(), _slot_cost()]; sbtn.disabled = cores < _slot_cost()
+		sbtn.text = _t("rb_slot") % [equipped_augs.size(), _slot_total(), _slot_cost()]; sbtn.disabled = cores < _slot_cost()
 		sbtn.pressed.connect(_buy_slot); reboot_list.add_child(sbtn)
 	# === СПИСОК ВЛАДЕЕМЫХ: два понятных раздела — Активные и В запасе (Диана) ===
 	var active := []
@@ -1486,11 +1535,11 @@ func _refresh_reboot() -> void:
 			if a["id"] in equipped_augs: active.append(a["id"])
 			else: spare.append(a["id"])
 	if active.size() > 0:
-		reboot_list.add_child(_lbl("● АКТИВНЫЕ (работают сейчас):", 12, Color("#b46bff")))
+		reboot_list.add_child(_lbl(_t("rb_active"), 12, Color("#b46bff")))
 		for id in active:
 			reboot_list.add_child(_owned_aug_row(id))
 	if spare.size() > 0:
-		reboot_list.add_child(_lbl("○ В ЗАПАСЕ (надень в свободный слот):", 12, Color("#9a8fb5")))
+		reboot_list.add_child(_lbl(_t("rb_spare"), 12, Color("#9a8fb5")))
 		for id in spare:
 			reboot_list.add_child(_owned_aug_row(id))
 
@@ -1500,16 +1549,16 @@ func _aug_effect(a: Dictionary, lvl: int) -> String:
 	var mul: float = pow(1.0 + a["per"], lvl)   # компаунд для множительных
 	var ms: String = ("×%.2f" % mul) if mul < 10.0 else (("×%.0f" % mul) if mul < 1000.0 else "×" + _fmt_n(mul))
 	match a["stat"]:
-		"dmg": return "%s урона" % ms
-		"hp": return "%s здоровья" % ms
-		"gold": return "+%d%% золота/лома" % int(round(v * 100))
-		"core": return "+%d%% ядер" % int(round(v * 100))
-		"atk": return "+%d%% скор.атаки" % int(round(v * 100))
-		"crit": return "+%.1f%% шанс крита" % (v * 100)
-		"critx": return "+%.2f× крит-урон" % v
-		"ultcd": return "−%d%% КД ульт" % int(round(v * 100))
-		"qte": return "+%.2fс окно QTE" % v
-		"density": return "−%d%% HP врагов" % int(round(v * 100))
+		"dmg": return _t("ae_dmg") % ms
+		"hp": return _t("ae_hp") % ms
+		"gold": return _t("ae_gold") % int(round(v * 100))
+		"core": return _t("ae_core") % int(round(v * 100))
+		"atk": return _t("ae_atk") % int(round(v * 100))
+		"crit": return _t("ae_crit") % (v * 100)
+		"critx": return _t("ae_critx") % v
+		"ultcd": return _t("ae_ultcd") % int(round(v * 100))
+		"qte": return _t("ae_qte") % v
+		"density": return _t("ae_density") % int(round(v * 100))
 		_: return "+%d%%" % int(round(v * 100))
 
 # Tap Titans: цена открытия случайного усиления растёт с числом уже открытых
@@ -1535,7 +1584,7 @@ func _discover_aug() -> void:
 	_apply_augments(); _recalc_auras()
 	_save(); _refresh_reboot(); _refresh_hud()
 	var a := _aug_def(id)
-	_popup_center("🎲 Открыто: %s %s!\n%s" % [a["icon"], a["name"], _aug_effect(a, 1)], Color("#ffd24a"), 2.4)
+	_popup_center(_t("rb_pop_open") % [a["icon"], _tloc(a, "name"), _aug_effect(a, 1)], Color("#ffd24a"), 2.4)
 
 # ПЕРЕРОЛЛ за алмазы (Tap Titans): снять только что открытое усиление и открыть другое случайное
 func _reroll_discovered() -> void:
@@ -1555,7 +1604,7 @@ func _reroll_discovered() -> void:
 	_apply_augments(); _recalc_auras()
 	_save(); _refresh_reboot(); _refresh_hud()
 	var a := _aug_def(nid)
-	_popup_center("🎲 Переброс → %s %s!\n%s" % [a["icon"], a["name"], _aug_effect(a, 1)], Color("#b46bff"), 2.2)
+	_popup_center(_t("rb_pop_reroll") % [a["icon"], _tloc(a, "name"), _aug_effect(a, 1)], Color("#b46bff"), 2.2)
 
 # строка владеемого усиления: надетые — фиолет/СНЯТЬ, в наличии — тускло/НАДЕТЬ; + кнопка «+ур» за ядра
 func _owned_aug_row(id: String) -> Control:
@@ -1572,18 +1621,18 @@ func _owned_aug_row(id: String) -> Control:
 	card.custom_minimum_size = Vector2(516, 0)
 	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 6); card.add_child(hb)
 	var info := VBoxContainer.new(); info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_child(_lbl("%s %s  ур.%d%s" % [a["icon"], a["name"], lvl, ("  ✓надето" if eq else "")], 14, Color("#d9c7ff") if eq else Color("#9aa0b5")))
+	info.add_child(_lbl(_t("rb_owned_row") % [a["icon"], _tloc(a, "name"), _t("lv_dot"), lvl, (_t("rb_eq_on") if eq else "")], 14, Color("#d9c7ff") if eq else Color("#9aa0b5")))
 	info.add_child(_lbl(_aug_effect(a, lvl) + "  →  " + _aug_effect(a, lvl + 1), 11, Color("#7fe0a0")))
 	hb.add_child(info)
 	var aid: String = id
 	var eqb := Button.new(); eqb.custom_minimum_size = Vector2(96, 46); eqb.add_theme_font_size_override("font_size", 12)
-	if eq: eqb.text = "СНЯТЬ"
-	elif equipped_augs.size() >= _slot_total(): eqb.text = "слоты\nзаняты"; eqb.disabled = true
-	else: eqb.text = "НАДЕТЬ"
+	if eq: eqb.text = _t("rb_unequip")
+	elif equipped_augs.size() >= _slot_total(): eqb.text = _t("rb_slots_full"); eqb.disabled = true
+	else: eqb.text = _t("g_equip")
 	eqb.pressed.connect(func(): _equip_aug(aid))
 	hb.add_child(eqb)
 	var ub := Button.new(); ub.custom_minimum_size = Vector2(96, 46); ub.add_theme_font_size_override("font_size", 12)
-	ub.text = "+ур\n%d🧬" % cost; ub.disabled = cores < cost
+	ub.text = _t("rb_lvlup") % cost; ub.disabled = cores < cost
 	ub.pressed.connect(func(): _buy_aug(aid))
 	hb.add_child(ub)
 	return card
