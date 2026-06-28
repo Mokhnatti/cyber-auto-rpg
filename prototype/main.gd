@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.6.8" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.6.9" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -224,14 +224,14 @@ const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 # === ТИПЫ ВРАГОВ (стат/поведение поверх стат-обмена) ===
 # hp/dmg/atk — множители; atk<1 = чаще бьёт; back=бьёт заднюю линию; heal=хилит союзников-врагов; s=масштаб
 const ENEMY_TYPES := {
-	"grunt":  {"name": "Грунт", "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0, "icon": ""},
-	"armor":  {"name": "Бронебот", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "БРОНЯ"},
-	"swift":  {"name": "Шустрый", "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.80, "icon": "ШУСТР"},
-	"archer": {"name": "Стрелок", "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true, "icon": "СТРЕЛ"},
-	"healer": {"name": "Лекарь", "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#3ad97a", "s": 1.0, "heal": true, "icon": "ХИЛ"},
-	"shield": {"name": "Щитоносец", "hp": 5.5, "dmg": 0.7, "atk": 1.2, "col": "#4d9bff", "s": 1.18, "icon": "ЩИТ", "shield": true},
-	"bomber": {"name": "Взрывной", "hp": 0.8, "dmg": 1.0, "atk": 1.0, "col": "#ff7a2d", "s": 1.05, "icon": "БОМБА", "bomb": true},
-	"swarm":  {"name": "Рой", "hp": 0.25, "dmg": 0.45, "atk": 0.7, "col": "#c06bff", "s": 0.62, "icon": "РОЙ", "swarm": true},
+	"grunt":  {"name": "Грунт",      "name_en": "Grunt",    "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0, "icon": ""},
+	"armor":  {"name": "Бронебот",   "name_en": "Armorbot", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "БРОНЯ"},
+	"swift":  {"name": "Шустрый",    "name_en": "Speeder",  "hp": 0.5, "dmg": 0.6, "atk": 0.4, "col": "#ffe14d", "s": 0.80, "icon": "ШУСТР"},
+	"archer": {"name": "Стрелок",    "name_en": "Shooter",  "hp": 0.7, "dmg": 0.9, "atk": 1.1, "col": "#3a8bd9", "s": 0.95, "back": true, "icon": "СТРЕЛ"},
+	"healer": {"name": "Лекарь",     "name_en": "Medic",    "hp": 1.3, "dmg": 0.3, "atk": 1.3, "col": "#3ad97a", "s": 1.0, "heal": true, "icon": "ХИЛ"},
+	"shield": {"name": "Щитоносец",  "name_en": "Shielder", "hp": 5.5, "dmg": 0.7, "atk": 1.2, "col": "#4d9bff", "s": 1.18, "icon": "ЩИТ", "shield": true},
+	"bomber": {"name": "Взрывной",   "name_en": "Bomber",   "hp": 0.8, "dmg": 1.0, "atk": 1.0, "col": "#ff7a2d", "s": 1.05, "icon": "БОМБА", "bomb": true},
+	"swarm":  {"name": "Рой",        "name_en": "Swarm",    "hp": 0.25, "dmg": 0.45, "atk": 0.7, "col": "#c06bff", "s": 0.62, "icon": "РОЙ", "swarm": true},
 }
 
 # КАЛИБРОВКА ПАС4 — модель Clicker Heroes (PROGRESSION-RESEARCH.md): per-STAGE экспонента врагов + ЛИНЕЙНАЯ сила бойца с ×2-изломами каждые N уровней. Зазор линейной силы vs экспон.цены = плавное затухание; ×2-изломы = power-spike «волна».
@@ -278,41 +278,45 @@ func _can_prestige() -> bool:
 
 # === ЛОКАЦИИ (Рамиль): карта → выбор локации → свои враги, фон-палитра, сюжетный квест ===
 const LOCATIONS := [
-	{"id": "slums",  "name": "Трущобы",     "icon": "🏚", "unlock": 1,
+	{"id": "slums",  "name": "Трущобы",     "name_en": "Slums",         "icon": "🏚", "unlock": 1,
 	 "pool": ["grunt", "swift", "swarm", "bomber"],
 	 "neon": ["#ff2d95", "#b400ff", "#00f0ff"], "ground": "#ffb02e",
 	 "desc": "Трущобы — психоз от дешёвых имплантов ZenoCore. Тут начал Вектор.",
-	 "quest": {"item": "🔪 Бритва главаря", "boss": "Главарь трущоб", "reward": "weapon", "contact": "🐀 Крыс",
+	 "desc_en": "Slums — psychosis from cheap ZenoCore implants. Where Vector began.",
+	 "quest": {"item": "🔪 Бритва главаря", "item_en": "🔪 Gang Leader's Razor", "boss": "Главарь трущоб", "reward": "weapon", "contact": "🐀 Крыс", "contact_en": "🐀 Rat",
 	           "chat": ["Ты тот курьер, которого ZenoCore списали? 🐀 Слыхал.", "Не дёргайся, я свой. Крыс. Тут все так зовут.", "Работа есть. Главарь трущоб таскает фирменную бритву — заказчик за неё отвалит ствол на выбор 🔫", "И гляди в оба: местные звереют от дешёвых имплантов. Психоз. Раньше такого не было...", "Зачисти Трущобы, выбей бритву с босса. Не подведи, Вектор."],
 	           "moral": {"id": "batch", "prompt": "Ещё момент. Тут склад нераспечатанных коробок — те самые импланты ZenoCore. Местные расхватают как «бесплатную силу». Что делать будем?",
 	                     "a": {"label": "🔥 Сжечь партию", "result": "Трущобы остались без «брони», Крыс в ярости — но психоз не расползётся. Ты заплатил репутацией ради чужих.", "karma": 1, "scrap": 0},
 	                     "b": {"label": "💰 Дать толкнуть", "result": "Крыс доволен, карман потяжелел (+400 лом). Но эти импланты ещё вернутся к тебе психами. ⚠️", "karma": -1, "scrap": 400}},
 	           "dialog": "Крыс: «Главарь носит фирменную бритву. Достань — заказчик отвалит ствол. И берегись психов: их плодят дешёвые импланты.»"}},
-	{"id": "corp",   "name": "Корп-район",   "icon": "🏢", "unlock": 8,
+	{"id": "corp",   "name": "Корп-район",   "name_en": "Corp District", "icon": "🏢", "unlock": 8,
 	 "pool": ["grunt", "armor", "shield", "archer", "healer"],
 	 "neon": ["#00f0ff", "#0077ff", "#7ee08a"], "ground": "#00f0ff",
 	 "desc": "Корп-район ZenoCore — где «доступная аугментация» живёт в цифрах.",
-	 "quest": {"item": "💳 КПК Холта", "boss": "Менеджер Холт", "reward": "weapon", "contact": "💼 Агент Ким",
+	 "desc_en": "ZenoCore Corp District — where 'affordable augmentation' lives on paper.",
+	 "quest": {"item": "💳 КПК Холта", "item_en": "💳 Holt's PDA", "boss": "Менеджер Холт", "reward": "weapon", "contact": "💼 Агент Ким", "contact_en": "💼 Agent Kim",
 	           "chat": ["Вектор. У меня контракт под тебя 💼", "Я аналитик ZenoCore. Та программа субсидий, что плодит психоз... я визировала отгрузки. Я знала.", "В КПК менеджера Холта — тред «откат партии». Доказательство, что не остановили нарочно.", "Выбей КПК с него. Пушка на выбор твоя.", "И... спасибо, что не спрашиваешь, почему я это сливаю."],
 	           "moral": {"id": "holt", "prompt": "Холт на коленях: «У меня дети. Я подписал «ещё один цикл наблюдений». Один. Дай уйти — я исчезну.» Сдать его публике как лицо скандала — или отпустить?",
 	                     "a": {"label": "🤝 Отпустить", "result": "Ты дал ему уйти. Не монстр — просто человек, что не нажал «стоп». Скандал останется без лица.", "karma": 1, "scrap": 0},
 	                     "b": {"label": "📢 Сдать публике", "result": "Холт — теперь лицо скандала ZenoCore (+500 лом за слив). Но корпа запомнила твоё лицо. ⚠️", "karma": -1, "scrap": 500}},
 	           "dialog": "Ким: «В КПК Холта — доказательство, что партию психозных имплантов не отозвали ради премии. Выбей его. Я знала и молчала — хватит.»"}},
-	{"id": "docks",  "name": "Доки",         "icon": "⚓", "unlock": 16,
+	{"id": "docks",  "name": "Доки",         "name_en": "Docks",         "icon": "⚓", "unlock": 16,
 	 "pool": ["grunt", "swift", "armor", "bomber", "archer"],
 	 "neon": ["#ffb02e", "#00f0ff", "#ff5050"], "ground": "#ffb02e",
 	 "desc": "Доки — контрабанда психозных партий, дроны, тяжёлая броня.",
-	 "quest": {"item": "📦 Чёрный груз", "boss": "Босс доков", "reward": "weapon", "contact": "⚓ Боцман",
+	 "desc_en": "The Docks — contraband psychosis shipments, drones, heavy armor.",
+	 "quest": {"item": "📦 Чёрный груз", "item_en": "📦 Black Cargo", "boss": "Босс доков", "reward": "weapon", "contact": "⚓ Боцман", "contact_en": "⚓ Bosun",
 	           "chat": ["Слышь, курьер. Боцман на связи ⚓", "На причале — ящик ZenoCore. Та самая партия. Психозная.", "Вожу и для них, и для тебя. Лояльность у меня по прайсу — не обижайся.", "Вышиби ящик с босса доков. Пушка твоя.", "Мне бабки очень нужны. Не спрашивай зачем."],
 	           "moral": {"id": "bosun", "prompt": "Боцман палится: он слил твой маршрут ZenoCore — за долг дочери в кабале. Прижать его — или понять?",
 	                     "a": {"label": "🫂 Понять", "result": "Ты понял Боцмана. Он сломался от того, что его не убили — теперь он твой, без прайса.", "karma": 1, "scrap": 0},
 	                     "b": {"label": "🔫 Прижать к стене", "result": "Ты выбил из Боцмана компенсацию (+500 лом). Но доверие сожжено — он больше не прикроет.", "karma": -1, "scrap": 500}},
 	           "dialog": "Боцман: «Ящик ZenoCore застрял на причале. Вышиби с босса. Я вожу для всех — кто платит. Не суди.»"}},
-	{"id": "core",   "name": "Нео-Ядро",     "icon": "🌐", "unlock": 26,
+	{"id": "core",   "name": "Нео-Ядро",     "name_en": "Neo-Core",      "icon": "🌐", "unlock": 26,
 	 "pool": ["grunt", "swift", "armor", "swarm", "archer", "bomber", "healer", "shield"],
 	 "neon": ["#ffffff", "#ff2d95", "#00f0ff"], "ground": "#ff2d95",
 	 "desc": "Нео-Ядро — здесь живёт то, что сломало Вектору жизнь.",
-	 "quest": {"item": "🧠 Чип PHANTOM-LIMB", "boss": "Страж Ядра", "reward": "weapon", "contact": "📡 Сигнал",
+	 "desc_en": "Neo-Core — where whatever broke Vector's life resides.",
+	 "quest": {"item": "🧠 Чип PHANTOM-LIMB", "item_en": "🧠 PHANTOM-LIMB Chip", "boss": "Страж Ядра", "reward": "weapon", "contact": "📡 Сигнал", "contact_en": "📡 Signal",
 	           "chat": ["...слышишь меня, Вектор? Это не Крыс и не Ким 📡", "Зови меня Сигнал. Помеха на линии. Шум. Тот, кто слушает.", "В Ядре — чип. Он объяснит твои девять секунд. Те, которых ты не помнишь.", "Дойди до Стража Ядра. Вырви чип. Я проведу.", "...я был там. Когда у тебя в голове всё сломалось. Я помню это изнутри."],
 	           "dialog": "Сигнал: «В Ядре — чип, что объяснит твои девять секунд. Дойди до Стража, вырви его. Я проведу — я был там, внутри.»"}},
 ]
@@ -568,6 +572,16 @@ const TR := {
 	"ach_rew_dia":   {"ru": "+%d💎 алмазов", "en": "+%d💎 diamonds"},
 	"ach_rew_cores": {"ru": "+%d🧬 ядер", "en": "+%d🧬 cores"},
 	"ach_rew_scrap": {"ru": "+%d♻ скрапа", "en": "+%d♻ scrap"},
+	# карта локаций
+	"map_title":    {"ru": "🗺 КАРТА — ЛОКАЦИИ", "en": "🗺 LOCATIONS MAP"},
+	"map_sub":      {"ru": "Выбери район — свои враги, свой вид, свой сюжетный квест", "en": "Choose a district — unique enemies, look & story quest"},
+	"map_here":     {"ru": "  ◀ ЗДЕСЬ", "en": "  ◀ HERE"},
+	"map_lock":     {"ru": "  🔒 со стадии %d", "en": "  🔒 from stage %d"},
+	"map_enemies":  {"ru": "Враги: ", "en": "Enemies: "},
+	"map_qdone":    {"ru": "✅ Квест закрыт: %s", "en": "✅ Quest done: %s"},
+	"map_qget":     {"ru": "📜 Квест: добыть %s с босса", "en": "📜 Quest: get %s from boss"},
+	"map_go":       {"ru": "▶ ОТПРАВИТЬСЯ", "en": "▶ GO THERE"},
+	"map_new_msg":  {"ru": "📨 Новое сообщение от %s", "en": "📨 New message from %s"},
 }
 func _t(k: String) -> String:
 	var e: Dictionary = TR.get(k, {})
@@ -3523,13 +3537,13 @@ func _open_map() -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.88); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var title := _lbl("🗺 КАРТА — ЛОКАЦИИ", 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 30); title.size = Vector2(W, 30); panel.add_child(title)
-	var sub := _lbl("Выбери район — свои враги, свой вид, свой сюжетный квест", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 60); sub.size = Vector2(W, 20); panel.add_child(sub)
+	var title := _lbl(_t("map_title"), 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 30); title.size = Vector2(W, 30); panel.add_child(title)
+	var sub := _lbl(_t("map_sub"), 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 60); sub.size = Vector2(W, 20); panel.add_child(sub)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 96); scroll.custom_minimum_size = Vector2(440, 600); scroll.size = Vector2(440, 600); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 8); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
 	for i in LOCATIONS.size():
 		list.add_child(_map_card(i, panel))
-	var close := Button.new(); close.text = "✕ закрыть"; close.custom_minimum_size = Vector2(200, 40)
+	var close := Button.new(); close.text = _t("close"); close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 712); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
 func _map_card(i: int, panel: Control) -> Control:
@@ -3545,19 +3559,20 @@ func _map_card(i: int, panel: Control) -> Control:
 	sb.set_border_width_all(3 if active else 1)
 	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
-	var head := "%s %s" % [loc["icon"], loc["name"]]
-	if active: head += "  ◀ ЗДЕСЬ"
-	if not unlocked: head += "  🔒 со стадии %d" % int(loc["unlock"])
+	var head := "%s %s" % [loc["icon"], _tloc(loc, "name")]
+	if active: head += _t("map_here")
+	if not unlocked: head += _t("map_lock") % int(loc["unlock"])
 	v.add_child(_lbl(head, 16, Color(loc["neon"][0]) if unlocked else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT))
-	v.add_child(_lbl(loc["desc"], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
+	v.add_child(_lbl(_tloc(loc, "desc"), 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
 	var names := []
-	for t in loc["pool"]: names.append(str(ENEMY_TYPES[t]["name"]))
-	v.add_child(_lbl("Враги: " + ", ".join(names), 11, Color("#7a8095"), HORIZONTAL_ALIGNMENT_LEFT))
+	for t in loc["pool"]: names.append(_tloc(ENEMY_TYPES[t], "name"))
+	v.add_child(_lbl(_t("map_enemies") + ", ".join(names), 11, Color("#7a8095"), HORIZONTAL_ALIGNMENT_LEFT))
 	var q: Dictionary = loc["quest"]
-	var qline := ("✅ Квест закрыт: " + str(q["item"])) if qdone else ("📜 Квест: добыть " + str(q["item"]) + " с босса")
+	var qitem := _tloc(q, "item")
+	var qline := (_t("map_qdone") % qitem) if qdone else (_t("map_qget") % qitem)
 	v.add_child(_lbl(qline, 11, Color("#7ee08a") if qdone else Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
 	if unlocked and not active:
-		var b := Button.new(); b.text = "▶ ОТПРАВИТЬСЯ"; b.custom_minimum_size = Vector2(0, 34); b.add_theme_font_size_override("font_size", 13)
+		var b := Button.new(); b.text = _t("map_go"); b.custom_minimum_size = Vector2(0, 34); b.add_theme_font_size_override("font_size", 13)
 		var ii := i
 		b.pressed.connect(func(): _go_location(ii); panel.queue_free())
 		v.add_child(b)
@@ -3571,7 +3586,7 @@ func _go_location(i: int) -> void:
 	_popup_center("%s %s" % [loc["icon"], loc["name"]], Color(loc["neon"][0]), 1.6)
 	# квест-чат: фиксер пишет задание в мессенджер (идея Рамиля)
 	if not (str(loc["id"]) in quest_done):
-		_popup_center("📨 Новое сообщение от %s" % str(loc["quest"].get("contact", "Связной")), Color("#3ad97a"), 1.8)
+		_popup_center(_t("map_new_msg") % _tloc(loc["quest"], "contact"), Color("#3ad97a"), 1.8)
 		_open_quest_chat(cur_location)
 	else:
 		# farm-эхо: район реагирует на твои прошлые решения
