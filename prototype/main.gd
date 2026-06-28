@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.0.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.0.2"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -2612,7 +2612,7 @@ func _build() -> void:
 	speed_btn.text = "⏩ x1"
 	speed_btn.add_theme_font_size_override("font_size", 16)
 	speed_btn.custom_minimum_size = Vector2(74, 40)
-	speed_btn.position = Vector2(W - 140, 762)   # UI-редизайн: вниз к пальцу (было верх-право)
+	speed_btn.position = Vector2(W - 88, 150)   # фидбэк Рамиля: скорость НАВЕРХ (редкая кнопка, не нужна у пальца)
 	speed_btn.pressed.connect(_cycle_speed)
 	hud.add_child(speed_btn)
 	# тумблер АВТОБОЯ
@@ -3080,6 +3080,8 @@ func _apply_location_theme() -> void:
 func _check_quest_complete() -> void:
 	var loc := _loc()
 	if str(loc["id"]) in quest_done: return
+	# предмет квеста падает с босса РАНДОМНО (~28%/босс), а не гарантом на 1-м (фидбэк Рамиля: «органично по ходу фарма»)
+	if randf() > 0.28: return
 	quest_done.append(str(loc["id"]))
 	_save()
 	_quest_reward(loc)
@@ -3089,7 +3091,7 @@ func _grant_quest_weapon(i: int) -> void:
 	var cls: int = hh["cls"]
 	var variants := _slot_variants("weapon", cls)
 	var v = variants[randi() % variants.size()]
-	var rar: int = RARITY.size() - 1   # топ-редкость (эпик)
+	var rar: int = _roll_rarity()   # СЛУЧАЙНАЯ рарность по стадии (фидбэк Рамиля: не гарант-эпик, это жирно; эпик пусть с рандом-дропа)
 	var it := _make_item(cls, v["id"], rar, "weapon"); it["lvl"] = max(1, stage)
 	var key := _ik(v["id"], rar); var g = hh["gear"]["weapon"]
 	if not g.has(key) or _item_power(it) > _item_power(g[key]):
@@ -3106,14 +3108,14 @@ func _quest_reward(loc: Dictionary) -> void:
 	var t := _lbl("✅ КВЕСТ ВЫПОЛНЕН", 22, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 180); t.size = Vector2(W, 30); panel.add_child(t)
 	var it := _lbl("Добыто: " + str(q["item"]) + "  (с босса «%s»)" % str(q["boss"]), 14, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); it.position = Vector2(0, 216); it.size = Vector2(W, 22); panel.add_child(it)
 	var rw := _lbl("Награда: +150 💎  +500 🔩  +  ПУШКА НА ВЫБОР ↓", 14, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); rw.position = Vector2(0, 250); rw.size = Vector2(W, 22); panel.add_child(rw)
-	var pick := _lbl("🔫 Выбери эпик-оружие одному бойцу:", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); pick.position = Vector2(0, 286); pick.size = Vector2(W, 20); panel.add_child(pick)
+	var pick := _lbl("🔫 Выбери пушку одному бойцу (рарность рандом):", 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); pick.position = Vector2(0, 286); pick.size = Vector2(W, 20); panel.add_child(pick)
 	for i in heroes.size():
 		var hh = heroes[i]
-		var b := Button.new(); b.text = "%s  %s — эпик-пушка" % [HEROES[hh["cls"]]["icon"], HEROES[hh["cls"]]["name"]]
+		var b := Button.new(); b.text = "%s  %s — пушка" % [HEROES[hh["cls"]]["icon"], HEROES[hh["cls"]]["name"]]
 		b.custom_minimum_size = Vector2(360, 46); b.add_theme_font_size_override("font_size", 15)
 		b.position = Vector2(W * 0.5 - 180, 320 + i * 54)
 		var ii := i
-		b.pressed.connect(func(): _grant_quest_weapon(ii); _popup_center("🔫 Эпик-пушка выдана!", Color("#ff2d95"), 1.6); panel.queue_free())
+		b.pressed.connect(func(): _grant_quest_weapon(ii); _popup_center("🔫 Пушка выдана!", Color("#ff2d95"), 1.6); panel.queue_free())
 		panel.add_child(b)
 
 # === ЕЖЕДНЕВНЫЕ КВЕСТЫ ===
@@ -3427,7 +3429,15 @@ func _open_more() -> void:
 		["🎁  Награды" + rew_b, Callable(self, "_open_rewards_group")],
 		["🗺  Карта локаций", Callable(self, "_open_map")],
 		["⚙  Настройки", Callable(self, "_toggle_settings")],
+		["🔄  v%s · обновить игру" % VERSION, Callable(self, "_force_update")],
 	])
+
+# принудительное обновление до свежего билда (чистка кэша+SW) — нужно на тесте (фидбэк Рамиля «зря убрал»)
+func _force_update() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("(async()=>{try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs){await r.unregister();}}if(self.caches){const ks=await caches.keys();for(const k of ks){await caches.delete(k);}}}catch(e){}location.reload(true);})();", true)
+	else:
+		_popup_center("🔄 Обновление доступно в веб-версии", Color("#9aa0b5"), 1.6)
 
 func _open_story_group() -> void:
 	var msg_new: bool = not (str(_loc()["id"]) in quest_done)
