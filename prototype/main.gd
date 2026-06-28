@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.2.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.3.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -366,6 +366,8 @@ var fb_id := ""             # короткий #ID (из uid)
 var fb_ready := false
 var fb_t := 0.0
 var player_clan := ""       # код клана игрока (6 цифр), "" = без клана
+var boss_my_dmg := 0        # мой накопленный урон по клан-боссу (локально → пишу свой узел contrib, без гонки)
+var boss_atk_cd := 0.0      # кулдаун кнопки «Ударить»
 func _fb_init() -> void:
 	if not OS.has_feature("web"): return
 	var js := """
@@ -495,12 +497,82 @@ func _open_clan() -> void:
 				var m = mem[u]
 				txt += "• %s — ⚡%s%s\n" % [str(m.get("nick", "?")), _gsep(int(m.get("power", 0))), ("  👑" if str(clan.get("leader", "")) == str(u) else "")]
 			ml.text = txt)
-		var bb := Button.new(); bb.text = "👹 КЛАН-БОСС (скоро)"; bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 560); bb.disabled = true
+		var bb := Button.new(); bb.text = "👹 КЛАН-БОСС"; bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 560)
+		bb.add_theme_font_size_override("font_size", 18)
+		bb.pressed.connect(func(): panel.queue_free(); _open_clan_boss())
 		panel.add_child(bb)
 		var bl := Button.new(); bl.text = "🚪 Выйти из клана"; bl.custom_minimum_size = Vector2(200, 40); bl.position = Vector2(W * 0.5 - 100, 620)
 		bl.pressed.connect(func(): _clan_leave(); panel.queue_free(); await get_tree().create_timer(0.6).timeout; _open_clan())
 		panel.add_child(bl)
 	_clan_close_btn(panel)
+
+# === КЛАН-БОСС: общий HP = hpMax − сумма вкладов (без гонки, каждый пишет свой узел) ===
+func _clan_boss_spawn() -> void:
+	if player_clan == "" or not fb_ready: return
+	var hpmax: int = max(5000000, power_peak * 250)
+	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(Time.get_unix_time_from_system())}), func(c, _d):
+		if c >= 200 and c < 300:
+			boss_my_dmg = 0
+			_popup_center("👹 Клан-босс призван! Бейте все!", Color("#ff2d95"), 2.6))
+
+func _clan_boss_attack() -> void:
+	if player_clan == "" or not fb_ready or boss_atk_cd > 0.0: return
+	boss_atk_cd = 1.2
+	var hit: int = max(1, int(power_peak * randf_range(0.8, 1.4)))
+	boss_my_dmg += hit
+	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss/contrib/%s" % [player_clan, fb_uid], JSON.stringify({"nick": _clan_name(), "dmg": boss_my_dmg}))
+	_popup_center("⚔ −%s урона боссу!" % _gsep(hit), Color("#ff5050"), 0.9)
+
+func _open_clan_boss() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.92); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	panel.add_child(_clbl("👹 КЛАН-БОСС", 96, Color("#ff2d95"), 22))
+	var info := _clbl("⏳ загрузка…", 140); info.size = Vector2(W, 24); panel.add_child(info)
+	# HP-бар
+	var barbg := ColorRect.new(); barbg.color = Color(0.1, 0.05, 0.08, 1); barbg.position = Vector2(W * 0.5 - 200, 180); barbg.size = Vector2(400, 30); panel.add_child(barbg)
+	var barfill := ColorRect.new(); barfill.color = Color("#ff2d95"); barfill.position = Vector2(W * 0.5 - 200, 180); barfill.size = Vector2(0, 30); panel.add_child(barfill)
+	var hplbl := _clbl("", 216, Color("#ffd24a")); panel.add_child(hplbl)
+	var lead := _clbl("⏳ загрузка…", 260); lead.size = Vector2(W, 300); panel.add_child(lead)
+	var refresh := func():
+		if not is_instance_valid(panel): return
+		_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/boss" % player_clan, "", func(_c, d):
+			if not is_instance_valid(panel): return
+			var boss = JSON.parse_string(d)
+			if typeof(boss) != TYPE_DICTIONARY:
+				info.text = "Босса нет. Призовите его!"; hplbl.text = ""; lead.text = ""; barfill.size = Vector2(0, 30); return
+			var hpmax: int = int(boss.get("hpMax", 1))
+			var contrib: Dictionary = boss.get("contrib", {})
+			if contrib.has(fb_uid): boss_my_dmg = max(boss_my_dmg, int(contrib[fb_uid].get("dmg", 0)))   # синк своего вклада из БД (реоткрытие не обнулит)
+			var total := 0
+			var ranked := []
+			for u in contrib:
+				var dm := int(contrib[u].get("dmg", 0))
+				total += dm
+				ranked.append([str(contrib[u].get("nick", "?")), dm])
+			var hp: int = max(0, hpmax - total)
+			barfill.size = Vector2(400.0 * float(hp) / float(max(1, hpmax)), 30)
+			hplbl.text = "HP: %s / %s" % [_gsep(hp), _gsep(hpmax)]
+			info.text = "💥 ПОВЕРЖЕН! Награды раздадим." if hp <= 0 else "Бейте босса всем кланом!"
+			ranked.sort_custom(func(a, b): return a[1] > b[1])
+			var lt := "🏆 ЛИДЕРБОРД ВКЛАДА:\n"
+			for i in min(ranked.size(), 8):
+				lt += "%d. %s — ⚔%s\n" % [i + 1, ranked[i][0], _gsep(ranked[i][1])]
+			lead.text = lt)
+	refresh.call()
+	# кнопка призыва (если босса нет) + бить
+	var bspawn := Button.new(); bspawn.text = "🔮 Призвать клан-босса"; bspawn.custom_minimum_size = Vector2(260, 44); bspawn.position = Vector2(W * 0.5 - 130, 600)
+	bspawn.pressed.connect(func(): _clan_boss_spawn(); await get_tree().create_timer(1.0).timeout; refresh.call())
+	panel.add_child(bspawn)
+	var batk := Button.new(); batk.text = "⚔ УДАРИТЬ"; batk.custom_minimum_size = Vector2(260, 56); batk.position = Vector2(W * 0.5 - 130, 540); batk.add_theme_font_size_override("font_size", 22)
+	batk.pressed.connect(func(): _clan_boss_attack(); await get_tree().create_timer(0.5).timeout; refresh.call())
+	panel.add_child(batk)
+	# авто-обновление HP-бара каждые 3с (realtime ощущение)
+	var tmr := Timer.new(); tmr.wait_time = 3.0; tmr.autostart = true; panel.add_child(tmr)
+	tmr.timeout.connect(func(): refresh.call())
+	_clan_close_btn(panel)
+
 # нарративный пульс фарма (анти-выгорание): редкие реплики мира/Сигнала во время гринда
 const PULSE_LINES := [
 	"📡 Сигнал: «…всё ещё слышу тебя. Не оборачивайся.»",
@@ -2089,6 +2161,7 @@ func _process(delta: float) -> void:
 			pulse_t = 0.0
 			_farm_pulse()
 	_fb_poll(delta)   # Firebase: дождаться анонимного uid → #ID
+	if boss_atk_cd > 0.0: boss_atk_cd -= delta
 	# реклама-бусты урона/скорости истекли → пересчитать героев (золото считается живьём)
 	var _adon: bool = _ad_active("dmg") or _ad_active("atk")
 	if _adon != _ad_buff_on:
