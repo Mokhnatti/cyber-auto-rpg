@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.5.0"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.5.1"   # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var tele_t := 30.0
 var http: HTTPRequest
@@ -2815,7 +2815,7 @@ func _refresh_hud() -> void:
 	if impl_btn:
 		var nc := 0
 		for k in new_gear: nc += int(new_gear[k])   # сумма новых предметов (не слотов)
-		impl_btn.text = "🦾 ЭКИПИРОВКА" + ("  ●%d" % nc if nc > 0 else "")
+		impl_btn.text = "🦾" + ("●%d" % nc if nc > 0 else "")
 		if nc > 0:
 			var ph: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 180.0)   # пульс золотом
 			impl_btn.modulate = Color(1.0, 1.0, 1.0).lerp(Color(1.7, 1.4, 0.2), ph)
@@ -2825,7 +2825,7 @@ func _refresh_hud() -> void:
 		if best_stage != _bp_cache_stage:   # перф: O(n²) счёт только при смене стадии (баг-хант R4)
 			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
 		var total := _bp_badge_cache + _ach_claimable() + _dq_ready_count()
-		more_btn.text = "☰\nЕщё" + ("  ●%d" % total if total > 0 else "")
+		more_btn.text = "☰" + ("●%d" % total if total > 0 else "")
 		more_btn.modulate = Color(1.6, 1.4, 0.3) if total > 0 else Color(1, 1, 1)
 	if loot_badge:
 		loot_badge.visible = new_gear.size() > 0 and not impl_open
@@ -3017,27 +3017,32 @@ func _build() -> void:
 	menubar.position = Vector2(0, H - 56); menubar.size = Vector2(W, 50)
 	hud.add_child(menubar)
 	# UI-редизайн: навбар 4 кнопки (иконка + подпись), остальное в «☰ Ещё»
+	# UI: иконки вместо текста (универсально, без перевода — идея Рамиля)
 	inv_btn = Button.new()
-	inv_btn.text = "📊\nПрокачка"
-	inv_btn.add_theme_font_size_override("font_size", 12)
+	inv_btn.text = "📊"
+	inv_btn.tooltip_text = "Прокачка"
+	inv_btn.add_theme_font_size_override("font_size", 26)
 	inv_btn.custom_minimum_size = Vector2(112, 48)
 	inv_btn.pressed.connect(_toggle_inv)
 	menubar.add_child(inv_btn)
 	impl_btn = Button.new()
-	impl_btn.text = "🦾\nЭкип"
-	impl_btn.add_theme_font_size_override("font_size", 12)
+	impl_btn.text = "🦾"
+	impl_btn.tooltip_text = "Экипировка"
+	impl_btn.add_theme_font_size_override("font_size", 26)
 	impl_btn.custom_minimum_size = Vector2(112, 48)
 	impl_btn.pressed.connect(_toggle_impl)
 	menubar.add_child(impl_btn)
 	var reboot_mb := Button.new()
-	reboot_mb.text = "♻\nПрестиж"
-	reboot_mb.add_theme_font_size_override("font_size", 12)
+	reboot_mb.text = "♻"
+	reboot_mb.tooltip_text = "Престиж"
+	reboot_mb.add_theme_font_size_override("font_size", 26)
 	reboot_mb.custom_minimum_size = Vector2(112, 48)
 	reboot_mb.pressed.connect(_toggle_reboot)
 	menubar.add_child(reboot_mb)
 	more_btn = Button.new()
-	more_btn.text = "☰\nЕщё"
-	more_btn.add_theme_font_size_override("font_size", 12)
+	more_btn.text = "☰"
+	more_btn.tooltip_text = "Ещё"
+	more_btn.add_theme_font_size_override("font_size", 26)
 	more_btn.custom_minimum_size = Vector2(112, 48)
 	more_btn.pressed.connect(_open_more)
 	menubar.add_child(more_btn)
