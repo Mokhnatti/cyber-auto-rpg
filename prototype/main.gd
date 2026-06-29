@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.0" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.1" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -583,6 +583,8 @@ const TR := {
 	"rb_discover": {"ru": "🎲 ОТКРЫТЬ СЛУЧАЙНОЕ УСИЛЕНИЕ  (%d 🧬)", "en": "🎲 UNLOCK RANDOM AUGMENT  (%d 🧬)"},
 	"rb_all_open": {"ru": "✓ Все усиления открыты — качай их ниже", "en": "✓ All augments unlocked — level them below"},
 	"rb_reroll": {"ru": "🎲 Перебросить «%s» — %d 💎", "en": "🎲 Reroll \"%s\" — %d 💎"},
+	"g_upgrade": {"ru": "⬆ Улучшить +10%% (%d🔩)", "en": "⬆ Upgrade +10%% (%d🔩)"},
+	"g_upgrade_done": {"ru": "⬆ Улучшено! +10%", "en": "⬆ Upgraded! +10%"},
 	"rb_slot": {"ru": "➕ Слот лоадаута %d/%d  (%d 🧬)", "en": "➕ Loadout slot %d/%d  (%d 🧬)"},
 	"rb_active": {"ru": "● АКТИВНЫЕ (работают сейчас):", "en": "● ACTIVE (working now):"},
 	"rb_spare": {"ru": "○ В ЗАПАСЕ (надень в свободный слот):", "en": "○ SPARE (equip in a free slot):"},
@@ -1512,7 +1514,7 @@ func _make_item(cls: int, vid: String, rarity: int, slot: String = "module") -> 
 	others.shuffle()
 	for i in range(min(rarity - 1, others.size())):
 		rolls.append(_roll_stat(others[i]))
-	return {"vid": vid, "rarity": rarity, "lvl": 1, "rolls": rolls}
+	return {"vid": vid, "rarity": rarity, "lvl": 1, "up": 0, "rolls": rolls}
 
 func _item_power(it: Dictionary) -> int:   # грубая сила для сравнения «перефармить?»
 	var s := 0
@@ -1556,7 +1558,8 @@ func _gear_bonus(hh: Dictionary, stat: String) -> float:
 		if key == "" or not hh["gear"][slot].has(key):
 			continue
 		var inst = hh["gear"][slot][key]
-		var mult: float = 1.0 + (inst["lvl"] - 1) * 0.25
+		# уровень-дропа (×0.25/lvl) × апгрейд за лом (×0.10/up — простой казуал-апгрейд)
+		var mult: float = (1.0 + (inst["lvl"] - 1) * 0.25) * (1.0 + 0.10 * int(inst.get("up", 0)))
 		for r in inst["rolls"]:
 			if r["stat"] == stat:
 				total += r["val"] * mult
@@ -2765,7 +2768,7 @@ func _coerce_gear(gear: Dictionary) -> Dictionary:
 	for slot in gear:
 		for key in gear[slot]:
 			var it = gear[slot][key]
-			it["rarity"] = int(it["rarity"]); it["lvl"] = int(it["lvl"])
+			it["rarity"] = int(it["rarity"]); it["lvl"] = int(it["lvl"]); it["up"] = int(it.get("up", 0))
 			for r in it["rolls"]:
 				r["val"] = int(r["val"])
 	return gear
@@ -2864,7 +2867,8 @@ func _process(delta: float) -> void:
 	if not bot and Engine.time_scale >= 2.0 and Engine.time_scale < 3.0 and not _x2_active():
 		_set_speed(1.0)
 	# нарративный пульс фарма (анти-выгорание): редкая сюжетная реплика во время гринда
-	if not bot:
+	# casual-core: сюжет не лезет к игроку во время геймплея — отключено
+	if false and not bot:
 		pulse_t += delta
 		if pulse_t >= 65.0:
 			pulse_t = 0.0
@@ -2954,7 +2958,8 @@ func _process(delta: float) -> void:
 			_update_power_peak()   # пик-мощь для клан-боссов (prestige-proof)
 			if _frags_open() > frags_notified:
 				frags_notified = _frags_open()
-				_popup_center(_t("memory_fragment"), Color("#ff2d95"), 2.6)
+				# casual-core: нарративное уведомление фрагмента не лезет к игроку (сюжет — опционально через меню)
+				# _popup_center(_t("memory_fragment"), Color("#ff2d95"), 2.6)
 			# РУБЕЖИ: celebration-награда каждые 10 стадий (positive reinforcement, лом+алмазы, БЕЗ DPS-спайка)
 			var ms := int(best_stage / 10)
 			if ms > milestones_hit:
@@ -4410,7 +4415,6 @@ func _open_more() -> void:
 	var rew_n := _dq_ready_count() + _bp_unclaimed_count() + _ach_claimable()
 	var rew_b := "   ●%d" % rew_n if rew_n > 0 else ""
 	_open_submenu(_t("more_title"), [
-		[_t("m_story") + story_b, Callable(self, "_open_story_group")],
 		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
 		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 		[_t("m_settings"), Callable(self, "_toggle_settings")],
@@ -4913,6 +4917,27 @@ func _scrap_value(inst: Dictionary) -> int:
 func _reroll_cost(inst: Dictionary) -> int:
 	return inst["rarity"] * 12 + inst["lvl"] * 4
 
+# ПРОСТОЙ АПГРЕЙД за лом (casual-core, заменил реролл): +10% к вкладу предмета за уровень up.
+func _gear_upgrade_cost(inst: Dictionary) -> int:
+	return int(20 * pow(1.5, int(inst.get("up", 0))))
+
+func _gear_upgrade(slot: String, key: String) -> void:
+	var hh = heroes[impl_sel]
+	if not hh["gear"][slot].has(key):
+		return
+	var inst = hh["gear"][slot][key]
+	var cost := _gear_upgrade_cost(inst)
+	if scrap < cost:
+		return
+	scrap -= cost
+	inst["up"] = int(inst.get("up", 0)) + 1
+	_recalc_hero(hh)
+	_save()
+	_refresh_hud()
+	_refresh_impl()
+	_refresh_detail()
+	_popup_center(_t("g_upgrade_done"), Color("#3ad97a"), 1.4)
+
 func _disassemble(slot: String, key: String) -> void:
 	var hh = heroes[impl_sel]
 	if hh["equip"][slot] == key or not hh["gear"][slot].has(key):
@@ -5146,7 +5171,7 @@ func _reroll(slot: String, key: String) -> void:
 # строка ролла → текст «+N стат»
 func _rolls_text(it: Dictionary) -> String:
 	# группируем по формату → одинаковые стат-строки (напр. урон оружия + доп-урон) сливаются в одну (Диана: «2 раза урон»)
-	var mult: float = 1.0 + (it["lvl"] - 1) * 0.25
+	var mult: float = (1.0 + (it["lvl"] - 1) * 0.25) * (1.0 + 0.10 * int(it.get("up", 0)))
 	var by_fmt := {}
 	var order := []
 	for r in it["rolls"]:
@@ -5459,7 +5484,8 @@ func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	card.add_theme_stylebox_override("panel", sb)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); card.add_child(box)
 	var head := Label.new(); head.add_theme_font_size_override("font_size", 15)
-	head.text = "%s · %s · %s%d%s" % [v["name"], _rarity_name(rar), _t("lv_dot"), inst["lvl"], ("  " + _t("g_equipped") if equipped else "")]
+	var up: int = int(inst.get("up", 0))
+	head.text = "%s · %s · %s%d%s%s" % [v["name"], _rarity_name(rar), _t("lv_dot"), inst["lvl"], ("  +%d⬆" % up if up > 0 else ""), ("  " + _t("g_equipped") if equipped else "")]
 	head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
 	box.add_child(head)
 	var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 14); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
@@ -5467,6 +5493,13 @@ func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	eqb.text = _t("g_equipped") if equipped else _t("g_equip"); eqb.disabled = equipped
 	eqb.pressed.connect(func(): _equip(slot, key))
 	box.add_child(eqb)
+	# простой апгрейд за лом (casual-core: заменил реролл) — +10% к вкладу предмета
+	var ucost := _gear_upgrade_cost(inst)
+	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 14); upb.custom_minimum_size = Vector2(0, 40)
+	upb.text = _t("g_upgrade") % ucost
+	upb.disabled = scrap < ucost
+	upb.pressed.connect(func(): _gear_upgrade(slot, key))
+	box.add_child(upb)
 	return card
 
 func _close_detail() -> void:
