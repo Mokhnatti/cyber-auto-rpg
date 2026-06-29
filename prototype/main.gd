@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.15" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.16" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -596,6 +596,8 @@ const TR := {
 	"rb_reboot_gain": {"ru": "♻ ПЕРЕЗАГРУЗИТЬСЯ  (+%d 🧬, старт стадия %d)", "en": "♻ REBOOT  (+%d 🧬, start stage %d)"},
 	"rb_lock_above": {"ru": "🔒 Продвинься выше стадии %d, чтобы престижнуть снова", "en": "🔒 Advance past stage %d to prestige again"},
 	"rb_lock_req": {"ru": "🔒 Престиж: стадия %d или %d ур.", "en": "🔒 Prestige: stage %d or %d lv."},
+	"aug_locked": {"ru": "🔒 Усиления откроются после первой ПЕРЕЗАГРУЗКИ (престижа).\nЯдра копятся — потратишь их после первого престижа!", "en": "🔒 Augments unlock after your first REBOOT (prestige).\nCores accumulate — spend them after your first prestige!"},
+	"prestige_avail": {"ru": "♻ ТЕПЕРЬ можно ПЕРЕЗАГРУЗИТЬСЯ! Жми ♻ → ЯДРА → усиления навсегда", "en": "♻ You can REBOOT now! Tap ♻ → CORES → permanent augments"},
 	"rb_sng_btn": {"ru": "🌌 СИНГУЛЯРНОСТЬ — мета-прокачка (⚛ %d)%s", "en": "🌌 SINGULARITY — meta upgrades (⚛ %d)%s"},
 	"rb_discover": {"ru": "🎲 ОТКРЫТЬ СЛУЧАЙНОЕ УСИЛЕНИЕ  (%d 🧬)", "en": "🎲 UNLOCK RANDOM AUGMENT  (%d 🧬)"},
 	"rb_all_open": {"ru": "✓ Все усиления открыты — качай их ниже", "en": "✓ All augments unlocked — level them below"},
@@ -1503,6 +1505,7 @@ var dq_base := {}         # снимок статов на старте дня
 var dq_claimed := []      # забранные сегодня (id)
 var rec_maxhit := 0.0     # самый большой удар за всё время (float: урон >9.2e18 не помещается в int64)
 var rec_prestiges := 0    # сколько престижей сделано
+var prestige_hint_shown := false   # показан ли попап «теперь можно престиж» (один раз до 1-го престижа)
 var stats_panel: Control
 var stats_open := false
 var stats_box: VBoxContainer
@@ -1707,6 +1710,7 @@ func _slot_cost() -> int:
 	return int(150 * pow(2, slots_bought))   # дорого, ×2 за каждый купленный
 
 func _buy_slot() -> void:
+	if rec_prestiges == 0: return   # гейт: слоты усилений только после 1-го престижа
 	if _slot_total() >= 10:
 		return
 	var c := _slot_cost()
@@ -1774,6 +1778,7 @@ func _cores_gain() -> int:
 	return max(1, int(floor(10.0 * pow(float(depth), 0.75) * aug_core * meta_core)))   # ×мета (2-й слой)
 
 func _buy_aug(id: String) -> void:
+	if rec_prestiges == 0: return   # гейт: усиления только после 1-го престижа
 	var c := _aug_cost(id)
 	if cores < c:
 		return
@@ -2149,6 +2154,13 @@ func _refresh_reboot() -> void:
 		sng.text = _t("rb_sng_btn") % [quanta, ("  +%d⚛" % sgn) if _singularity_ready() else ""]
 		sng.pressed.connect(_open_singularity)
 		reboot_list.add_child(sng)
+	# === ГЕЙТ (Рамиль): усиления НЕЛЬЗЯ покупать ДО 1-го престижа (ядра из батлпасса/ачивок копятся, но трата заблокирована — иначе усиление на первом прохождении) ===
+	if rec_prestiges == 0:
+		var lk := Label.new(); lk.text = _t("aug_locked"); lk.custom_minimum_size = Vector2(516, 64)
+		lk.add_theme_color_override("font_color", Color("#ffb84d")); lk.add_theme_font_size_override("font_size", 14)
+		lk.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; lk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		reboot_list.add_child(lk)
+		return
 	# === TAP TITANS-МОДЕЛЬ: открыть СЛУЧАЙНОЕ усиление за ядра ===
 	var n_unowned := 0
 	var n_owned := 0
@@ -2217,6 +2229,7 @@ func _discover_cost() -> int:
 	return int(8 * pow(1.5, owned))
 
 func _discover_aug() -> void:
+	if rec_prestiges == 0: return   # гейт: усиления только после 1-го престижа
 	var c := _discover_cost()
 	if cores < c: return
 	var pool := []
@@ -3612,6 +3625,10 @@ func _rect(nm: String, pos: Vector2, size: Vector2, col: Color) -> ColorRect:
 
 # --- HUD ---
 func _refresh_hud() -> void:
+	# попап «теперь можно престиж» — один раз когда впервые доступен (до 1-го престижа)
+	if rec_prestiges == 0 and not prestige_hint_shown and not bot and _can_prestige():
+		prestige_hint_shown = true
+		_popup_center(_t("prestige_avail"), Color("#ffd24a"), 4.0)
 	var etypes := {}
 	for e in enemies:
 		if e["alive"] and not e.get("boss", false):
