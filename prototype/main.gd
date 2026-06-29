@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.7" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.8" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -436,8 +436,11 @@ func _update_power_peak() -> void:
 
 # === FIREBASE / КЛАНЫ (мультиплеер) — анонимный auth → #ID игрока ===
 const FB_DB_URL := "https://cyber-auto-rpg-default-rtdb.europe-west1.firebasedatabase.app"   # реальный databaseURL (Рамиль, europe-west1)
+const FB_API_KEY := "AIzaSyBPwusg9hSB8k76Uox5DeRLJ6Sb6M3Y3mk"   # Web API key (анон-вход через Identity Toolkit REST)
+const FB_AUTH_URL := "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + FB_API_KEY
 var fb_uid := ""
 var fb_id := ""             # короткий #ID (из uid)
+var fb_id_token := ""       # idToken анон-сессии (для будущих authed-запросов; RTDB сейчас test-mode → не обязателен)
 var fb_ready := false
 var fb_t := 0.0
 var player_clan := ""       # код клана игрока (6 цифр), "" = без клана
@@ -876,19 +879,34 @@ func _hname(i: int) -> String:
 func _rarity_name(i: int) -> String:
 	if i < 0 or i >= RARITY.size(): return ""
 	return _tloc(RARITY[i], "name")
+# Анонимный вход через Firebase Auth REST (Identity Toolkit) — работает и на web, и на Android-нативе (HTTPRequest, без JS SDK)
 func _fb_init() -> void:
-	if not OS.has_feature("web"): return
-	var js := """
-	if(!window._fbStart){window._fbStart=true;window._fbUid='';window._fbErr='';
-	var c={apiKey:'AIzaSyBPwusg9hSB8k76Uox5DeRLJ6Sb6M3Y3mk',authDomain:'cyber-auto-rpg.firebaseapp.com',databaseURL:'%s',projectId:'cyber-auto-rpg',storageBucket:'cyber-auto-rpg.firebasestorage.app',messagingSenderId:'448585153975',appId:'1:448585153975:web:b699058f1413a61aa63c32'};
-	function L(u,cb){var s=document.createElement('script');s.src=u;s.onload=cb;s.onerror=function(){window._fbErr='load '+u;};document.head.appendChild(s);}
-	L('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',function(){
-	 L('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js',function(){
-	  L('https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js',function(){
-	   try{firebase.initializeApp(c);firebase.auth().signInAnonymously().then(function(r){window._fbUid=r.user.uid;}).catch(function(e){window._fbErr=String(e);});}catch(e){window._fbErr=String(e);}
-	  });});});}
-	""" % FB_DB_URL
-	JavaScriptBridge.eval(js, true)
+	if bot or fb_ready: return   # боты-плейтесты не авторизуются (как раньше headless пропускал web-only auth)
+	var http := HTTPRequest.new()
+	http.accept_gzip = false   # web: браузерный fetch уже распаковывает ответ → Godot не должен декомпрессить повторно (иначе gzip-fail + пустой body)
+	add_child(http)
+	http.request_completed.connect(func(_r, code, _h, data):
+		if http.is_inside_tree(): http.queue_free()
+		_fb_on_auth(int(code), data.get_string_from_utf8()))
+	var headers := PackedStringArray(["Content-Type: application/json"])
+	var err := http.request(FB_AUTH_URL, headers, HTTPClient.METHOD_POST, JSON.stringify({"returnSecureToken": true}))
+	if err != OK:
+		print("FB auth: request не стартовал err=%s (кланы покажут «нет связи»)" % err)
+		if http.is_inside_tree(): http.queue_free()
+
+# колбэк анон-входа: парсим localId (uid) + idToken; фейл → fb_ready остаётся false, не крашим
+func _fb_on_auth(code: int, body: String) -> void:
+	if code != 200:
+		print("FB auth: HTTP %s — %s (кланы: нет связи)" % [code, body]); return
+	var j = JSON.parse_string(body)
+	if typeof(j) != TYPE_DICTIONARY or not j.has("localId"):
+		print("FB auth: неожиданный ответ — %s" % body); return
+	fb_uid = str(j["localId"])
+	fb_id_token = str(j.get("idToken", ""))
+	fb_id = "#%06d" % (abs(hash(fb_uid)) % 1000000)
+	fb_ready = true
+	print("FB ready uid=%s id=%s" % [fb_uid, fb_id])
+	_fb_write_profile()
 
 # === QA-МОСТ ЛОКАЛИЗАЦИИ: открыть любую панель командой из JS (window._qa="имя") — для скрин-сканера языков ===
 func _qa_poll() -> void:
@@ -915,18 +933,9 @@ func _qa_poll() -> void:
 	}
 	if m.has(cmd) and has_method(m[cmd]): call(m[cmd])
 
-func _fb_poll(delta: float) -> void:
-	if fb_ready or bot or not OS.has_feature("web"): return
-	fb_t -= delta
-	if fb_t > 0.0: return
-	fb_t = 1.0
-	var uid = JavaScriptBridge.eval("window._fbUid||''", true)
-	if typeof(uid) == TYPE_STRING and uid != "":
-		fb_uid = uid
-		fb_id = "#%06d" % (abs(hash(uid)) % 1000000)
-		fb_ready = true
-		print("FB ready uid=%s id=%s" % [fb_uid, fb_id])
-		_fb_write_profile()
+# auth теперь через колбэк HTTPRequest (_fb_on_auth) — опрос window._fbUid больше не нужен
+func _fb_poll(_delta: float) -> void:
+	pass
 
 # REST к Realtime DB (test mode = открыто, токен не нужен). Метод HTTPClient.METHOD_*
 func _fb_rest(method: int, path: String, body: String, cb: Callable = Callable()) -> void:
