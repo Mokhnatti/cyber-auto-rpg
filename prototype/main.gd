@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.16" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.17" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -138,6 +138,7 @@ var hero_rows := []   # строки прокачки по героям: {lvl_bt
 var impl_btn: Button
 var bp_btn: Button
 var dq_btn: Button   # быстрый доступ к квестам с главного экрана (фидбэк Дианы)
+var login_btn: Button   # 🎁 ежедневная награда за вход (ретеншн), бейдж когда доступна
 var ach_btn: Button
 var more_btn: Button   # «☰ Ещё» — сворачивает баттлпас/ачивки/карту/настройки (UI-редизайн)
 var _bp_cache_stage := -1   # кэш счёта батлпас-бейджа (перф)
@@ -708,6 +709,8 @@ const TR := {
 	"dr_day_short": {"ru": "Д%d", "en": "D%d"},
 	"dr_claim_btn": {"ru": "🎁 ЗАБРАТЬ ДЕНЬ %d (+%s)", "en": "🎁 CLAIM DAY %d (+%s)"},
 	"dr_pop":       {"ru": "🎁 День %d: +%s!", "en": "🎁 Day %d: +%s!"},
+	"dr_done":      {"ru": "✅ Награда забрана. Возвращайся завтра за днём %d!", "en": "✅ Reward claimed. Come back tomorrow for day %d!"},
+	"dr_close":     {"ru": "ЗАКРЫТЬ", "en": "CLOSE"},
 	# батлпас
 	"bp_title":     {"ru": "🎟 БАТЛПАС — награды за стадии", "en": "🎟 BATTLE PASS — stage rewards"},
 	"bp_sub":       {"ru": "Текущая лучшая стадия: %d   ·   до след. тира: %d стадий", "en": "Best stage: %d   ·   next tier in: %d stages"},
@@ -964,6 +967,7 @@ func _qa_poll() -> void:
 		"map": "_open_map", "daily": "_open_daily_quests", "messages": "_open_messages",
 		"dossier": "_open_dossier", "case": "_open_case", "finale": "_open_finale",
 		"battlepass": "_open_battlepass", "achievements": "_open_achievements",
+		"login": "_show_daily",
 	}
 	if m.has(cmd) and has_method(m[cmd]): call(m[cmd])
 
@@ -3666,6 +3670,10 @@ func _refresh_hud() -> void:
 			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
 		bp_btn.text = "🎟" + (" ●%d" % _bp_badge_cache if _bp_badge_cache > 0 else "")
 		bp_btn.modulate = Color(1.6, 1.4, 0.3) if _bp_badge_cache > 0 else Color(1, 1, 1)
+	if login_btn:
+		var lavail := _daily_available()
+		login_btn.text = "🎁" + (" ●" if lavail else "")
+		login_btn.modulate = Color(1.6, 1.4, 0.3) if lavail else Color(1, 1, 1)
 	if loot_badge:
 		loot_badge.visible = new_gear.size() > 0 and not impl_open
 		if loot_badge.visible:
@@ -3806,6 +3814,14 @@ func _build() -> void:
 	bp_btn.position = Vector2(W - 88, 196)
 	bp_btn.pressed.connect(_open_battlepass)
 	hud.add_child(bp_btn)
+	# 🎁 ежедневная награда за вход (ретеншн) — третий ряд, бейдж когда доступна сегодня
+	login_btn = Button.new()
+	login_btn.text = "🎁"
+	login_btn.add_theme_font_size_override("font_size", 15)
+	login_btn.custom_minimum_size = Vector2(82, 36)
+	login_btn.position = Vector2(W - 88, 242)
+	login_btn.pressed.connect(_show_daily)
+	hud.add_child(login_btn)
 	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
 	boss_btn = Button.new()
 	boss_btn.text = _t("to_boss")
@@ -5010,7 +5026,9 @@ func _claim_daily(panel: Control) -> void:
 	if panel: panel.queue_free()
 
 func _show_daily() -> void:
-	var ns := _daily_next_streak()
+	var avail := _daily_available()
+	# ns = день для подсветки трека: забираемый сегодня (avail) либо уже забранный сегодня день стрика
+	var ns: int = _daily_next_streak() if avail else int(max(daily_streak, 1))
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.8); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())   # тап по фону = закрыть (фикс R4)
@@ -5033,8 +5051,15 @@ func _show_daily() -> void:
 		cv.add_child(_lbl(_t("dr_day_short") % day, 11, Color("#ffd24a") if day == ns else Color("#7a809a"), HORIZONTAL_ALIGNMENT_CENTER))
 		cv.add_child(_lbl(_daily_reward_text(DAILY_REWARDS[day - 1]), 9, Color("#cfe6ff") if day == ns else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_CENTER))
 		grid.add_child(cell)
-	var cb := Button.new(); cb.text = _t("dr_claim_btn") % [ns, _daily_reward_text(DAILY_REWARDS[ns - 1])]; cb.custom_minimum_size = Vector2(0, 50); cb.add_theme_font_size_override("font_size", 16); cb.add_theme_color_override("font_color", Color("#ffd24a"))
-	cb.pressed.connect(func(): _claim_daily(panel)); v.add_child(cb)
+	if avail:
+		var cb := Button.new(); cb.text = _t("dr_claim_btn") % [ns, _daily_reward_text(DAILY_REWARDS[ns - 1])]; cb.custom_minimum_size = Vector2(0, 50); cb.add_theme_font_size_override("font_size", 16); cb.add_theme_color_override("font_color", Color("#ffd24a"))
+		cb.pressed.connect(func(): _claim_daily(panel)); v.add_child(cb)
+	else:
+		# уже забрал сегодня (открыл вручную через кнопку 🎁) → показать «приходи завтра» + закрыть
+		var nxt := (daily_streak % 7) + 1
+		v.add_child(_lbl(_t("dr_done") % nxt, 13, Color("#9ad29a"), HORIZONTAL_ALIGNMENT_CENTER))
+		var cb := Button.new(); cb.text = _t("dr_close"); cb.custom_minimum_size = Vector2(0, 44); cb.add_theme_font_size_override("font_size", 15)
+		cb.pressed.connect(func(): panel.queue_free()); v.add_child(cb)
 
 # описание класса (Диана: непонятно чем герои различаются / что делают ульты)
 func _show_hero_desc(i: int) -> void:
