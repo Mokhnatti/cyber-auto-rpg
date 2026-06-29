@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.20" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.21" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -608,6 +608,11 @@ const TR := {
 	"rb_help_b": {"ru": "Застрял? ПЕРЕЗАГРУЗКА ♻ обнуляет стадии и уровни, но даёт ЯДРА 🧬 (тем больше, чем глубже зашёл).\n\n• На ядра ОТКРЫВАЕШЬ случайные УСИЛЕНИЯ и качаешь их. Они остаются НАВСЕГДА.\n• Усиления = множители урона/HP/крита/скорости. Следующий заход — сильно мощнее → проходишь дальше.\n• 🎯 КОМБИНИРУЙ разные усиления (урон+крит+скорость+HP) — это выгоднее, чем качать одно. Без HP бойцы дохнут на глубине!\n• Не везёт с усилением — перебрось за алмазы 💎.\n\nСо стадии 40 откроется 🌌 СИНГУЛЯРНОСТЬ — второй слой с вечными мета-бонусами.", "en": "Stuck? REBOOT ♻ wipes stages and levels but grants CORES 🧬 (more the deeper you got).\n\n• Spend cores to UNLOCK random AUGMENTS and level them. They stay FOREVER.\n• Augments = multipliers for damage/HP/crit/speed. Next run is far stronger → you push deeper.\n• 🎯 COMBINE different augments (dmg+crit+speed+HP) — better than maxing one. Without HP your fighters die deep!\n• Bad roll on an augment — reroll it for diamonds 💎.\n\nFrom stage 40 the 🌌 SINGULARITY unlocks — a second layer with permanent meta-bonuses."},
 	"rb_reboot_btn": {"ru": "♻ ПЕРЕЗАГРУЗИТЬСЯ", "en": "♻ REBOOT"},
 	"rb_info": {"ru": "💪 Мощь: %s    🧬 Ядра: %d", "en": "💪 Power: %s    🧬 Cores: %d"},
+	# UI Этап 3: блок «что будет при престиже» — чтоб игрок видел что это РОСТ, а не потеря
+	"rb_keep": {"ru": "✅ ОСТАЁТСЯ НАВСЕГДА: усиления, ядра 🧬, сингулярность ⚛, ачивки и рекорды", "en": "✅ KEPT FOREVER: augments, cores 🧬, singularity ⚛, achievements & records"},
+	"rb_reset": {"ru": "♻ Сбросятся: стадия и уровни бойцов — но заработаешь заново и куда быстрее", "en": "♻ Resets: stage & fighter levels — but you regain them, much faster"},
+	"rb_reward_perma": {"ru": "💪 НАГРАДА: +%d🧬 ядер → новые усиления НАВСЕГДА", "en": "💪 REWARD: +%d🧬 cores → new augments FOREVER"},
+	"rb_reward_perma_locked": {"ru": "💪 Дойди до престижа → ядра 🧬 на усиления НАВСЕГДА", "en": "💪 Reach prestige → cores 🧬 for augments FOREVER"},
 	"rb_reboot_gain": {"ru": "♻ ПЕРЕЗАГРУЗИТЬСЯ  (+%d 🧬, старт стадия %d)", "en": "♻ REBOOT  (+%d 🧬, start stage %d)"},
 	"rb_lock_above": {"ru": "🔒 Продвинься выше стадии %d, чтобы престижнуть снова", "en": "🔒 Advance past stage %d to prestige again"},
 	"rb_lock_req": {"ru": "🔒 Престиж: стадия %d или %d ур.", "en": "🔒 Prestige: stage %d or %d lv."},
@@ -880,6 +885,8 @@ const TR := {
 	"shop_note":         {"ru": "(покупка за реал — подключится в сборке под Google Play / App Store)", "en": "(real-money purchase — enabled in the Google Play / App Store build)"},
 	"shop_buy_pop":      {"ru": "💎 +%d (стаб покупки)", "en": "💎 +%d (purchase stub)"},
 	"shop_best_value":   {"ru": "🔥 ЛУЧШАЯ ЦЕНА", "en": "🔥 BEST VALUE"},
+	"shop_popular":      {"ru": "⭐ ПОПУЛЯРНОЕ", "en": "⭐ POPULAR"},
+	"shop_first_x2":     {"ru": "🎁 ×2 ЗА 1-Ю ПОКУПКУ", "en": "🎁 ×2 FIRST BUY"},
 	"shop_gacha_btn":    {"ru": "🎰 ГАЧА — призыв шмота", "en": "🎰 GACHA — summon gear"},
 	# офлайн-реактор (экспон. сток алмазов)
 	"reactor_btn":       {"ru": "🔋 ОФЛАЙН-РЕАКТОР — дольше копит без тебя", "en": "🔋 OFFLINE REACTOR — banks longer while away"},
@@ -2187,6 +2194,17 @@ func _refresh_reboot() -> void:
 			rb_main.text = _t("rb_lock_req") % [PRESTIGE_STAGE, PRESTIGE_TOTAL_LVL]
 	for c in reboot_list.get_children():
 		c.queue_free()
+	# === UI Этап 3: ПОНЯТНЫЙ БЛОК «ЧТО БУДЕТ» — престиж = РОСТ, не потеря (фидбэк Дианы) ===
+	var wbox := PanelContainer.new()
+	var wsb := StyleBoxFlat.new(); wsb.bg_color = Color(0.12, 0.08, 0.18, 0.96); wsb.set_corner_radius_all(10)
+	wsb.border_color = Color("#b46bff"); wsb.set_border_width_all(1); wsb.set_content_margin_all(10)
+	wbox.add_theme_stylebox_override("panel", wsb); wbox.custom_minimum_size = Vector2(516, 0)
+	var wv := VBoxContainer.new(); wv.add_theme_constant_override("separation", 5); wbox.add_child(wv)
+	var wk := _lbl(_t("rb_keep"), 13, Color("#7ee08a")); wk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wk.custom_minimum_size = Vector2(492, 0); wv.add_child(wk)
+	var wr := _lbl(_t("rb_reset"), 13, Color("#ff9a6b")); wr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wr.custom_minimum_size = Vector2(492, 0); wv.add_child(wr)
+	var wgt: String = (_t("rb_reward_perma") % _cores_gain()) if unlocked else _t("rb_reward_perma_locked")
+	var wg := _lbl(wgt, 14, Color("#ffd24a")); wg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wg.custom_minimum_size = Vector2(492, 0); wv.add_child(wg)
+	reboot_list.add_child(wbox)
 	# === 2-Й СЛОЙ: кнопка Сингулярности — ПОЯВЛЯЕТСЯ только со стадии 40 (новичку не грузим) ===
 	if _singularity_ready() or meta_unlocked:
 		meta_unlocked = true
@@ -4394,13 +4412,18 @@ func _open_shop() -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
 	v.add_child(_lbl(_t("shop_title") % diamonds, 18, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(_t("shop_note"), 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
-	# value-ladder: 4 ступени $0.99→$49.99; бейдж «лучшая цена» на средне-крупном пакете (нудж к среднему чеку)
-	for pack in [[100, "0.99$", false], [550, "4.99$", false], [1200, "9.99$", true], [6500, "49.99$", false]]:
-		var amt: int = pack[0]; var best: bool = pack[2]
+	# value-ladder: 4 ступени $0.99→$49.99 с тегами-нуджами (UI Этап 3): старт=×2 за 1-ю покупку (визуальный хук), средний=популярное, топ=лучшая цена/алмаз
+	for pack in [[100, "0.99$", "first2"], [550, "4.99$", "popular"], [1200, "9.99$", ""], [6500, "49.99$", "best"]]:
+		var amt: int = pack[0]; var tag: String = pack[2]
+		var tagtxt := ""; var tagcol := Color("#ffffff")
+		match tag:
+			"first2":  tagtxt = "   " + _t("shop_first_x2");   tagcol = Color("#3ad97a")
+			"popular": tagtxt = "   " + _t("shop_popular");    tagcol = Color("#7adfff")
+			"best":    tagtxt = "   " + _t("shop_best_value"); tagcol = Color("#ffd24a")
 		var bp := Button.new()
-		bp.text = ("💎 %d — %s   %s" % [amt, pack[1], _t("shop_best_value")]) if best else ("💎 %d — %s" % [amt, pack[1]])
+		bp.text = "💎 %d — %s%s" % [amt, pack[1], tagtxt]
 		bp.custom_minimum_size = Vector2(0, 44); bp.add_theme_font_size_override("font_size", 15)
-		if best: bp.add_theme_color_override("font_color", Color("#ffd24a"))
+		if tag != "": bp.add_theme_color_override("font_color", tagcol)
 		bp.pressed.connect(func(): diamonds += amt; _track("iap_purchase", {"item": "diamonds_%d" % amt, "amount": amt, "price": pack[1]}); _save(); _refresh_hud(); _popup_center(_t("shop_buy_pop") % amt, Color("#ffd24a"), 1.6); panel.queue_free())
 		v.add_child(bp)
 	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
