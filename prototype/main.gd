@@ -3770,7 +3770,7 @@ func _anim_doll(o: Dictionary, t: float, marching: bool, delta: float) -> void:
 		if spr.animation != want:
 			spr.play(want)
 		spr.speed_scale = 1.0
-		spr.position.x = (o["atk_anim"] / 0.2) * 6.0   # лёгкий выпад-отдача вперёд на время выстрела (local +x = к врагу)
+		spr.position.x = 0.0   # БЕЗ выпада — Рамиль: атака не должна смещаться (старый лунж × atk_anim 0.9 давал слайд/ползёт)
 	# hp-бар над головой — только если ранен (и не босс: у него полоса сверху)
 	var hbg: ColorRect = d.get_node("HpBg")
 	var bar: ColorRect = d.get_node("HpFill")
