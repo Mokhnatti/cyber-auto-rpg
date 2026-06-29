@@ -1,0 +1,66 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "players": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['id', 'nick', 'power', 'best', 'clan', 't'])",
+        "id":    { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16" },
+        "nick":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 64" },
+        "power": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "best":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "clan":  { ".validate": "newData.isString() && newData.val().length <= 16" },
+        "t":     { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "clans": {
+      "$code": {
+        ".read": "auth != null",
+
+        ".write": "auth != null && (!data.exists() || data.child('leader').val() == auth.uid)",
+        ".validate": "newData.hasChildren(['name', 'leader', 'created'])",
+
+        "name":    { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 64" },
+        "leader":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128" },
+        "created": { ".validate": "newData.isNumber() && newData.val() > 0" },
+
+        "members": {
+          "$uid": {
+            ".write": "auth != null && auth.uid == $uid",
+            ".validate": "!newData.exists() || (newData.hasChildren(['nick', 'power']) && newData.child('nick').isString() && newData.child('nick').val().length >= 1 && newData.child('nick').val().length <= 64 && newData.child('power').isNumber() && newData.child('power').val() >= 0)"
+          }
+        },
+
+        "boss": {
+          ".write": "auth != null && root.child('clans').child($code).child('members').child(auth.uid).exists()",
+          ".validate": "!newData.exists() || newData.hasChildren(['hpMax', 'started', 'name', 'fac', 'week'])",
+          "hpMax":   { ".validate": "newData.isNumber() && newData.val() > 0" },
+          "started": { ".validate": "newData.isNumber() && newData.val() > 0" },
+          "name":    { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 64" },
+          "fac":     { ".validate": "newData.isString() && newData.val().length <= 64" },
+          "week":    { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "contrib": {
+            "$uid": {
+              ".write": "auth != null && auth.uid == $uid && root.child('clans').child($code).child('members').child(auth.uid).exists()",
+              ".validate": "!newData.exists() || (newData.hasChildren(['nick', 'dmg']) && newData.child('nick').isString() && newData.child('nick').val().length >= 1 && newData.child('nick').val().length <= 64 && newData.child('dmg').isNumber() && newData.child('dmg').val() >= 0)"
+            }
+          }
+        },
+
+        "chat": {
+          "$message": {
+            ".write": "auth != null && !data.exists() && root.child('clans').child($code).child('members').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['nick', 'text', 't']) && newData.child('nick').isString() && newData.child('nick').val().length >= 1 && newData.child('nick').val().length <= 64 && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 200 && newData.child('t').isNumber() && newData.child('t').val() > 0"
+          }
+        },
+
+        "$clan_other": { ".validate": false }
+      }
+    }
+  }
+}
