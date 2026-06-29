@@ -43,11 +43,17 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.9" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.10" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
 var http: HTTPRequest
+# === АНАЛИТИКА (плагг-абль слой; позже сюда в ОДНОМ месте воткнётся ByteBrew SDK) ===
+var session_id := ""              # уникален на запуск приложения (время старта + рандом)
+var _session_start_t := 0.0       # для длительности сессии (session_end)
+var _analytics_buf := []          # батч-буфер событий для временного ntfy-стока (без блокирующего HTTP в горячем цикле)
+var _analytics_http: HTTPRequest  # отдельный реквест под аналитику (не конкурирует с телеметрией/firebase)
+const ANALYTICS_BATCH := 8        # размер батча перед POST в ntfy-сток
 var nick_panel: Control
 var restart_confirm: Control
 var _offline_gold := 0.0
@@ -1796,6 +1802,7 @@ func _reboot() -> void:
 	_qte_clear()
 	if reboot_panel: reboot_panel.visible = false
 	print("TTEVENT reboot gain=%d from_stage=%d -> start=%d cores=%d" % [gain, best_stage, stage, cores])
+	_track("prestige", {"best_stage": best_stage, "cores_gained": gain})   # KPI: престиж/перезагрузка
 	_popup_center(_t("reboot_done") % gain, Color("#b46bff"))
 	_save()
 	_start_march()
@@ -1903,6 +1910,53 @@ func _send_telemetry(ev: String) -> void:
 		return   # занят предыдущим запросом — пропускаем (fire-and-forget)
 	var d := {"nick": nick, "event": ev, "stage": stage, "best": best_stage, "maxlvl": _max_hero_level(), "cores": cores, "scrap": scrap, "gold": int(min(gold, 9.0e18)), "ver": "1"}
 	http.request(TELEMETRY_URL, ["Content-Type: text/plain"], HTTPClient.METHOD_POST, JSON.stringify(d))
+
+# === АНАЛИТИКА: единая точка всех KPI-событий ===
+# Архитектура: _track() (общие поля + фильтр ботов) → _analytics_sink() (ЕДИНСТВЕННОЕ место отправки).
+# Подключение ByteBrew будет ровно в одном месте — _analytics_sink(). Пока заглушка-сток: print + ntfy-батч.
+func _analytics_init() -> void:
+	# session_id: время старта + случайный суффикс → уникален на каждый запуск приложения
+	_session_start_t = Time.get_unix_time_from_system()
+	session_id = "%d-%04d" % [int(_session_start_t), randi() % 10000]
+	_analytics_http = HTTPRequest.new()
+	add_child(_analytics_http)
+
+# Единая точка всех событий. Сюда добавляем общие поля и зовём сток.
+func _track(event: String, params: Dictionary = {}) -> void:
+	if bot: return   # боты не спамят аналитику
+	var all_params := {
+		"session_id": session_id,
+		"platform": OS.get_name(),
+		"ts": int(Time.get_unix_time_from_system()),
+		"app_version": VERSION,
+		"best_stage": best_stage,
+	}
+	for k in params: all_params[k] = params[k]
+	_analytics_sink(event, all_params)
+
+# ЕДИНСТВЕННОЕ место отправки события наружу.
+func _analytics_sink(event: String, params: Dictionary) -> void:
+	# TODO: сюда ByteBrew.newCustomEvent(event, params)
+	print("[analytics] ", event, " ", params)
+	# Временный сток: батчим в ntfy-топик и шлём пачкой (fire-and-forget, без блокировки кадра).
+	_analytics_buf.append({"event": event, "params": params})
+	if _analytics_buf.size() >= ANALYTICS_BATCH:
+		_analytics_flush()
+
+func _analytics_flush() -> void:
+	if _analytics_buf.is_empty() or TELEMETRY_URL == "" or _analytics_http == null:
+		return
+	if _analytics_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return   # реквест занят — оставляем буфер до следующего флеша
+	var batch: Array = _analytics_buf.duplicate()
+	_analytics_buf.clear()
+	_analytics_http.request(TELEMETRY_URL, ["Content-Type: text/plain", "Title: analytics"], HTTPClient.METHOD_POST, JSON.stringify(batch))
+
+# session_end + сброс батча при выходе/паузе (web/Android закрытие окна)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
+		_track("session_end", {"duration": int(Time.get_unix_time_from_system() - _session_start_t)})
+		_analytics_flush()
 
 func _build_nick_prompt() -> void:
 	nick_panel = Control.new()
@@ -2175,6 +2229,7 @@ func _owned_aug_row(id: String) -> Control:
 
 func _ready() -> void:
 	randomize()
+	_analytics_init()   # session_id + сток аналитики (до загрузки сейва)
 	_setup_font()
 	_build()
 	_fb_init()   # Firebase: анонимный вход (web), даёт #ID для кланов
@@ -2207,6 +2262,7 @@ func _ready() -> void:
 		_show_daily()
 	if not bot and _x2_active():   # активный x2 пережил перезаход → вернуть скорость (фикс C2)
 		_set_speed(2.0)
+	_track("session_start", {"stage": stage})   # KPI: старт сессии (после загрузки сейва)
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -2994,7 +3050,12 @@ func _process(delta: float) -> void:
 			in_boss = false
 			boss_retry = false
 			_popup_center(_t("stage_cleared") % (stage - 1), Color("#ffd24a"))
+			var _prev_best := best_stage
 			best_stage = max(best_stage, stage)
+			if best_stage > _prev_best:
+				_track("stage_reached", {"stage": best_stage})   # KPI: новая лучшая стадия
+				if best_stage == 3 or best_stage == 5:
+					_track("tutorial_step", {"step": "stage_%d" % best_stage})   # ранние вехи онбординга
 			_update_power_peak()   # пик-мощь для клан-боссов (prestige-proof)
 			if _frags_open() > frags_notified:
 				frags_notified = _frags_open()
@@ -3783,6 +3844,7 @@ func _open_speed_menu() -> void:
 
 func _watch_ad_x2() -> void:
 	# СТАБ рекламы (на платформе — реальный rewarded-ad SDK). Сейчас выдаём сразу.
+	_track("ad_impression", {"placement": "speed_x2"})   # KPI: просмотр rewarded-рекламы
 	x2_until = Time.get_unix_time_from_system() + 1800.0   # x2 на 30 мин
 	_set_speed(2.0); _save()
 	_popup_center(_t("spd_pop_x2"), Color("#3ad97a"), 2.0)
@@ -3818,6 +3880,7 @@ func _clan_boost_mult(b: String) -> float:
 
 func _watch_ad_boost(b: String) -> void:
 	# СТАБ рекламы. Каждый просмотр: продлевает на 30 мин И поднимает уровень (выше %) — петля Дианы.
+	_track("ad_impression", {"placement": "boost_%s" % b})   # KPI: просмотр rewarded-рекламы (буст Дианы)
 	var d = ad_boosts.get(b, {"until": 0.0, "lvl": 0})
 	d["until"] = Time.get_unix_time_from_system() + AD_DUR
 	d["lvl"] = min(int(d["lvl"]) + 1, 30)
@@ -3870,7 +3933,7 @@ func _open_shop() -> void:
 	for pack in [[100, "0.99$"], [550, "4.99$"], [1200, "9.99$"], [6500, "49.99$"]]:
 		var amt: int = pack[0]
 		var bp := Button.new(); bp.text = "💎 %d — %s" % [amt, pack[1]]; bp.custom_minimum_size = Vector2(0, 44); bp.add_theme_font_size_override("font_size", 15)
-		bp.pressed.connect(func(): diamonds += amt; _save(); _refresh_hud(); _popup_center(_t("shop_buy_pop") % amt, Color("#ffd24a"), 1.6); panel.queue_free())
+		bp.pressed.connect(func(): diamonds += amt; _track("iap_purchase", {"item": "diamonds_%d" % amt, "amount": amt, "price": pack[1]}); _save(); _refresh_hud(); _popup_center(_t("shop_buy_pop") % amt, Color("#ffd24a"), 1.6); panel.queue_free())
 		v.add_child(bp)
 	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
 	var bg := Button.new(); bg.text = _t("shop_gacha_btn"); bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
@@ -3915,6 +3978,9 @@ func _gacha_pull(n: int) -> Array:
 			new_gear["%d:%s" % [i, slot]] = int(new_gear.get("%d:%s" % [i, slot], 0)) + 1
 		_recalc_hero(hh)
 		results.append({"hero": i, "slot": slot, "rar": rar, "name": vv["name"]})
+	var best_rar := 0
+	for r in results: best_rar = max(best_rar, int(r["rar"]))
+	_track("gacha_pull", {"count": n, "rarity": best_rar})   # KPI: круток гачи (rarity = лучшая в пуле)
 	_save(); _refresh_hud()
 	return results
 
@@ -4777,6 +4843,7 @@ func _show_help(title: String, body: String) -> void:
 # первый запуск — короткое интро по основной петле
 func _show_intro() -> void:
 	_show_help(_t("wc_help_t"), _t("wc_help_b"))
+	_track("tutorial_step", {"step": "intro"})   # KPI: показ вводного онбординга
 	seen_intro = true; _save()
 
 func _toggle_inv() -> void:
