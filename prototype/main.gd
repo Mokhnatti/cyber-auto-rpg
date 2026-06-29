@@ -3448,18 +3448,23 @@ func _priority_target(arr: Array):
 func _hero_hit(hh: Dictionary) -> void:
 	var e = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)
 	if e == null: return
-	hh["atk_anim"] = 0.9   # атака 0.9с — медленнее/видно (фидбэк Рамиля: 45fps+0.2с дёргались); между атаками — боевая стойка
+	hh["atk_anim"] = 0.9   # атака 0.9с — медленнее/видно; между атаками — боевая стойка
 	var base: float = min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)   # float: int64 overflow при stage>133
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
 	if is_crit: base = min(base * hh.get("critx", hh["data"]["critx"]), STAT_CAP)
+	# СИНХРА урон↔кадр-выстрела (Рамиль): анимация уже стартовала, урон наносим в момент вспышки (~0.4с в анимацию)
+	await get_tree().create_timer(0.4).timeout
+	if not hh.get("alive", false): return   # герой умер до выстрела — урон не проходит
 	if hh["data"]["atk_type"] == "aoe":
 		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
 		for en in enemies:
 			if en["alive"]:
 				_deal(hh, en, max(1.0, base * 0.55), is_crit)
 	else:
-		_deal(hh, e, base, is_crit)   # снайпер/штурм/танк — одна цель
+		var tgt = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)   # перевыбор: первая цель могла умереть за 0.4с
+		if tgt != null:
+			_deal(hh, tgt, base, is_crit)   # снайпер/штурм/танк — одна цель
 
 func _stat_add(k: String, n) -> void:   # п.7: накопить и в текущий забег, и за всё время
 	stats_run[k] = stats_run.get(k, 0) + n
