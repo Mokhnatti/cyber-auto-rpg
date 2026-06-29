@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.21" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.22" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -281,6 +281,12 @@ const BOSS_ESCORTS := [
 	["healer", "swarm"], # микс
 ]
 const STAT_CAP := 1.0e300          # потолок урона/HP — поднят 1e15→1e300 для бесконечной прогрессии (потолок ~стадия 2300, без float64-overflow 1.8e308). Большие числа → научная запись
+# === SOFT-END ГЕЙТ (совет мат-ревьюера, infinite-progression-status) — ЗАЩИТА от деградации у float-потолка ===
+# Без неё на ст.~2344 pow(1.34, stage) долетает к 1e300/inf → числа деградируют (inf/NaN), баланс «гниёт».
+# Никто не дойдёт сюда годы — это страховка. Нормальные стадии (<2000) НЕ затронуты.
+const SOFT_END_STAGE := 2300       # с этой стадии СТЕНА HP/урона врага ЗАМОРОЖЕНА на уровне ст.2300 → числа остаются < 1e300, без overflow/inf
+const ERA_END_STAGE := 2344        # ЖЁСТКИЙ предел текущей эры: выше не пускаем (гейт-сообщение). v2.0 снимет лимит через bignum
+const ERA_TEASER_STAGE := 2000     # тизер «приближается предел эры» (показываем один раз)
 const INNATE_WDMG := 16            # вшитый базовый урон «стартового оружия» (слоты на старте ПУСТЫЕ — Диана; боец не слабее)
 const STAGE_WAVES := 10        # норм-волн на стадии (потом босс). Кратно 5. Диана/Рамиль: 5→10 — стадия длиннее, темп спокойнее, не суматошно.
 const AUG_DIMINISH := 1.0      # 0.88→1.0 для БЕСКОНЕЧНОЙ прогрессии: exp(c·totlvl^1.0) = истинная экспонента (обгоняет HP-экспоненту), а не растянутая (q<1 асимптотит). Главный фикс потолка
@@ -441,6 +447,8 @@ var frag_flags := {}        # idx фрагмента → помечен подд
 var case_solved := false
 var frags_notified := 0     # сколько фрагментов уже показали (для попапа-уведомления)
 var milestones_hit := 0     # рубежи стадий (каждые 10) — награда-celebration, БЕЗ DPS (не трогает кривую 1.34)
+var era_teaser_shown := false   # SOFT-END: тизер «предел эры близко» показан (1 раз)
+var era_end_shown := false      # SOFT-END: гейт «достигнут предел эры» показан (1 раз)
 var power_peak := 0.0       # ПИК-МОЩЬ (prestige-proof): для клан-боссов — снапшот лучшей силы, не гимпится престижем
 func _power_now() -> float:   # текущая мощь отряда + бонус от глубины (best_stage) → база для клан-вклада
 	return _party_power() * (1.0 + best_stage * 0.04)
@@ -860,6 +868,8 @@ const TR := {
 	"stage_cleared":     {"ru": "🏆 СТАДИЯ %d ПРОЙДЕНА", "en": "🏆 STAGE %d CLEARED"},
 	"memory_fragment":   {"ru": "🧩 Восстановлен фрагмент памяти — открой 📓 Дело", "en": "🧩 Memory fragment recovered — open the 📓 Case"},
 	"milestone_stage":   {"ru": "🏆 РУБЕЖ: СТАДИЯ %d! +%d🔩 +%d💎", "en": "🏆 MILESTONE: STAGE %d! +%d🔩 +%d💎"},
+	"era_end_gate":      {"ru": "🌌 Достигнут предел текущей эры (ст.%d)\nЖди обновления для дальнейшей бесконечности!", "en": "🌌 Reached the limit of this era (stage %d)\nAwait the update to continue into infinity!"},
+	"era_teaser":        {"ru": "🌌 Приближается предел эры — скоро обновление с бесконечностью за %d (bignum)", "en": "🌌 Era limit approaching — an update with infinity beyond %d (bignum) is coming"},
 	"hint_tank":         {"ru": "💡 Подкачай отряд или вкачай ТАНКА для живучести всех", "en": "💡 Power up your squad or level the TANK for everyone's survivability"},
 	"hint_sniper":       {"ru": "💡 Качай СНАЙПЕРА — он первым бьёт 💊хилеров и 🛡щитоносцев", "en": "💡 Level the SNIPER — he hits 💊healers and 🛡shielders first"},
 	"hint_hacker":       {"ru": "💡 Качай ХАКЕРА — его AoE выкосит 🐝рой", "en": "💡 Level the HACKER — his AoE mows down the 🐝swarm"},
@@ -3087,12 +3097,13 @@ func _spawn_wave() -> void:
 		var ey: float = GROUND_Y + 62.0 - ((0.0 if iboss else 20.0 + j * 12.0) if boss else j * 20.0)
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
-		var hp_stage := pow(float(_cfg("ehp", ENEMY_HP_PER_STAGE)) if bot else ENEMY_HP_PER_STAGE, stage - 1)   # бот может свипать HP-экспоненту через /tmp/bot_tactics.json (поиск sweet-spot стены)
+		var wstage := mini(stage, SOFT_END_STAGE)   # SOFT-END: со ст.2300 СТЕНА заморожена → pow не долетает к 1e300/inf (защита float-потолка)
+		var hp_stage := pow(float(_cfg("ehp", ENEMY_HP_PER_STAGE)) if bot else ENEMY_HP_PER_STAGE, wstage - 1)   # бот может свипать HP-экспоненту через /tmp/bot_tactics.json (поиск sweet-spot стены)
 		var boss_mult: float = BOSS_HP_CYCLE[(stage - 1) % BOSS_HP_CYCLE.size()]
 		var ehp: float = min(ENEMY_HP_BASE * hp_stage * (boss_mult if iboss else et["hp"]) * aug_density, STAT_CAP)   # float: int64 overflow >stage 133
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": min((9 if iboss else 5) * pow(float(_cfg("edmg", ENEMY_DMG_PER_STAGE)) if bot else ENEMY_DMG_PER_STAGE, stage - 1) * (1.0 if iboss else et["dmg"]), STAT_CAP),   # float
+			"dmg": min((9 if iboss else 5) * pow(float(_cfg("edmg", ENEMY_DMG_PER_STAGE)) if bot else ENEMY_DMG_PER_STAGE, wstage - 1) * (1.0 if iboss else et["dmg"]), STAT_CAP),   # float (стена заморожена со ст.2300)
 			"atk": (1.5 if iboss else 1.1 * et["atk"]), "t": 1.5, "alive": true, "boss": iboss,
 			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
@@ -3139,10 +3150,11 @@ func _spawn_endless_wave() -> void:
 		var ey: float = GROUND_Y + 62.0 - j * 20.0
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
-		var ehp: float = min(ENEMY_HP_BASE * pow(ENEMY_HP_PER_STAGE, eff - 1) * et["hp"] * hp_mod * aug_density, STAT_CAP)
+		var weff: float = min(eff, float(SOFT_END_STAGE))   # SOFT-END: стена этажей тоже заморожена со ст-эквивалента 2300 (защита float-потолка)
+		var ehp: float = min(ENEMY_HP_BASE * pow(ENEMY_HP_PER_STAGE, weff - 1) * et["hp"] * hp_mod * aug_density, STAT_CAP)
 		enemies.append({
 			"node": d, "hp": ehp, "max": ehp,
-			"dmg": min(5 * pow(ENEMY_DMG_PER_STAGE, eff - 1) * et["dmg"], STAT_CAP),
+			"dmg": min(5 * pow(ENEMY_DMG_PER_STAGE, weff - 1) * et["dmg"], STAT_CAP),
 			"atk": 1.1 * et["atk"] * atk_mod, "t": 1.5, "alive": true, "boss": false,
 			"type": etype, "home": Vector2(px, ey), "atk_anim": 0.0
 		})
@@ -3303,6 +3315,17 @@ func _process(delta: float) -> void:
 			print("TTEVENT bosswin stage=%d maxlvl=%d gold=%d" % [stage, _max_hero_level(), int(gold)])
 			_qte_clear()
 			_drop_implant()
+			if stage >= ERA_END_STAGE:
+				# 🌌 SOFT-END ГЕЙТ: достигнут предел текущей эры — НЕ пускаем выше (защита от деградации чисел у float-потолка 1e300/inf). Остаёмся фармить финальную стадию.
+				if not era_end_shown:
+					era_end_shown = true
+					_track("era_end", {"stage": stage})   # KPI: кто-то реально упёрся в предел эры (за годы — никто)
+				_popup_center(_t("era_end_gate") % ERA_END_STAGE, Color("#7d5cff"), 4.0)
+				sub = 1; in_boss = false; boss_retry = false
+				_update_power_peak()
+				_start_march()
+				_refresh_hud()
+				return
 			stage += 1
 			sub = 1
 			in_boss = false
@@ -3327,6 +3350,10 @@ func _process(delta: float) -> void:
 				var msd := ms * 4
 				scrap += msc; diamonds += msd
 				_popup_center(_t("milestone_stage") % [ms * 10, msc, msd], Color("#ffd24a"), 2.8)
+			# 🌌 SOFT-END ТИЗЕР: на подходе к пределу эры — анонс v2.0 (bignum-бесконечность). Один раз.
+			if not era_teaser_shown and best_stage >= ERA_TEASER_STAGE:
+				era_teaser_shown = true
+				_popup_center(_t("era_teaser") % ERA_END_STAGE, Color("#7d5cff"), 4.0)
 			_check_quest_complete()   # сюжетный квест локации: предмет упал с босса
 			_start_march()
 		elif sub < STAGE_WAVES:
