@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.6" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.7" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -673,6 +673,11 @@ const TR := {
 	# дейли-квесты + стрик-награда
 	"dq_title":     {"ru": "📋 ЕЖЕДНЕВНЫЕ КВЕСТЫ", "en": "📋 DAILY QUESTS"},
 	"dq_subtitle":  {"ru": "Обновляются каждый день. Прогресс — за сегодня.", "en": "Resets daily. Only today's progress counts."},
+	"dq_d_kill":    {"ru": "Убивай врагов в бою", "en": "Kill enemies in battle"},
+	"dq_d_boss":    {"ru": "Побеждай боссов (волны-боссы)", "en": "Defeat bosses (boss waves)"},
+	"dq_d_crit":    {"ru": "Наноси критические удары", "en": "Land critical hits"},
+	"dq_d_drops":   {"ru": "Собирай выпавший лут с врагов", "en": "Collect loot drops from enemies"},
+	"dq_d_gold":    {"ru": "Зарабатывай золото в бою", "en": "Earn gold in battle"},
 	"dq_claimed":   {"ru": "✅ Забрано   ", "en": "✅ Claimed   "},
 	"dq_done_pop":  {"ru": "✅ Квест выполнен: ", "en": "✅ Quest complete: "},
 	"m_daily":      {"ru": "📋  Ежедневные квесты", "en": "📋  Daily quests"},
@@ -1422,11 +1427,11 @@ var stats_run := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "
 var stats_all := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
 # === ЕЖЕДНЕВНЫЕ КВЕСТЫ (Рамиль): 3 задачи/день, прогресс = текущий стат − снимок на старте дня ===
 const DAILY_QUESTS := [
-	{"id": "kill",  "icon": "🗡", "name": "Зачистка",         "name_en": "Sweep",           "stat": "mobs",   "target": 200,    "rew": {"diamonds": 30}},
-	{"id": "boss",  "icon": "👑", "name": "Охота на боссов",   "name_en": "Boss Hunt",       "stat": "bosses", "target": 6,      "rew": {"diamonds": 40}},
-	{"id": "crit",  "icon": "🎯", "name": "Криткарь",          "name_en": "Critical Strike", "stat": "crits",  "target": 300,    "rew": {"diamonds": 25}},
-	{"id": "drops", "icon": "🎁", "name": "Лутер",             "name_en": "Looter",          "stat": "drops",  "target": 12,     "rew": {"diamonds": 25}},
-	{"id": "gold",  "icon": "💰", "name": "Золотая лихорадка", "name_en": "Gold Rush",       "stat": "gold",   "target": 100000, "rew": {"scrap": 2000}},
+	{"id": "kill",  "icon": "🗡", "name": "Зачистка",         "name_en": "Sweep",           "desc": "dq_d_kill",  "stat": "mobs",   "target": 200,    "rew": {"diamonds": 30}},
+	{"id": "boss",  "icon": "👑", "name": "Охота на боссов",   "name_en": "Boss Hunt",       "desc": "dq_d_boss",  "stat": "bosses", "target": 6,      "rew": {"diamonds": 40}},
+	{"id": "crit",  "icon": "🎯", "name": "Криткарь",          "name_en": "Critical Strike", "desc": "dq_d_crit",  "stat": "crits",  "target": 300,    "rew": {"diamonds": 25}},
+	{"id": "drops", "icon": "🎁", "name": "Лутер",             "name_en": "Looter",          "desc": "dq_d_drops", "stat": "drops",  "target": 12,     "rew": {"diamonds": 25}},
+	{"id": "gold",  "icon": "💰", "name": "Золотая лихорадка", "name_en": "Gold Rush",       "desc": "dq_d_gold",  "stat": "gold",   "target": 100000, "rew": {"scrap": 2000}},
 ]
 var dq_day := 0           # день, для которого выбраны квесты
 var dq_idx := []          # индексы 3 квестов на сегодня
@@ -4159,9 +4164,10 @@ func _open_daily_quests() -> void:
 		sb.bg_color = Color(0.13, 0.11, 0.04, 0.97) if (ready and not claimed) else Color(0.08, 0.09, 0.13, 0.95)
 		sb.set_corner_radius_all(8); sb.set_content_margin_all(10)
 		sb.border_color = Color("#ffd24a") if (ready and not claimed) else Color("#2a2f45"); sb.set_border_width_all(2 if (ready and not claimed) else 1)
-		box.add_theme_stylebox_override("panel", sb); box.position = Vector2(W * 0.5 - 210, 196 + n * 92); box.custom_minimum_size = Vector2(420, 84)
+		box.add_theme_stylebox_override("panel", sb); box.position = Vector2(W * 0.5 - 210, 196 + n * 104); box.custom_minimum_size = Vector2(420, 96)
 		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
 		v.add_child(_lbl("%s %s" % [q["icon"], _tloc(q, "name")], 15, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
+		v.add_child(_lbl(_t(q["desc"]), 11, Color("#6a6f85"), HORIZONTAL_ALIGNMENT_LEFT))   # описание-действие: ЧТО делать (приглушённо)
 		var pr := "%s / %s   → %s" % [_gsep(int(prog)), _gsep(int(tgt)), _dq_rew_text(q)]
 		if claimed: pr = _t("dq_claimed") + _dq_rew_text(q)
 		v.add_child(_lbl(pr, 13, Color("#7ee08a") if claimed else Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_LEFT))
@@ -4172,7 +4178,7 @@ func _open_daily_quests() -> void:
 			v.add_child(b)
 		panel.add_child(box)   # ← ФИКС: коробки квестов не добавлялись в панель → дейли были ПУСТЫЕ (Диана)
 	var dq_ready := _dq_ready_count()
-	var by := 196 + 3 * 92 + 16
+	var by := 196 + 3 * 104 + 16
 	if dq_ready > 0:
 		var ca := Button.new(); ca.text = _t("ach_claim_all") % dq_ready; ca.add_theme_font_size_override("font_size", 14); ca.add_theme_color_override("font_color", Color("#ffd24a"))
 		ca.custom_minimum_size = Vector2(200, 40); ca.position = Vector2(W * 0.5 - 210, by)
@@ -4546,7 +4552,7 @@ func _ach_value(key: String) -> int:
 func _ach_reward(idx: int) -> Dictionary:
 	match idx:
 		0: return {"scrap": 40}
-		1: return {"cores": 20}
+		1: return {"diamonds": 15}   # ядра ТОЛЬКО за престиж — ачивки дают алмазы (фидбэк Дианы v1.9.7)
 		2: return {"diamonds": 25}
 		_: return {"diamonds": 100}
 
