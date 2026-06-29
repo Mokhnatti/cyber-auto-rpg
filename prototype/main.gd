@@ -3448,7 +3448,7 @@ func _priority_target(arr: Array):
 func _hero_hit(hh: Dictionary) -> void:
 	var e = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)
 	if e == null: return
-	hh["atk_anim"] = 0.2   # короткий резкий выстрел 0.2с (схема Рамиля); между выстрелами — боевая стойка (idle)
+	hh["atk_anim"] = 0.9   # атака 0.9с — медленнее/видно (фидбэк Рамиля: 45fps+0.2с дёргались); между атаками — боевая стойка
 	var base: float = min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)   # float: int64 overflow при stage>133
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
@@ -3851,7 +3851,7 @@ func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2
 
 func _frames(folder: String) -> SpriteFrames:
 	var sf := SpriteFrames.new()
-	for spec in [["walk", 16.0, true], ["idle", 16.0, true], ["stance", 7.0, true], ["hit", 45.0, false]]:   # 4 состояния (Рамиль): idle/walk/боевая-стойка(прицел)/быстрый-выстрел
+	for spec in [["walk", 11.0, true], ["idle", 8.0, true], ["stance", 6.0, true], ["hit", 14.0, false]]:   # 4 состояния (Рамиль): idle/walk/боевая-стойка(прицел)/быстрый-выстрел
 		var anim: String = spec[0]
 		sf.add_animation(anim)
 		sf.set_animation_speed(anim, spec[1])
