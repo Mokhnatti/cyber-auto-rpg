@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.18" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.19" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -527,6 +527,9 @@ const TR := {
 	"u_need_for": {"ru": "на", "en": "for"},
 	"power": {"ru": "Мощь", "en": "Power"},
 	"per_sec": {"ru": "/с", "en": "/s"},
+	# тултипы ресурс-бара (UI-ясность: что значат иконки/числа — фидбэк Дианы)
+	"tip_resources": {"ru": "💰 Золото — прокачка бойцов и снаряги\n♻ Лом — апгрейд снаряги\n🧬 Ядра — престиж-усиления (вечная сила)\n💎 Алмазы — премиум/гача\n\nБольшие числа: K=тыс, M=млн, B=млрд, T=трлн", "en": "💰 Gold — upgrade fighters & gear\n♻ Scrap — gear upgrades\n🧬 Cores — prestige boosts (forever power)\n💎 Diamonds — premium/gacha\n\nBig numbers: K=thousand, M=million, B=billion, T=trillion"},
+	"tip_power": {"ru": "💪 Мощь — суммарная боевая сила отряда (урон + выживаемость)", "en": "💪 Power — total combat strength of your squad (damage + survivability)"},
 	# настройки
 	"set_lang": {"ru": "🌐 Язык", "en": "🌐 Language"},
 	"set_sci": {"ru": "Научные числа", "en": "Scientific numbers"},
@@ -2689,11 +2692,11 @@ func _fmt_n(n) -> String:
 	else: s = str(int(round(v)))
 	return ("-" if neg else "") + s
 
-# разделитель тысяч точкой (Диана): 500000 → 500.000. Очень большие → суффикс/научно (читаемо).
+# разделитель тысяч точкой (Диана): 500000 → 500.000. Большие (1M+) → суффикс/научно (читаемо).
 func _gsep(n) -> String:
 	var v := float(n)
-	if abs(v) >= 1.0e9:
-		return _fmt_n(v)        # миллиарды+ → 1.50B / 2.30e+15, а не каша из цифр
+	if abs(v) >= 1.0e6:
+		return _fmt_n(v)        # миллионы+ → 1.20M / 1.50B / 2.30e+15, а не простыня цифр (UI-ясность, фидбэк Дианы)
 	var s := str(int(round(v)))
 	var neg := s.begins_with("-")
 	if neg: s = s.substr(1)
@@ -3994,6 +3997,8 @@ func _build() -> void:
 	gold_label.add_theme_color_override("font_color", Color("#ffe14d"))
 	gold_label.add_theme_font_size_override("font_size", 18)
 	gold_label.position = Vector2(20, 104)
+	gold_label.mouse_filter = Control.MOUSE_FILTER_PASS   # тултип по наведению/тапу-удержанию
+	gold_label.tooltip_text = _t("tip_resources")
 	hud.add_child(gold_label)
 
 	status_label = Label.new()
@@ -5459,6 +5464,8 @@ func _build_inventory() -> void:
 	inv_gold.add_theme_font_size_override("font_size", 18)
 	inv_gold.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	inv_gold.position = Vector2(0, 78); inv_gold.size = Vector2(W, 24)
+	inv_gold.mouse_filter = Control.MOUSE_FILTER_PASS
+	inv_gold.tooltip_text = _t("tip_power")
 	inv_panel.add_child(inv_gold)
 	# переключатель множителя покупки уровней
 	var mbar := HBoxContainer.new(); mbar.add_theme_constant_override("separation", 8)
