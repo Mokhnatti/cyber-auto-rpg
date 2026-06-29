@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.13" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.14" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -2012,7 +2012,15 @@ func _clear_cache() -> void:   # очистка service worker + кэша → з
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("(async()=>{try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs){await r.unregister();}}if(self.caches){const ks=await caches.keys();for(const k of ks){await caches.delete(k);}}}catch(e){}location.reload(true);})();", true)
 
-func _prompt_nick(on_done: Callable = Callable()) -> void:   # нативный Godot-диалог ввода ника (web + Android, единообразно)
+func _prompt_nick(on_done: Callable = Callable()) -> void:   # ВЕБ→браузерный prompt (мобильная клавиатура работает), НАТИВ→Godot LineEdit-диалог
+	if OS.has_feature("web"):
+		var cur := nick if (nick != "" and nick != _t("guest_nick")) else ""
+		var r = JavaScriptBridge.eval("window.prompt(%s, %s)" % [JSON.stringify(_t("nick_prompt")), JSON.stringify(cur)], true)
+		if r != null:
+			var s := str(r).strip_edges()
+			if s != "": nick = s.substr(0, 20)
+		if on_done.is_valid(): on_done.call()
+		return
 	var dlg := Control.new()
 	dlg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dlg.z_index = 3500   # выше nick_panel(3000) и настроек
@@ -3407,8 +3415,13 @@ func _toggle_auto() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not aim_mode:
 		return
+	var tap_pos = null   # мышь (десктоп) ИЛИ тач (мобила) — иначе на телефоне ультра не срабатывала
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var pos := get_global_mouse_position()
+		tap_pos = get_global_mouse_position()
+	elif event is InputEventScreenTouch and event.pressed:
+		tap_pos = get_canvas_transform().affine_inverse() * event.position
+	if tap_pos != null:
+		var pos: Vector2 = tap_pos
 		var best = null
 		var bd := 130.0
 		for e in enemies:
