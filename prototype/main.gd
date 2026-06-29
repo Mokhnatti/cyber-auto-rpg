@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.8.2" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.0" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -3268,7 +3268,7 @@ func _qte_resolve(boss) -> void:
 
 func _toggle_auto() -> void:
 	auto_battle = not auto_battle
-	auto_btn.text = "🤖"   # иконка; цвет = вкл/выкл
+	auto_btn.text = "AUTO ✅" if auto_battle else "AUTO ⬜"   # текст вместо иконки; состояние видно
 	auto_btn.modulate = Color(1.4, 1.4, 0.5) if auto_battle else Color(0.7, 0.7, 0.7)
 	if auto_battle and aim_mode:   # включили во время ручного прицела — выходим из него
 		aim_mode = false; aim_hero = null; status_label.text = ""
@@ -3557,12 +3557,13 @@ func _build() -> void:
 	speed_btn.position = Vector2(W - 88, 150)   # фидбэк Рамиля: скорость НАВЕРХ (редкая кнопка, не нужна у пальца)
 	speed_btn.pressed.connect(_cycle_speed)
 	hud.add_child(speed_btn)
-	# тумблер АВТОБОЯ
+	# тумблер АВТОБОЯ — текст «AUTO» рядом со скоростью (наверху, слева от speed_btn)
 	auto_btn = Button.new()
-	auto_btn.text = "🤖"
-	auto_btn.add_theme_font_size_override("font_size", 18)
-	auto_btn.custom_minimum_size = Vector2(58, 40)
-	auto_btn.position = Vector2(W - 62, 762)   # UI-редизайн: вниз к пальцу, иконка (было верх-право + слова)
+	auto_btn.text = "AUTO ⬜"
+	auto_btn.add_theme_font_size_override("font_size", 14)
+	auto_btn.custom_minimum_size = Vector2(86, 40)
+	auto_btn.position = Vector2(W - 178, 150)   # слева от кнопки скорости
+	auto_btn.modulate = Color(0.7, 0.7, 0.7)
 	auto_btn.pressed.connect(_toggle_auto)
 	hud.add_child(auto_btn)
 	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
@@ -3951,6 +3952,13 @@ func _bp_unclaimed_count() -> int:
 		m += BP_STEP
 	return n
 
+func _bp_claim_all() -> void:
+	var m := BP_STEP
+	while m <= best_stage:
+		if not (m in bp_claimed): _bp_claim(m, false)
+		if bp_premium and not (m in bp_claimed_prem): _bp_claim(m, true)
+		m += BP_STEP
+
 # === КАРТА ЛОКАЦИЙ (Рамиль) ===
 func _open_map() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -4119,6 +4127,9 @@ func _dq_claim(qi: int) -> void:
 	_save(); _refresh_hud()
 	_popup_center(_t("dq_done_pop") + _dq_rew_text(q), Color("#3ad97a"), 1.6)
 
+func _dq_claim_all() -> void:
+	for qi in dq_idx: _dq_claim(qi)
+
 func _open_daily_quests() -> void:
 	_dq_refresh()
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -4151,8 +4162,18 @@ func _open_daily_quests() -> void:
 			b.pressed.connect(func(): _dq_claim(qii); panel.queue_free(); _open_daily_quests())
 			v.add_child(b)
 		panel.add_child(box)   # ← ФИКС: коробки квестов не добавлялись в панель → дейли были ПУСТЫЕ (Диана)
-	var close := Button.new(); close.text = _t("close"); close.custom_minimum_size = Vector2(200, 40)
-	close.position = Vector2(W * 0.5 - 100, 196 + 3 * 92 + 16); close.pressed.connect(panel.queue_free); panel.add_child(close)
+	var dq_ready := _dq_ready_count()
+	var by := 196 + 3 * 92 + 16
+	if dq_ready > 0:
+		var ca := Button.new(); ca.text = _t("ach_claim_all") % dq_ready; ca.add_theme_font_size_override("font_size", 14); ca.add_theme_color_override("font_color", Color("#ffd24a"))
+		ca.custom_minimum_size = Vector2(200, 40); ca.position = Vector2(W * 0.5 - 210, by)
+		ca.pressed.connect(func(): _dq_claim_all(); panel.queue_free(); _open_daily_quests())
+		panel.add_child(ca)
+		var close := Button.new(); close.text = _t("close"); close.custom_minimum_size = Vector2(200, 40)
+		close.position = Vector2(W * 0.5 + 10, by); close.pressed.connect(panel.queue_free); panel.add_child(close)
+	else:
+		var close := Button.new(); close.text = _t("close"); close.custom_minimum_size = Vector2(200, 40)
+		close.position = Vector2(W * 0.5 - 100, by); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
 # === КВЕСТ-ЧАТ (идея Рамиля): фиксер шлёт задание в мессенджер-облачках ===
 func _chat_bubble(text: String, incoming: bool, accent: Color) -> Control:
@@ -4391,7 +4412,6 @@ func _open_more() -> void:
 	_open_submenu(_t("more_title"), [
 		[_t("m_story") + story_b, Callable(self, "_open_story_group")],
 		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
-		[_t("m_map"), Callable(self, "_open_map")],
 		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 		[_t("m_settings"), Callable(self, "_toggle_settings")],
 		[_t("update_btn") % VERSION, Callable(self, "_force_update")],
@@ -4466,7 +4486,15 @@ func _open_battlepass() -> void:
 	while m <= top:
 		list.add_child(_bp_tier_row(m, panel))
 		m += BP_STEP
-	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+	var bp_unc := _bp_unclaimed_count()
+	if bp_unc > 0:
+		var ca := Button.new(); ca.text = _t("ach_claim_all") % bp_unc; ca.add_theme_font_size_override("font_size", 14); ca.add_theme_color_override("font_color", Color("#ffd24a"))
+		ca.custom_minimum_size = Vector2(200, 42); ca.position = Vector2(W * 0.5 - 210, 706)
+		ca.pressed.connect(func(): _bp_claim_all(); panel.queue_free(); _open_battlepass())
+		panel.add_child(ca)
+		var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 + 10, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+	else:
+		var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
 func _bp_tier_row(m: int, panel: Control) -> Control:
 	var reached: bool = best_stage >= m
@@ -4479,6 +4507,7 @@ func _bp_tier_row(m: int, panel: Control) -> Control:
 	# бесплатная награда
 	var fclaimed: bool = m in bp_claimed
 	var fb := Button.new(); fb.custom_minimum_size = Vector2(190, 40); fb.add_theme_font_size_override("font_size", 12)
+	fb.add_theme_color_override("font_color", Color("#6a6f85") if fclaimed else Color("#7ee08a"))   # забранное — серым
 	fb.text = ("✓ " if fclaimed else "🆓 ") + _bp_reward_text(_bp_free_reward(m))
 	fb.disabled = fclaimed or not reached
 	var mm := m
@@ -4486,7 +4515,7 @@ func _bp_tier_row(m: int, panel: Control) -> Control:
 	row.add_child(fb)
 	# премиум награда
 	var pclaimed: bool = m in bp_claimed_prem
-	var pbn := Button.new(); pbn.custom_minimum_size = Vector2(190, 40); pbn.add_theme_font_size_override("font_size", 12); pbn.add_theme_color_override("font_color", Color("#ffd24a"))
+	var pbn := Button.new(); pbn.custom_minimum_size = Vector2(190, 40); pbn.add_theme_font_size_override("font_size", 12); pbn.add_theme_color_override("font_color", Color("#6a6f85") if pclaimed else Color("#ffd24a"))   # забранное — серым
 	pbn.text = ("✓ " if pclaimed else "💎 ") + _bp_reward_text(_bp_prem_reward(m))
 	pbn.disabled = pclaimed or not reached or not bp_premium
 	pbn.pressed.connect(func(): _bp_claim(mm, true); panel.queue_free(); _open_battlepass())
