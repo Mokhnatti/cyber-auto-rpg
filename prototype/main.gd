@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.3" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.4" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1682,7 +1682,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	var dmg_scale: float = (1.0 + lv * 0.04) if is_tank else (lv * milestone)
 	hh["dmg"] = min(base_dmg * dmg_scale * aug_dmg * _ad_mult("dmg") * _clan_boost_mult("dmg") * meta_pow * _prestige_mult(), STAT_CAP)   # float: int64 overflow при stage>133
 	# HP: НЕ от своего уровня, а от АУРЫ ТАНКА (его уровень, экспонента) + аугменты/модуль/surv. Качаешь танка = HP всему отряду.
-	hh["max"] = min(base_hp * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0), STAT_CAP)   # float
+	hh["max"] = min(base_hp * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0) * _prestige_mult(), STAT_CAP)   # float; ×perma-множитель — HP растёт с престижами как и урон (иначе бот дохнет на глубине, survival-плато)
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
