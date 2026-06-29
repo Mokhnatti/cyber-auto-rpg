@@ -3,3 +3,4 @@ prototype/.godot/
 prototype/*.tmp
 .DS_Store
 .claude/worktrees/
+prototype/android/
