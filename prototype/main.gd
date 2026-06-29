@@ -43,14 +43,14 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.4" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.5" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
 var http: HTTPRequest
 var nick_panel: Control
 var restart_confirm: Control
-var _offline_gold := 0
+var _offline_gold := 0.0
 var _offline_secs := 0
 var show_dmg := true        # цифры урона над врагами (настройка)
 var show_cd := true         # цифры КД ульт (настройка)
@@ -428,7 +428,7 @@ var frag_flags := {}        # idx фрагмента → помечен подд
 var case_solved := false
 var frags_notified := 0     # сколько фрагментов уже показали (для попапа-уведомления)
 var milestones_hit := 0     # рубежи стадий (каждые 10) — награда-celebration, БЕЗ DPS (не трогает кривую 1.34)
-var power_peak := 0         # ПИК-МОЩЬ (prestige-proof): для клан-боссов — снапшот лучшей силы, не гимпится престижем
+var power_peak := 0.0       # ПИК-МОЩЬ (prestige-proof): для клан-боссов — снапшот лучшей силы, не гимпится престижем
 func _power_now() -> float:   # текущая мощь отряда + бонус от глубины (best_stage) → база для клан-вклада
 	return _party_power() * (1.0 + best_stage * 0.04)
 func _update_power_peak() -> void:
@@ -936,7 +936,7 @@ func _fb_rest(method: int, path: String, body: String, cb: Callable = Callable()
 
 func _fb_write_profile() -> void:
 	if fb_uid == "": return
-	var prof := {"id": fb_id, "nick": (nick if nick != "" else "Вектор"), "power": power_peak, "best": best_stage, "clan": player_clan, "t": Time.get_unix_time_from_system()}
+	var prof := {"id": fb_id, "nick": (nick if nick != "" else "Вектор"), "power": min(power_peak, 9.0e18), "best": best_stage, "clan": player_clan, "t": Time.get_unix_time_from_system()}
 	_fb_rest(HTTPClient.METHOD_PUT, "/players/%s" % fb_uid, JSON.stringify(prof))
 
 func _clan_name() -> String: return (nick if nick != "" else "Вектор")
@@ -950,7 +950,7 @@ func _clan_create() -> void:
 	if not fb_ready:
 		_popup_center(_t("cl_no_server"), Color("#ff5050"), 2.0); return
 	var code := "%06d" % (randi() % 1000000)
-	var clan := {"name": _t("clan_name_prefix") + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": power_peak}}, "created": int(Time.get_unix_time_from_system())}
+	var clan := {"name": _t("clan_name_prefix") + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": min(power_peak, 9.0e18)}}, "created": int(Time.get_unix_time_from_system())}
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s" % code, JSON.stringify(clan), func(c, _d):
 		if c >= 200 and c < 300:
 			player_clan = code; _fb_write_profile(); _save()
@@ -970,7 +970,7 @@ func _clan_join(code: String) -> void:
 		var members: Dictionary = clan.get("members", {})
 		if members.size() >= 20:
 			_popup_center(_t("cl_full"), Color("#ff5050"), 2.2); return
-		_fb_rest(HTTPClient.METHOD_PATCH, "/clans/%s/members" % code, JSON.stringify({fb_uid: {"nick": _clan_name(), "power": power_peak}}), func(c2, _d2):
+		_fb_rest(HTTPClient.METHOD_PATCH, "/clans/%s/members" % code, JSON.stringify({fb_uid: {"nick": _clan_name(), "power": min(power_peak, 9.0e18)}}), func(c2, _d2):
 			if c2 >= 200 and c2 < 300:
 				player_clan = code; _fb_write_profile(); _save()
 				_popup_center(_t("cl_joined") % code, Color("#7ee08a"), 3.0)
@@ -1028,7 +1028,7 @@ func _open_clan() -> void:
 			var txt := _t("cl_members") % mem.size()
 			for u in mem:
 				var m = mem[u]
-				txt += "• %s — ⚡%s%s\n" % [str(m.get("nick", "?")), _gsep(int(m.get("power", 0))), ("  👑" if str(clan.get("leader", "")) == str(u) else "")]
+				txt += "• %s — ⚡%s%s\n" % [str(m.get("nick", "?")), _gsep(int(min(float(m.get("power", 0)), 9.0e18))), ("  👑" if str(clan.get("leader", "")) == str(u) else "")]
 			ml.text = txt)
 		var bb := Button.new(); bb.text = _t("cl_boss_btn"); bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 540)
 		bb.add_theme_font_size_override("font_size", 18)
@@ -1051,7 +1051,7 @@ func _open_clan() -> void:
 func _clan_boss_spawn() -> void:
 	if player_clan == "" or not fb_ready: return
 	var wb := _weekly_boss()
-	var hpmax: int = max(100000, power_peak * 1000)  # ~1000 hits to kill: 20min solo / 4min clan-of-5 (bot ppwr peak ~940M → ~940B boss HP)
+	var hpmax: int = int(min(max(100000.0, power_peak * 1000.0), 9.0e18))  # ~1000 hits to kill: 20min solo / 4min clan-of-5 (bot ppwr peak ~940M → ~940B boss HP); кламп к int64-safe перед int()
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(Time.get_unix_time_from_system()), "name": wb["name"], "fac": wb["fac"], "week": _week_num()}), func(c, _d):
 		if c >= 200 and c < 300:
 			boss_my_dmg = 0
@@ -1060,7 +1060,7 @@ func _clan_boss_spawn() -> void:
 func _clan_boss_attack() -> void:
 	if player_clan == "" or not fb_ready or boss_atk_cd > 0.0: return
 	boss_atk_cd = 1.2
-	var hit: int = max(1, int(power_peak * randf_range(0.8, 1.4)))
+	var hit: int = max(1, int(min(power_peak * randf_range(0.8, 1.4), 9.0e18)))
 	boss_my_dmg += hit
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss/contrib/%s" % [player_clan, fb_uid], JSON.stringify({"nick": _clan_name(), "dmg": boss_my_dmg}))
 	_popup_center(_t("cl_boss_hit") % _gsep(hit), Color("#ff5050"), 0.9)
@@ -1338,10 +1338,10 @@ var scrap := 0             # ♻ ЛОМ: валюта с разбора шмот
 # ПРЕСТИЖ:
 var cores := 0            # 🧬 ЯДРА — валюта престижа (трата на аугменты)
 var cores_total := 0.0    # сумма ВСЕХ добытых ядер за всё время → перма-множитель (√-петля AdCap-стиля, unbounded драйвер бесконечной прогрессии)
-const PERMA_TAIL_K := 0.010   # ХВОСТ БЕСКОНЕЧНОСТИ: exp-добавка сверх полинома при больших cores_total (калибруется ботами). Полином асимптотит против экспоненты HP-стены → нужен супер-полиномиальный хвост
+const PERMA_TAIL_K := 0.013   # ХВОСТ БЕСКОНЕЧНОСТИ: exp-добавка сверх полинома при больших cores_total (калибруется ботами). Полином асимптотит против экспоненты HP-стены → нужен супер-полиномиальный хвост
 func _prestige_mult() -> float:   # вечно растущий множитель: полином (ранняя игра, баланс сохранён) × exp-хвост (бесконечность на глубине, бьёт стену 1.34^ст)
 	var poly := pow(1.0 + cores_total, 0.6)
-	var tail := exp(PERMA_TAIL_K * max(0.0, sqrt(cores_total) - 100.0))  # cores_total>10k → exp(K·√) растёт быстрее ЛЮБОГО полинома → НЕТ плато; √ внутри = мягко (не взрыв), reach D нужно ~D^1.25 престижей (soft-wall, «лезешь но потеешь»)
+	var tail := exp(min(700.0, PERMA_TAIL_K * max(0.0, sqrt(cores_total) - 100.0)))  # clamp 700 (e^700<1e308, нет inf при cores_total>3e9); cores_total>10k → exp(K·√) растёт быстрее ЛЮБОГО полинома → НЕТ плато; √ внутри = мягко (не взрыв), reach D нужно ~D^1.25 престижей (soft-wall, «лезешь но потеешь»)
 	return poly * tail
 # === МОНЕТИЗАЦИЯ (Фаза А) ===
 var diamonds := 999999    # 💎 АЛМАЗЫ — премиум (ВРЕМЕННО: всем 999999 для теста монетизации — Рамиль)
@@ -1691,7 +1691,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _aug_cost(id: String) -> int:
-	return int(floor(8.0 * pow(1.15, _al(id))))   # Фикс №1: 1.22→1.15 — глубокие уровни усилений доступнее (ядра → сила → пробитие потолка)
+	return int(min(floor(8.0 * pow(1.15, _al(id))), 9.0e18))   # Фикс №1: 1.22→1.15 — глубокие уровни усилений доступнее; кламп к int64-safe (латентный overflow)
 
 func _prestige_score() -> float:
 	# «счёт престижа» из ДВУХ осей: стадия (главный вес, квадратично) + суммарный ур. отряда (добавка)
@@ -1886,7 +1886,7 @@ func _send_telemetry(ev: String) -> void:
 		return
 	if http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
 		return   # занят предыдущим запросом — пропускаем (fire-and-forget)
-	var d := {"nick": nick, "event": ev, "stage": stage, "best": best_stage, "maxlvl": _max_hero_level(), "cores": cores, "scrap": scrap, "gold": int(gold), "ver": "1"}
+	var d := {"nick": nick, "event": ev, "stage": stage, "best": best_stage, "maxlvl": _max_hero_level(), "cores": cores, "scrap": scrap, "gold": int(min(gold, 9.0e18)), "ver": "1"}
 	http.request(TELEMETRY_URL, ["Content-Type: text/plain"], HTTPClient.METHOD_POST, JSON.stringify(d))
 
 func _build_nick_prompt() -> void:
@@ -2256,7 +2256,7 @@ func _bot_telemetry() -> void:
 		"t": int(Time.get_ticks_msec() / 1000), "tactic": bot_tactic,
 		"stage": stage, "best": best_stage, "sub": sub, "boss": (1 if in_boss else 0),
 		"lvls": lvls, "maxlvl": _max_hero_level(), "totlvl": _total_levels(), "wlvls": wlvls,
-		"gold": int(gold), "scrap": scrap, "cores": cores, "prestiges": rec_prestiges,
+		"gold": int(min(gold, 9.0e18)), "scrap": scrap, "cores": cores, "prestiges": rec_prestiges,
 		"augs": equipped_augs.size(), "slots": _slot_total(), "auglvls": aug_lvl.size(),
 		"dmg": stats_run["dmg"], "mobs": stats_run["mobs"], "bosses": stats_run["bosses"],   # float: суммарный урон >9.2e18 не лезет в int64 (показывал INT64_MIN)
 		"ppwr": _party_power(),
@@ -2602,7 +2602,7 @@ func _show_offline() -> void:
 	var b := Button.new(); b.text = _t("offline_collect"); b.add_theme_font_size_override("font_size", 17); b.custom_minimum_size = Vector2(0, 50)
 	b.pressed.connect(func(): panel.queue_free())
 	v.add_child(b)
-	_offline_gold = 0
+	_offline_gold = 0.0
 
 func _build_restart_confirm() -> void:
 	restart_confirm = Control.new()
@@ -2705,7 +2705,7 @@ func _load() -> void:
 	endgame_mode = str(d.get("endgame_mode", ""))
 	if endgame_mode != "" and not ENDINGS.has(endgame_mode): endgame_mode = ""   # хардениг: невалидный режим (старый сейв) → "" (иначе ENDINGS[mode] краш в меню/финале)
 	milestones_hit = int(d.get("milestones_hit", 0))
-	power_peak = int(d.get("power_peak", 0))
+	power_peak = float(d.get("power_peak", 0.0))
 	player_clan = str(d.get("player_clan", ""))
 	clan_tokens = int(d.get("clan_tokens", 0))
 	boss_claimed = int(d.get("boss_claimed", 0))
@@ -2761,9 +2761,9 @@ func _load() -> void:
 			if away > 60:
 				var capped: int = min(away, 43200)   # кап 12 часов
 				var rate := _passive_rate()   # пассив (растёт со стадией) — тот же расчёт что и онлайн
-				_offline_gold = int(min(rate * capped, STAT_CAP))   # кламп офлайн-дохода от int64-overflow (Godot-ресёрч)
+				_offline_gold = min(rate * capped, STAT_CAP)   # float-кламп офлайн-дохода (без int() — int64-overflow на глубоких стадиях)
 				_offline_secs = capped
-				gold += _offline_gold
+				gold += max(0.0, _offline_gold)
 	_refresh_hud()
 
 # JSON делает числа float — возвращаем int там, где нужны индексы/счётчики
@@ -3050,6 +3050,7 @@ func _load_stats(dst: Dictionary, src) -> void:
 			dst[k] = float(src[k]) if k in ["dmg", "gold", "time"] else int(src[k])
 
 func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
+	d = min(d, STAT_CAP)   # кламп: ульт/босс-множители (×12 снайпер, ×5 хак) не должны раздуть dmg за 1.8e308→inf
 	e["hp"] = max(0.0, e["hp"] - d)
 	_stat_add("dmg", d)                     # п.7: статистика урона/критов/рекорд удара
 	if is_crit: _stat_add("crits", 1)
@@ -3921,7 +3922,7 @@ func _gacha_result_text(results: Array) -> String:
 func _bp_free_reward(m: int) -> Dictionary:
 	var r := {"cores": m}                       # ядра = веха (растёт со стадией)
 	if m % 25 == 0: r["diamonds"] = 30          # на круглых тирах — алмазы
-	else: r["gold"] = int(min(50.0 * pow(GOLD_PER_STAGE, m), STAT_CAP))   # кламп от int64-переполнения (баг: m>218 → негатив)
+	else: r["gold"] = int(min(50.0 * pow(GOLD_PER_STAGE, m), 9.0e18))   # кламп к int64-safe (STAT_CAP=1e300 → int() overflow; баг: m>218 → негатив)
 	return r
 
 func _bp_prem_reward(m: int) -> Dictionary:
@@ -4540,7 +4541,7 @@ func _ach_value(key: String) -> int:
 			var mn := 999999
 			for hh in heroes: mn = min(mn, int(hh["level"]))
 			return mn
-		_: return int(min(float(stats_all.get(key, 0)), STAT_CAP))   # кламп от int64-переполнения накопит. статов
+		_: return int(min(float(stats_all.get(key, 0)), 9.0e18))   # кламп к int64-safe от переполнения накопит. статов (STAT_CAP=1e300 → int() всё равно overflow)
 
 func _ach_reward(idx: int) -> Dictionary:
 	match idx:
