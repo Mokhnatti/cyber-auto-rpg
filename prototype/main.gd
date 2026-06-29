@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.8.0" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.8.2" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1692,11 +1692,11 @@ func _prestige_score() -> float:
 	return stage * stage / 4.0 + float(_total_levels()) * 0.5
 
 func _cores_gain() -> int:
-	# ПАС4 (ресёрч): корневая формула — ядра = 10·√(макс.достигнутая стадия).
-	# Корень = «налог» на повтор: чтобы удвоить ядра, надо пройти ×4 дальше (растягивает забеги, Realm Grinder/AdVenture Capitalist).
-	# Всегда >0 → застрявший копит и пробивает стену, не зависает.
+	# ПАС4 (ресёрч): корневая формула — ядра = 10·depth^exp.
+	# 0.5→0.65→0.75: плато stадий_за_престиж=0.022-0.050 (норма 2-30) → бодрее рост ядер на глубине.
+	# При depth=100: было 199 ядер → стало 316 (+59%). Не трогает стену, только ускоряет cores_total.
 	var depth: int = max(best_stage, stage)
-	return max(1, int(floor(10.0 * sqrt(float(depth)) * aug_core * meta_core)))   # ×мета (2-й слой)
+	return max(1, int(floor(10.0 * pow(float(depth), 0.75) * aug_core * meta_core)))   # ×мета (2-й слой)
 
 func _buy_aug(id: String) -> void:
 	var c := _aug_cost(id)
@@ -2362,7 +2362,7 @@ func _bot_augments() -> void:
 	# приоритет тактики: какие семейства держим в слотах
 	var pri: Array = _cfg("augs", {
 		"rush": ["neuro", "coproc", "blade", "reactor"],
-		"hoard": ["neuro", "qcore", "reactor", "armor"],
+		"hoard": ["neuro", "coproc", "reactor", "armor"],
 		"skill": ["exploit", "reflex", "scope", "neuro"],
 		"balanced": ["neuro", "coproc", "reactor", "scope"],
 	}.get(bot_tactic, ["neuro", "coproc", "reactor", "scope"]))
@@ -4579,7 +4579,7 @@ func _ach_row(a: Dictionary, panel: Control) -> Control:
 	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(424, 0)
 	var v2 := VBoxContainer.new(); v2.add_theme_constant_override("separation", 2); box.add_child(v2)
 	# тир: сколько уровней достижения уже забрано из всех
-	var nextidx: int = min(reached if canclaim else claimed, maxt - 1)
+	var nextidx: int = min(claimed, maxt - 1)
 	var nextt: int = a["tiers"][nextidx]
 	var head := "%s %s · %s" % [a["icon"], _tloc(a, "name"), _t("ach_tier") % [claimed, maxt]]
 	v2.add_child(_lbl(head, 14, Color("#ffd24a") if canclaim else Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_LEFT))
