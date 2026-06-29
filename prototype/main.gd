@@ -2258,7 +2258,7 @@ func _bot_telemetry() -> void:
 		"lvls": lvls, "maxlvl": _max_hero_level(), "totlvl": _total_levels(), "wlvls": wlvls,
 		"gold": int(gold), "scrap": scrap, "cores": cores, "prestiges": rec_prestiges,
 		"augs": equipped_augs.size(), "slots": _slot_total(), "auglvls": aug_lvl.size(),
-		"dmg": int(stats_run["dmg"]), "mobs": stats_run["mobs"], "bosses": stats_run["bosses"],
+		"dmg": stats_run["dmg"], "mobs": stats_run["mobs"], "bosses": stats_run["bosses"],   # float: суммарный урон >9.2e18 не лезет в int64 (показывал INT64_MIN)
 		"ppwr": _party_power(),
 		"quanta": quanta, "sing": singularity_count, "mpow": _ml("mpow"), "mcore": _ml("mcore"), "mslot": _ml("mslot"),
 		"alive": heroes.reduce(func(acc, h): return acc + (1 if h["alive"] else 0), 0),
