@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.11" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.13" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -137,6 +137,7 @@ var hero_rows := []   # строки прокачки по героям: {lvl_bt
 # ИМПЛАНТЫ-СКЕЛЕТ (шмотки) — дают БАЗОВЫЕ статы отряду; уровень потом множит (HP/урон)
 var impl_btn: Button
 var bp_btn: Button
+var dq_btn: Button   # быстрый доступ к квестам с главного экрана (фидбэк Дианы)
 var ach_btn: Button
 var more_btn: Button   # «☰ Ещё» — сворачивает баттлпас/ачивки/карту/настройки (UI-редизайн)
 var _bp_cache_stage := -1   # кэш счёта батлпас-бейджа (перф)
@@ -504,6 +505,10 @@ const TR := {
 	"t_map": {"ru": "🗺 КАРТА ЛОКАЦИЙ", "en": "🗺 LOCATIONS MAP"},
 	# меню «Ещё»
 	"m_story": {"ru": "📖 Сюжет", "en": "📖 Story"},
+	"m_lore":  {"ru": "🌐 Мир/Лор", "en": "🌐 World/Lore"},
+	"ctx_skip": {"ru": "Пропустить", "en": "Skip"},
+	"lore_title": {"ru": "🌐 МИР ИГРЫ", "en": "🌐 GAME WORLD"},
+	"lore_body": {"ru": "Нео-Сити, 205X. Мегакорпорация ZenoCore монополизировала аугментацию: нейро-импланты для каждого. Обещание — сила для всех. Реальность — эпидемия психоза в беднейших кварталах.\n\nТы — Вектор. Бывший курьер колонны снабжения. Девять секунд чужого кода в голове изменили всё: ты выжил там, где не должен был. ZenoCore тебя «списала».\n\nТеперь ты пробиваешься сквозь районы города — каждый контакт знает часть правды, каждый район хранит кусок того, что случилось в те девять секунд.\n\n— ФРАКЦИИ —\n🏚  Уличные — выжившие в Трущобах, сломанные имплантами\n🏢  ZenoCore — корпоративная машина с длинной памятью\n⚓  Контрабандисты — нейтральны, пока платят\n📡  Сигнал — неизвестное. Голос изнутри.", "en": "Neo-City, 205X. Megacorp ZenoCore monopolised augmentation: neuro-implants for everyone. The promise — strength for all. The reality — a psychosis epidemic in the poorest quarters.\n\nYou are Vector. A former supply-column courier. Nine seconds of someone else's code in your head changed everything: you survived where you shouldn't have. ZenoCore wrote you off.\n\nNow you fight through city districts — every contact knows part of the truth, every district holds a piece of what happened in those nine seconds.\n\n— FACTIONS —\n🏚  Street — Slum survivors broken by implants\n🏢  ZenoCore — corporate machine with a long memory\n⚓  Smugglers — neutral as long as you pay\n📡  Signal — unknown. A voice from within."},
 	"m_rewards": {"ru": "🎁 Награды", "en": "🎁 Rewards"},
 	"m_map": {"ru": "🗺 Карта локаций", "en": "🗺 Locations map"},
 	"m_clans": {"ru": "🛡 Кланы", "en": "🛡 Clans"},
@@ -1384,6 +1389,7 @@ const AD_BOOST := {       # base% + step%/уровень (растёт от чи
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var seen_intro := false   # показано ли интро-обучение (1й запуск)
+var dialog_seen := {}     # флаг просмотренных контекстных диалогов (ключ → true)
 # === ОНБОРДИНГ (лёгкий гол-баннер до 1-го престижа) ===
 var onboarded := false        # сделан ли 1-й престиж → онбординг пройден навсегда (баннер исчезает)
 var onboard_hidden := false   # игрок свернул гол-баннер тапом (не навязываем)
@@ -2303,7 +2309,7 @@ func _reset() -> void:
 	diamonds = 50; x3_unlocked = false; x2_until = 0.0; gacha_pity = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
 	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}; daily_day = 0; daily_streak = 0
-	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0
+	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	aim_mode = false; aim_hero = -1; _qte_clear()   # чистка QTE-маркеров/прицела при hard-restart (баг-хант R2)
 	best_stage = 1
@@ -2754,6 +2760,7 @@ func _save() -> void:
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
+		"dialog_seen": dialog_seen,
 	}
 	var f := FileAccess.open(_save_path(), FileAccess.WRITE)
 	if f:
@@ -2800,6 +2807,7 @@ func _load() -> void:
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
 	quest_done = _arr(d.get("quest_done", [])).map(func(x): return str(x))
+	dialog_seen = _dct(d.get("dialog_seen", {}))
 	var tc: Dictionary = _dct(d.get("tone_counts", {}))
 	for k in tone_counts: tone_counts[k] = int(tc.get(k, 0))
 	moral_choices = _dct(d.get("moral_choices", {}))
@@ -3587,6 +3595,15 @@ func _refresh_hud() -> void:
 		var total := _bp_badge_cache + _ach_claimable() + _dq_ready_count()
 		more_btn.text = "☰" + ("●%d" % total if total > 0 else "")
 		more_btn.modulate = Color(1.6, 1.4, 0.3) if total > 0 else Color(1, 1, 1)
+	if dq_btn:
+		var dn := _dq_ready_count()
+		dq_btn.text = "📋" + (" ●%d" % dn if dn > 0 else "")
+		dq_btn.modulate = Color(1.6, 1.4, 0.3) if dn > 0 else Color(1, 1, 1)
+	if bp_btn:
+		if best_stage != _bp_cache_stage:
+			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
+		bp_btn.text = "🎟" + (" ●%d" % _bp_badge_cache if _bp_badge_cache > 0 else "")
+		bp_btn.modulate = Color(1.6, 1.4, 0.3) if _bp_badge_cache > 0 else Color(1, 1, 1)
 	if loot_badge:
 		loot_badge.visible = new_gear.size() > 0 and not impl_open
 		if loot_badge.visible:
@@ -3712,6 +3729,21 @@ func _build() -> void:
 	auto_btn.modulate = Color(0.7, 0.7, 0.7)
 	auto_btn.pressed.connect(_toggle_auto)
 	hud.add_child(auto_btn)
+	# квесты + батлпас прямо на главном экране (фидбэк Дианы: не зарывать в «Ещё»)
+	dq_btn = Button.new()
+	dq_btn.text = "📋"
+	dq_btn.add_theme_font_size_override("font_size", 15)
+	dq_btn.custom_minimum_size = Vector2(82, 36)
+	dq_btn.position = Vector2(W - 178, 196)
+	dq_btn.pressed.connect(_open_daily_quests)
+	hud.add_child(dq_btn)
+	bp_btn = Button.new()
+	bp_btn.text = "🎟"
+	bp_btn.add_theme_font_size_override("font_size", 15)
+	bp_btn.custom_minimum_size = Vector2(82, 36)
+	bp_btn.position = Vector2(W - 88, 196)
+	bp_btn.pressed.connect(_open_battlepass)
+	hud.add_child(bp_btn)
 	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
 	boss_btn = Button.new()
 	boss_btn.text = _t("to_boss")
@@ -4187,7 +4219,9 @@ func _go_location(i: int) -> void:
 	# квест-чат: фиксер пишет задание в мессенджер (идея Рамиля)
 	if not (str(loc["id"]) in quest_done):
 		_popup_center(_t("map_new_msg") % _tloc(loc["quest"], "contact"), Color("#3ad97a"), 1.8)
-		_open_quest_chat(cur_location)
+		# контекстный диалог — атмосферные 2 реплики от фиксера (1 раз, перед квест-чатом)
+		var loc_idx := cur_location
+		_show_context_dialog_for_location(loc, func(): _open_quest_chat(loc_idx))
 	else:
 		# farm-эхо: район реагирует на твои прошлые решения
 		var lid := str(loc["id"])
@@ -4220,7 +4254,8 @@ func _check_quest_complete() -> void:
 	if randf() > 0.28: return
 	quest_done.append(str(loc["id"]))
 	_save()
-	_quest_reward(loc)
+	# контекстный диалог-реакция от фиксера при завершении квеста (перед панелью награды)
+	_show_context_dialog_boss_clear(loc, func(): _quest_reward(loc))
 
 func _grant_quest_weapon(i: int) -> void:
 	var hh = heroes[i]
@@ -4583,6 +4618,8 @@ func _open_more() -> void:
 	var rew_n := _dq_ready_count() + _bp_unclaimed_count() + _ach_claimable()
 	var rew_b := "   ●%d" % rew_n if rew_n > 0 else ""
 	var more_items := [
+		[_t("m_story") + story_b, Callable(self, "_open_story_group")],
+		[_t("m_lore"), Callable(self, "_open_lore")],
 		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
 		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 		[_t("m_settings"), Callable(self, "_toggle_settings")],
@@ -4900,9 +4937,151 @@ func _show_help(title: String, body: String) -> void:
 	var t := _lbl(body, 15, Color("#d7dcf0"), HORIZONTAL_ALIGNMENT_LEFT); t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; t.custom_minimum_size = Vector2(394, 0); v.add_child(t)
 	var bc := Button.new(); bc.text = _t("help_ok"); bc.custom_minimum_size = Vector2(0, 46); bc.add_theme_font_size_override("font_size", 16); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
+# ─── КОНТЕКСТНЫЕ ДИАЛОГИ ────────────────────────────────────────────────────
+# Компактное окошко с портретом-заглушкой + 1-3 реплики + кнопка «Пропустить».
+# flag_key: ключ дедупликации (пустая строка — всегда показывать).
+# on_close: вызывается при закрытии (skip / авто-dismiss) — для цепочки действий.
+func _show_context_dialog(speaker: String, sp_icon: String, sp_color: Color, lines: Array, flag_key: String, on_close: Callable = Callable()) -> void:
+	if bot: return
+	if flag_key != "" and dialog_seen.get(flag_key, false):
+		if on_close.is_valid(): on_close.call()
+		return
+	if flag_key != "": dialog_seen[flag_key] = true; _save()
+	var panel := Control.new()
+	panel.z_index = 3200
+	hud.add_child(panel)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.04, 0.07, 0.13, 0.97)
+	sb.set_corner_radius_all(12)
+	sb.border_color = sp_color
+	sb.set_border_width_all(2)
+	sb.set_content_margin_all(12)
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = Vector2(18, 58)
+	card.custom_minimum_size = Vector2(W - 36, 0)
+	panel.add_child(card)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	card.add_child(row)
+	# портрет-заглушка: цветной прямоугольник + эмодзи
+	var port_wrap := Control.new()
+	port_wrap.custom_minimum_size = Vector2(52, 52)
+	var port_bg := ColorRect.new()
+	port_bg.color = sp_color.darkened(0.55)
+	port_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var port_icon := Label.new()
+	port_icon.text = sp_icon
+	port_icon.add_theme_font_size_override("font_size", 26)
+	port_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	port_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	port_icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	port_wrap.add_child(port_bg)
+	port_wrap.add_child(port_icon)
+	row.add_child(port_wrap)
+	# текстовая часть
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(col)
+	col.add_child(_lbl(speaker, 13, sp_color))
+	for ln in lines:
+		var ll := _lbl(str(ln), 13, Color("#cfd8ee"))
+		ll.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ll.custom_minimum_size = Vector2(W - 36 - 52 - 10 - 24, 0)
+		col.add_child(ll)
+	var skip_b := Button.new()
+	skip_b.text = _t("ctx_skip")
+	skip_b.add_theme_font_size_override("font_size", 11)
+	skip_b.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	skip_b.custom_minimum_size = Vector2(0, 28)
+	col.add_child(skip_b)
+	# закрытие (кнопка / тап по карточке / авто через 6с)
+	var _done := [false]
+	var _close := func():
+		if _done[0]: return
+		_done[0] = true
+		if is_instance_valid(panel): panel.queue_free()
+		if on_close.is_valid(): on_close.call()
+	skip_b.pressed.connect(_close)
+	card.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed: _close.call()
+	)
+	var tw := create_tween()
+	tw.tween_interval(6.0)
+	tw.tween_callback(_close)
+
+# Контекстный диалог при входе в локацию (1 раз, до квест-чата)
+func _show_context_dialog_for_location(loc: Dictionary, on_close: Callable) -> void:
+	var lid: String = loc["id"]
+	var flag := "loc_intro_" + lid
+	var contact: String = _tloc(loc["quest"], "contact")
+	var neon := Color(loc["neon"][0])
+	var lines_ru: Array
+	var lines_en: Array
+	match lid:
+		"slums":
+			lines_ru = ["Трущобы — дешёвые импланты ZenoCore плодят психоз.", "Тут всё началось для тебя, Вектор. Внимательно."]
+			lines_en = ["The Slums — cheap ZenoCore implants breeding psychosis.", "This is where it all started for you, Vector. Eyes open."]
+		"corp":
+			lines_ru = ["Корп-район. Стеклянные офисы и тысячи психозов в отчёте.", "ZenoCore знает всё. Молчит. Я тоже молчала — хватит."]
+			lines_en = ["Corp District. Glass offices and thousands of psychosis cases on the report.", "ZenoCore knows everything. Stays quiet. I stayed quiet too — no more."]
+		"docks":
+			lines_ru = ["Доки — тут всё движется и никого не волнует, откуда.", "ZenoCore груз идёт этим маршрутом. Регулярно."]
+			lines_en = ["The Docks — everything moves here and nobody asks from where.", "ZenoCore cargo comes this way. Regularly."]
+		"core":
+			lines_ru = ["...Нео-Ядро. Здесь у тебя кончились те девять секунд.", "Я ждал, пока ты дойдёшь, Вектор."]
+			lines_en = ["...Neo-Core. This is where your nine seconds ended.", "I've been waiting for you to make it here, Vector."]
+		_:
+			on_close.call(); return
+	var lines := lines_ru if lang == "ru" else lines_en
+	_show_context_dialog(contact, loc["quest"]["contact"].substr(0, 2), neon, lines, flag, on_close)
+
+# Контекстный диалог-реакция когда квест-предмет упал с босса
+func _show_context_dialog_boss_clear(loc: Dictionary, on_close: Callable) -> void:
+	var contact: String = _tloc(loc["quest"], "contact")
+	var neon := Color(loc["neon"][0])
+	var item: String = _tloc(loc["quest"], "item")
+	var lines_ru := ["Получил " + item + "?", "Молодец. Моя часть выполнена."]
+	var lines_en := ["Got the " + item + "?", "Well done. My end's done."]
+	var lines := lines_ru if lang == "ru" else lines_en
+	_show_context_dialog(contact, loc["quest"]["contact"].substr(0, 2), neon, lines, "", on_close)
+
+# Панель «Мир/Лор» — описание сеттинга и конфликта (для меню «Ещё»)
+func _open_lore() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.88); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.08, 0.15, 0.99)
+	sb.set_corner_radius_all(14)
+	sb.border_color = Color("#00f0ff")
+	sb.set_border_width_all(2)
+	sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = Vector2(W * 0.5 - 220, 70)
+	card.custom_minimum_size = Vector2(440, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl(_t("lore_title"), 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	var body_lbl := _lbl(_t("lore_body"), 14, Color("#cfd8ee"), HORIZONTAL_ALIGNMENT_LEFT)
+	body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body_lbl.custom_minimum_size = Vector2(404, 0)
+	v.add_child(body_lbl)
+	var close_b := Button.new(); close_b.text = _t("close"); close_b.custom_minimum_size = Vector2(0, 44); close_b.add_theme_font_size_override("font_size", 15)
+	close_b.pressed.connect(panel.queue_free); v.add_child(close_b)
+
+# ─────────────────────────────────────────────────────────────────────────────
 # первый запуск — короткое интро по основной петле
 func _show_intro() -> void:
-	_show_help(_t("wc_help_t"), _t("wc_help_b"))
+	# нарративный контекст (1 раз) → потом онбординг-помощь
+	var lines_ru := ["...Очнулся? Девять секунд выпали — ты не знаешь откуда.", "ZenoCore тебя списала. Имплант в башке — твой единственный актив.", "Иди воевать. Остальное — потом."]
+	var lines_en := ["...Awake? Nine seconds dropped out — you don't know from where.", "ZenoCore wrote you off. The implant in your head is your only asset.", "Go fight. The rest — later."]
+	var intro_lines := lines_ru if lang == "ru" else lines_en
+	_show_context_dialog("📡 СИГНАЛ" if lang == "ru" else "📡 SIGNAL", "📡", Color("#ff2d95"), intro_lines, "intro_signal",
+		func(): _show_help(_t("wc_help_t"), _t("wc_help_b")))
 	_track("tutorial_step", {"step": "intro"})   # KPI: показ вводного онбординга
 	seen_intro = true; _save()
 
