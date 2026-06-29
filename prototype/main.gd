@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.8" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.9" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -783,6 +783,7 @@ const TR := {
 	"scrap_confirm":     {"ru": "Разобрать %d вещей в лом?\n(избранное и надетое пропускаются)", "en": "Scrap %d items?\n(favorites and equipped are skipped)"},
 	"scrap_done":        {"ru": "♻ Разобрано → +%s лом", "en": "♻ Scrapped → +%s scrap"},
 	"cancel_btn":        {"ru": "ОТМЕНА", "en": "CANCEL"},
+	"ok_btn":            {"ru": "OK", "en": "OK"},
 	"skipped_loot":      {"ru": "🎁 Лут за %d пропущенных боссов:\n+%d в инвентарь · +%d ♻ лом", "en": "🎁 Loot from %d skipped bosses:\n+%d to inventory · +%d ♻ scrap"},
 	"hero_desc_close":   {"ru": "× закрыть", "en": "× close"},
 	"reboot_done":       {"ru": "♻ ПЕРЕЗАГРУЗКА +%d 🧬 ЯДЕР", "en": "♻ REBOOT +%d 🧬 CORES"},
@@ -1921,8 +1922,8 @@ func _build_nick_prompt() -> void:
 	nick_show = Label.new(); nick_show.text = _t("nick_unset"); nick_show.add_theme_font_size_override("font_size", 20); nick_show.add_theme_color_override("font_color", Color("#ffd24a")); nick_show.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; nick_show.custom_minimum_size = Vector2(0, 40); v.add_child(nick_show)
 	var enter := Button.new(); enter.text = _t("nick_enter_btn"); enter.add_theme_font_size_override("font_size", 18); enter.custom_minimum_size = Vector2(0, 50); v.add_child(enter)
 	enter.pressed.connect(func():
-		_prompt_nick()
-		nick_show.text = nick if nick != "" else _t("nick_unset"))
+		_prompt_nick(func():
+			nick_show.text = nick if nick != "" else _t("nick_unset")))
 	var b := Button.new(); b.text = _t("nick_play_btn"); b.add_theme_font_size_override("font_size", 20); b.custom_minimum_size = Vector2(0, 54); v.add_child(b)
 	b.pressed.connect(func():
 		if nick == "": nick = _t("guest_nick")
@@ -1933,18 +1934,39 @@ func _build_nick_prompt() -> void:
 		elif _daily_available(): _show_daily())
 	var upd := Button.new(); upd.text = _t("nick_refresh_btn"); upd.add_theme_font_size_override("font_size", 13); upd.custom_minimum_size = Vector2(0, 40); v.add_child(upd)
 	upd.pressed.connect(_clear_cache)
+	upd.visible = OS.has_feature("web")   # обновление кэша билда — только web (на Android обновления через стор)
 
 func _clear_cache() -> void:   # очистка service worker + кэша → загрузка свежей версии (фикс «вижу старое»)
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("(async()=>{try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs){await r.unregister();}}if(self.caches){const ks=await caches.keys();for(const k of ks){await caches.delete(k);}}}catch(e){}location.reload(true);})();", true)
 
-func _prompt_nick() -> void:   # нативный ввод браузера — надёжно на мобиле (LineEdit в вебе клаву не цепляет)
-	if OS.has_feature("web"):
-		var r = JavaScriptBridge.eval("(window.prompt('" + _t("nick_prompt") + "', '') || '').slice(0,20)", true)
-		if typeof(r) == TYPE_STRING and r.strip_edges() != "":
-			nick = r.strip_edges()
-	else:
-		nick = "игрок"   # не-веб (бот/десктоп-тест) — заглушка
+func _prompt_nick(on_done: Callable = Callable()) -> void:   # нативный Godot-диалог ввода ника (web + Android, единообразно)
+	var dlg := Control.new()
+	dlg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.z_index = 3500   # выше nick_panel(3000) и настроек
+	hud.add_child(dlg)
+	var bg := ColorRect.new()
+	bg.color = Color(0.02, 0.03, 0.06, 0.93); bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dlg.add_child(bg)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 14)
+	v.position = Vector2(W * 0.5 - 200, 380); v.size = Vector2(400, 0)
+	dlg.add_child(v)
+	var t := Label.new(); t.text = _t("nick_prompt"); t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var inp := LineEdit.new(); inp.max_length = 20; inp.alignment = HORIZONTAL_ALIGNMENT_CENTER; inp.custom_minimum_size = Vector2(0, 52); inp.add_theme_font_size_override("font_size", 20)
+	if nick != "" and nick != _t("guest_nick"): inp.text = nick
+	v.add_child(inp)
+	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 14); v.add_child(row)
+	var cancel := Button.new(); cancel.text = _t("cancel_btn"); cancel.add_theme_font_size_override("font_size", 16); cancel.custom_minimum_size = Vector2(0, 50); cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL; row.add_child(cancel)
+	var ok := Button.new(); ok.text = _t("ok_btn"); ok.add_theme_font_size_override("font_size", 16); ok.custom_minimum_size = Vector2(0, 50); ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL; row.add_child(ok)
+	var apply := func():
+		var s: String = inp.text.strip_edges()
+		if s != "": nick = s.substr(0, 20)
+		dlg.queue_free()
+		if on_done.is_valid(): on_done.call()
+	ok.pressed.connect(apply)
+	inp.text_submitted.connect(func(_s): apply.call())
+	cancel.pressed.connect(func(): dlg.queue_free())
+	inp.grab_focus()
 
 func _build_reboot() -> void:
 	reboot_panel = Control.new()
@@ -2480,13 +2502,14 @@ func _build_settings() -> void:
 	v.add_child(recs_btn)
 	cache_btn = Button.new(); cache_btn.text = _t("set_refresh"); cache_btn.add_theme_font_size_override("font_size", 15); cache_btn.custom_minimum_size = Vector2(0, 50)
 	cache_btn.pressed.connect(_clear_cache)
+	cache_btn.visible = OS.has_feature("web")   # сброс кэша билда — только web
 	v.add_child(cache_btn)
 	# смена ника (нативный браузерный ввод)
 	nick_lbl = Label.new(); nick_lbl.text = _t("set_nick_lbl"); nick_lbl.add_theme_font_size_override("font_size", 14); nick_lbl.add_theme_color_override("font_color", Color("#7a7f99")); v.add_child(nick_lbl)
 	save_nick_btn = Button.new(); save_nick_btn.text = _t("set_nick_btn"); save_nick_btn.add_theme_font_size_override("font_size", 15); save_nick_btn.custom_minimum_size = Vector2(0, 46)
 	save_nick_btn.pressed.connect(func():
-		_prompt_nick()
-		_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center(_t("set_nick_saved") % nick, Color("#00f0ff")))
+		_prompt_nick(func():
+			_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center(_t("set_nick_saved") % nick, Color("#00f0ff"))))
 	v.add_child(save_nick_btn)
 	settings_close = Button.new(); settings_close.text = _t("close_caps"); settings_close.add_theme_font_size_override("font_size", 16); settings_close.custom_minimum_size = Vector2(0, 50)
 	settings_close.pressed.connect(func(): settings_panel.visible = false)
@@ -4433,12 +4456,14 @@ func _open_more() -> void:
 	_dq_refresh()
 	var rew_n := _dq_ready_count() + _bp_unclaimed_count() + _ach_claimable()
 	var rew_b := "   ●%d" % rew_n if rew_n > 0 else ""
-	_open_submenu(_t("more_title"), [
+	var more_items := [
 		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
 		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 		[_t("m_settings"), Callable(self, "_toggle_settings")],
-		[_t("update_btn") % VERSION, Callable(self, "_force_update")],
-	])
+	]
+	if OS.has_feature("web"):   # «обновить игру» (чистка кэша билда) — только web; на Android обновления через стор
+		more_items.append([_t("update_btn") % VERSION, Callable(self, "_force_update")])
+	_open_submenu(_t("more_title"), more_items)
 
 # принудительное обновление до свежего билда (чистка кэша+SW) — нужно на тесте (фидбэк Рамиля «зря убрал»)
 func _force_update() -> void:
