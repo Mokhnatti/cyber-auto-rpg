@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.10" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.11" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -495,6 +495,9 @@ const TR := {
 	"tab_more": {"ru": "Ещё", "en": "More"},
 	# заголовки панелей
 	"t_upgrade": {"ru": "📊 ПРОКАЧКА ОТРЯДА", "en": "📊 SQUAD UPGRADE"},
+	"goal_upgrade":  {"ru": "🎯 Прокачивай бойцов (📊 внизу) за золото", "en": "🎯 Upgrade fighters (📊 below) for gold"},
+	"goal_gear":     {"ru": "🎯 Надевай выпавший лут (🦾 Экипировка)", "en": "🎯 Equip dropped loot (🦾 Gear)"},
+	"goal_prestige": {"ru": "🎯 Дойди до стадии 26 → ♻ ПЕРЕЗАГРУЗКА → ЯДРА (вечная сила)", "en": "🎯 Reach stage 26 → ♻ REBOOT → CORES (forever power)"},
 	"t_gear": {"ru": "🦾 ЭКИПИРОВКА БОЙЦА", "en": "🦾 FIGHTER GEAR"},
 	"t_prestige": {"ru": "♻ ПРЕСТИЖ", "en": "♻ PRESTIGE"},
 	"t_settings": {"ru": "⚙ НАСТРОЙКИ", "en": "⚙ SETTINGS"},
@@ -1381,6 +1384,13 @@ const AD_BOOST := {       # base% + step%/уровень (растёт от чи
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var seen_intro := false   # показано ли интро-обучение (1й запуск)
+# === ОНБОРДИНГ (лёгкий гол-баннер до 1-го престижа) ===
+var onboarded := false        # сделан ли 1-й престиж → онбординг пройден навсегда (баннер исчезает)
+var onboard_hidden := false   # игрок свернул гол-баннер тапом (не навязываем)
+var onboard_upg_done := false # открыл ли экран прокачки 📊 хоть раз → стоп пульса
+var goal_banner: PanelContainer
+var goal_lbl: Label
+var _goal_idx := -1           # текущая стадия гол-баннера (для трекинга смены цели)
 # === АЧИВКИ (Рамиль): журнал-книжка, тиры ×10, награды дрипом (лом→ядра→алмазы). Ретроактив: значения живые.
 var ach_claimed := {}     # id → сколько тиров забрано
 const ACHIEVEMENTS := [
@@ -1781,6 +1791,8 @@ func _reboot() -> void:
 	cores_total += float(gain)      # накопитель для перма-множителя (бесконечная прогрессия)
 	_stat_add("cores", gain)        # п.7
 	rec_prestiges += 1
+	onboarded = true   # онбординг: 1-й престиж → гол-баннер исчезает навсегда
+	if goal_banner: goal_banner.visible = false
 	_zero_stats(stats_run)          # новый забег → текущая статистика обнуляется (рекорды/all — нет)
 	cores_peak = max(cores_peak, _prestige_score())   # подняли планку (пока уровни/стадия ещё не сброшены)
 	best_stage = max(best_stage, stage)
@@ -2292,6 +2304,7 @@ func _reset() -> void:
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
 	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}; daily_day = 0; daily_streak = 0
 	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0
+	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	aim_mode = false; aim_hero = -1; _qte_clear()   # чистка QTE-маркеров/прицела при hard-restart (баг-хант R2)
 	best_stage = 1
 	new_gear.clear()
@@ -2735,7 +2748,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
+		"best_stage": best_stage, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "gacha_pity": gacha_pity, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -2818,6 +2831,8 @@ func _load() -> void:
 	fav = d.get("fav", {})
 	draft_offers = d.get("draft_offers", [])
 	rec_maxhit = float(d.get("rec_maxhit", 0.0)); rec_prestiges = int(d.get("rec_prestiges", 0))
+	onboarded = bool(d.get("onboarded", false)); onboard_hidden = bool(d.get("onboard_hidden", false)); onboard_upg_done = bool(d.get("onboard_upg_done", false))
+	if best_stage > 30 or rec_prestiges > 0: onboarded = true   # старые сейвы (уже играющие) → онбординг не показываем
 	_load_stats(stats_run, d.get("stats_run", {}))
 	_load_stats(stats_all, d.get("stats_all", {}))
 	equipped_augs = d.get("equipped_augs", [])
@@ -3551,6 +3566,12 @@ func _refresh_hud() -> void:
 	wave_label.text = ("%s %d · 👹 %s" % [_t("hud_stage"), stage, _t("hud_boss")] if in_boss else "%s %d · %s %d/%d" % [_t("hud_stage"), stage, _t("hud_wave"), sub, STAGE_WAVES]) + ("   ⚔" if phase == "fight" else "   ▶")
 	if boss_btn:
 		boss_btn.visible = boss_retry and not in_boss   # кнопка только для ретрая (свежий заход = авто)
+	if inv_btn:   # онбординг: мягкий пульс кнопки прокачки пока новичок не открыл её
+		if not onboarded and not onboard_upg_done and not bot:
+			var pu: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 300.0)
+			inv_btn.modulate = Color(1, 1, 1).lerp(Color(0.3, 1.6, 1.7), pu)
+		else:
+			inv_btn.modulate = Color(1, 1, 1)
 	if impl_btn:
 		var nc := 0
 		for k in new_gear: nc += int(new_gear[k])   # сумма новых предметов (не слотов)
@@ -3618,6 +3639,24 @@ func _refresh_hud() -> void:
 		inv_gold.text = "💰 %s   +%s%s    💪 %s: %s" % [_gsep(gold), _gsep(_passive_rate()), _t("per_sec"), _t("power"), _gsep(_party_power())]
 	if inv_open: _refresh_inv()
 	if impl_open: _refresh_impl()
+	_refresh_goal()
+
+func _refresh_goal() -> void:   # гол-баннер новичка: цель меняется по прогрессу, исчезает после 1-го престижа
+	if not goal_banner: return
+	if bot or onboarded or onboard_hidden:
+		goal_banner.visible = false
+		return
+	var bs: int = max(best_stage, stage)
+	var idx: int
+	if not onboard_upg_done and bs < 5: idx = 0          # стадия 1-5: прокачивай бойцов
+	elif bs < 20: idx = 1                                 # стадия ~5-20: надевай лут
+	else: idx = 2                                         # стадия 20+: дойди до 26 → престиж
+	var keys := ["goal_upgrade", "goal_gear", "goal_prestige"]
+	goal_lbl.text = _t(keys[idx])   # каждый кадр → авто-рефреш при смене языка
+	if idx != _goal_idx:
+		_goal_idx = idx
+		_track("tutorial_step", {"step": "goal_%d" % idx})   # KPI: смена цели онбординга
+	goal_banner.visible = not (inv_open or impl_open or (reboot_panel and reboot_panel.visible))
 
 func _build() -> void:
 	# фон
@@ -3800,6 +3839,27 @@ func _build() -> void:
 	restart.position = Vector2(10, 14)
 	restart.pressed.connect(_ask_restart)
 	hud.add_child(restart)
+
+	# === ГОЛ-БАННЕР ОНБОРДИНГА (лёгкий, ненавязчивый, тап = свернуть) ===
+	goal_banner = PanelContainer.new()
+	var gsb := StyleBoxFlat.new()
+	gsb.bg_color = Color(0.06, 0.08, 0.14, 0.82); gsb.set_corner_radius_all(10)
+	gsb.border_color = Color("#00f0ff"); gsb.set_border_width_all(1); gsb.set_content_margin_all(8)
+	goal_banner.add_theme_stylebox_override("panel", gsb)
+	goal_banner.position = Vector2(W * 0.5 - 260, H - 202)   # над баром ульт, не задевает верхний HUD/кнопки
+	goal_banner.custom_minimum_size = Vector2(520, 0)
+	goal_banner.z_index = 500   # ниже панелей (2000) — открытый экран его перекрывает
+	goal_banner.visible = false
+	goal_banner.gui_input.connect(func(ev):   # тап по баннеру = скрыть (не навязываем)
+		if ev is InputEventMouseButton and ev.pressed:
+			onboard_hidden = true; _save(); goal_banner.visible = false)
+	hud.add_child(goal_banner)
+	goal_lbl = Label.new()
+	goal_lbl.add_theme_font_size_override("font_size", 15)
+	goal_lbl.add_theme_color_override("font_color", Color("#cfe8ff"))
+	goal_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	goal_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	goal_banner.add_child(goal_lbl)
 
 # x2 активна (выдана за рекламу, таймер) / x3 куплена навсегда
 func _x2_active() -> bool:
@@ -4849,7 +4909,10 @@ func _show_intro() -> void:
 func _toggle_inv() -> void:
 	inv_open = not inv_open
 	inv_panel.visible = inv_open
-	if inv_open: _refresh_inv()
+	if inv_open:
+		if not onboard_upg_done:   # онбординг: открыл прокачку → стоп пульса 📊
+			onboard_upg_done = true; _save()
+		_refresh_inv()
 
 func _upgrade_level(i: int) -> void:
 	var hh = heroes[i]
