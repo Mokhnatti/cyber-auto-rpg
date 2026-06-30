@@ -23,18 +23,19 @@ func set_textures(bg: Texture2D, road: Texture2D) -> void:
 	bg_tex = bg; road_tex = road
 	queue_redraw()
 
-func _scroll_tex(tex: Texture2D, y0: float, h: float, factor: float) -> void:
-	# тайлим текстуру по горизонтали со скроллом + ЗЕРКАЛИМ чётные/нечётные тайлы → бесшовный стык (фикс шва дороги)
+func _scroll_tex(tex: Texture2D, y0: float, h: float, factor: float, mirror := true) -> void:
+	# тайлим текстуру по горизонтали со скроллом. mirror=зеркалить соседние тайлы (хак для НЕшовных текстур).
+	# для seamless-текстур (--tile) mirror=false — иначе зеркало даёт уёбанский отражённый стык (фидбэк Рамиля)
 	var tw := tex.get_width() * (h / tex.get_height())
 	var s := scroll * factor
 	var first_idx := int(floor(s / tw))
 	var x := -(s - first_idx * tw)
 	var idx := first_idx
 	while x < W:
-		if (idx % 2 + 2) % 2 == 0:
-			draw_texture_rect(tex, Rect2(x, y0, tw, h), false)
-		else:
+		if mirror and (idx % 2 + 2) % 2 == 1:
 			draw_texture_rect(tex, Rect2(x + tw, y0, -tw, h), false)   # зеркало по X
+		else:
+			draw_texture_rect(tex, Rect2(x, y0, tw, h), false)
 		x += tw
 		idx += 1
 
@@ -55,7 +56,7 @@ func _draw() -> void:
 	# дорога
 	draw_rect(Rect2(0, GROUND_Y, W, H - GROUND_Y), Color("#070709"))
 	if road_tex != null:
-		_scroll_tex(road_tex, GROUND_Y, H - GROUND_Y, 1.0)   # рисованная дорога (быстрее)
+		_scroll_tex(road_tex, GROUND_Y, H - GROUND_Y, 1.0, false)   # асфальт seamless (--tile) → без зеркаления, чистый встык
 	draw_line(Vector2(0, GROUND_Y), Vector2(W, GROUND_Y), ground_col, 2.0)
 	if road_tex == null:
 		var dash_off := fmod(scroll * 1.6, 80.0)
