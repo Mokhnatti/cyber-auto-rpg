@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.26" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.27" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -658,7 +658,7 @@ const TR := {
 	"rb_info": {"ru": "💪 Мощь: %s    🧬 Ядра: %d", "en": "💪 Power: %s    🧬 Cores: %d"},
 	# UI Этап 3: блок «что будет при престиже» — чтоб игрок видел что это РОСТ, а не потеря
 	"rb_keep": {"ru": "✅ ОСТАЁТСЯ НАВСЕГДА: усиления, ядра 🧬, сингулярность ⚛, ачивки и рекорды", "en": "✅ KEPT FOREVER: augments, cores 🧬, singularity ⚛, achievements & records"},
-	"rb_short": {"ru": "♻ Сбрасывает стадии и уровни → даёт ЯДРА 🧬 на вечные усиления. Что именно остаётся/сбрасывается — жми «?» сверху.", "en": "♻ Resets stages and levels → grants CORES 🧬 for permanent augments. Tap «?» above for what's kept/reset."},
+	"rb_short": {"ru": "♻ Сбрасывает стадии и уровни — заработаешь заново, но заметно быстрее. Что остаётся — жми «?» сверху.", "en": "♻ Resets stages and levels — you'll regain them much faster. Tap «?» above for what's kept."},
 	"rb_reset": {"ru": "♻ Сбросятся: стадия и уровни бойцов — но заработаешь заново и куда быстрее", "en": "♻ Resets: stage & fighter levels — but you regain them, much faster"},
 	"rb_reward_perma": {"ru": "💪 НАГРАДА: +%d🧬 ядер → новые усиления НАВСЕГДА", "en": "💪 REWARD: +%d🧬 cores → new augments FOREVER"},
 	"rb_reward_perma_locked": {"ru": "💪 Дойди до престижа → ядра 🧬 на усиления НАВСЕГДА", "en": "💪 Reach prestige → cores 🧬 for augments FOREVER"},
@@ -2256,8 +2256,9 @@ func _refresh_reboot() -> void:
 	wbox.add_theme_stylebox_override("panel", wsb); wbox.custom_minimum_size = Vector2(516, 0)
 	var wv := VBoxContainer.new(); wv.add_theme_constant_override("separation", 5); wbox.add_child(wv)
 	var wk := _lbl(_t("rb_short"), 13, Color("#cfe6ff")); wk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wk.custom_minimum_size = Vector2(492, 0); wv.add_child(wk)   # упрощено (фидбэк Дианы): 1 строка вместо 2 длинных боксов, детали под «?»
-	var wgt: String = (_t("rb_reward_perma") % _cores_gain()) if unlocked else _t("rb_reward_perma_locked")
-	var wg := _lbl(wgt, 14, Color("#ffd24a")); wg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wg.custom_minimum_size = Vector2(492, 0); wv.add_child(wg)
+	# награда-строка ТОЛЬКО когда престиж доступен (показываем сколько ядер). Заблокировано — не дублируем rb_short/gate (фидбэк Дианы: «ядра→усиления два раза»)
+	if unlocked:
+		var wg := _lbl(_t("rb_reward_perma") % _cores_gain(), 14, Color("#ffd24a")); wg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wg.custom_minimum_size = Vector2(492, 0); wv.add_child(wg)
 	reboot_list.add_child(wbox)
 	# === 2-Й СЛОЙ: кнопка Сингулярности — ПОЯВЛЯЕТСЯ только со стадии 40 (новичку не грузим) ===
 	if _singularity_ready() or meta_unlocked:
