@@ -11,6 +11,71 @@ const HEROES := [
 	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "fac": "zeno", "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0, "wname": "Тяж-орудие", "wicon": "💥", "role": "Танк · держит удар", "role_en": "Tank · soaks hits", "desc": "Огромный запас HP (×3.75 от других), принимает урон на себя, защищает сквиши.\nУЛЬТА «Щит»: даёт щит ВСЕМУ отряду — пережить опасный момент.", "desc_en": "Huge HP pool (×3.75 of the others), soaks damage, protects the squishies.\nULT «Shield»: shields the WHOLE squad — survive a dangerous moment."},
 	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "fac": "zeno", "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0, "wname": "Взлом-дрон", "wicon": "📡", "role": "Хакер · урон по площади", "role_en": "Hacker · area damage", "desc": "Бьёт по ВСЕМ врагам сразу (AoE) — чистит толпы.\nУЛЬТА «Взлом»: мощный импульс урона по площади + отряд бьёт +20% урона 5 сек.", "desc_en": "Hits ALL enemies at once (AoE) — clears crowds.\nULT «Hack»: a powerful AoE damage pulse + the squad deals +20% damage for 5s."},
 ]
+# === РОСТЕР СОБИРАЕМЫХ ГЕРОЕВ (гача) — вариант внутри класса: cls=индекс HEROES, своя фракция/редкость/пассивка ===
+# rarity: 1 обычный · 2 редкий · 3 эпик · 4 легенда. Бонус к статам от редкости = «чем дольше качаешь тем лучше» (+ уровни/ранги).
+const HERO_ROSTER := [
+	{"id": "snp_base",    "cls": 0, "name": "Снайп",         "name_en": "Sniper",           "fac": "dock", "rarity": 1, "passive": "exec"},
+	{"id": "asl_base",    "cls": 1, "name": "Штурм",         "name_en": "Assault",          "fac": "slum", "rarity": 1, "passive": "shred"},
+	{"id": "tnk_base",    "cls": 2, "name": "Танк",          "name_en": "Tank",             "fac": "zeno", "rarity": 1, "passive": "dome"},
+	{"id": "hak_base",    "cls": 3, "name": "Хакер",         "name_en": "Hacker",           "fac": "zeno", "rarity": 1, "passive": "mark"},
+	{"id": "snp_widow",   "cls": 0, "name": "Вдова",         "name_en": "Widow",            "fac": "dock", "rarity": 2, "passive": "echo"},
+	{"id": "snp_ghost",   "cls": 0, "name": "Призрак",       "name_en": "Ghost",            "fac": "zeno", "rarity": 3, "passive": "firststrike"},
+	{"id": "snp_marta",   "cls": 0, "name": "Тихая Марта",   "name_en": "Silent Marta",     "fac": "slum", "rarity": 4, "passive": "chainkill"},
+	{"id": "asl_lead",    "cls": 1, "name": "Свинец",        "name_en": "Lead",             "fac": "slum", "rarity": 1, "passive": "overclock"},
+	{"id": "asl_double",  "cls": 1, "name": "Двустволка",    "name_en": "Double-Barrel",    "fac": "dock", "rarity": 2, "passive": "multistrike"},
+	{"id": "asl_barrage", "cls": 1, "name": "Капрал Барраж", "name_en": "Corporal Barrage", "fac": "zeno", "rarity": 3, "passive": "squadspeed"},
+	{"id": "tnk_beton",   "cls": 2, "name": "Бетон",         "name_en": "Concrete",         "fac": "slum", "rarity": 1, "passive": "ceramic"},
+	{"id": "tnk_boris",   "cls": 2, "name": "Экзо-Борис",    "name_en": "Exo-Boris",        "fac": "zeno", "rarity": 2, "passive": "barrier"},
+	{"id": "tnk_wall",    "cls": 2, "name": "Стена",         "name_en": "The Wall",         "fac": "dock", "rarity": 3, "passive": "taunt"},
+	{"id": "hak_glitch",  "cls": 3, "name": "Глюк",          "name_en": "Glitch",           "fac": "zeno", "rarity": 1, "passive": "slowaura"},
+	{"id": "hak_virus",   "cls": 3, "name": "Вирусолог",     "name_en": "Virologist",       "fac": "slum", "rarity": 2, "passive": "virus"},
+	{"id": "hak_zero",    "cls": 3, "name": "Нуль-Дэй",      "name_en": "Zero-Day",         "fac": "dock", "rarity": 4, "passive": "sync"},
+	{"id": "hak_dealer",  "cls": 3, "name": "Барыга-Дрон",   "name_en": "Dealer-Drone",     "fac": "dock", "rarity": 3, "passive": "datamine"},
+]
+const RARITY_MULT := {1: 1.0, 2: 1.12, 3: 1.26, 4: 1.45}   # бонус к урону/HP за редкость
+# метаданные пассивок (id → иконка/название/описание, для UI и локализации)
+const PASSIVE_META := {
+	"exec":        {"icon": "🎯", "name": "Контрольный",  "name_en": "Execute",      "desc": "Добивает врага с HP ≤15% мгновенно",                 "desc_en": "Instantly finishes enemies at ≤15% HP"},
+	"shred":       {"icon": "🔩", "name": "Перфорация",   "name_en": "Perforation",  "desc": "Шредит броню цели — весь отряд бьёт по ней больнее", "desc_en": "Shreds target armor — whole squad hits it harder"},
+	"dome":        {"icon": "🛡", "name": "Живой купол",  "name_en": "Living Dome",  "desc": "Пока жив — весь отряд получает −12% урона",          "desc_en": "While alive — whole squad takes −12% damage"},
+	"mark":        {"icon": "🎯", "name": "Эксплойт",     "name_en": "Exploit",      "desc": "Метит цель: +20% урона всего отряда по ней",         "desc_en": "Marks a target: +20% squad damage to it"},
+	"echo":        {"icon": "🔁", "name": "Эхо",          "name_en": "Echo",         "desc": "Крит с 30% шансом бьёт по цели второй раз",          "desc_en": "A crit has 30% chance to strike the target twice"},
+	"firststrike": {"icon": "🗡", "name": "Вскрытие",     "name_en": "First Strike", "desc": "Первый удар по свежей цели — гарант-крит +40%",      "desc_en": "First hit on a fresh target — guaranteed crit +40%"},
+	"chainkill":   {"icon": "💀", "name": "Цепь смерти",  "name_en": "Death Chain",  "desc": "Добил врага → КД ульты сброшен (чейн-киллы)",        "desc_en": "Kill by execute → ult CD reset (chain-kills)"},
+	"overclock":   {"icon": "⏩", "name": "Оверклок",     "name_en": "Overclock",    "desc": "Стреляет очередью → скорострельность растёт",        "desc_en": "Sustained fire → attack speed ramps up"},
+	"multistrike": {"icon": "🔀", "name": "Раздвоение",   "name_en": "Split Shot",   "desc": "15% шанс задеть второго врага (50% урона)",          "desc_en": "15% chance to hit a 2nd enemy (50% dmg)"},
+	"squadspeed":  {"icon": "📣", "name": "Очередь",      "name_en": "Cadence",      "desc": "Каждый 10-й выстрел даёт отряду +скорость",          "desc_en": "Every 10th shot gives the squad +speed"},
+	"ceramic":     {"icon": "🧱", "name": "Керамика",     "name_en": "Ceramics",     "desc": "−50% урона от мелких ударов (чип/DoT)",              "desc_en": "−50% damage from small hits (chip/DoT)"},
+	"barrier":     {"icon": "🔷", "name": "Экзо-щит",     "name_en": "Exo-Shield",   "desc": "На низком HP навешивает барьер",                     "desc_en": "At low HP, casts a barrier"},
+	"taunt":       {"icon": "🧲", "name": "Приманка",     "name_en": "Taunt",        "desc": "Стягивает врагов на себя + 15% блок",                "desc_en": "Pulls enemies onto itself + 15% block"},
+	"slowaura":    {"icon": "🐌", "name": "Глушилка",     "name_en": "Jammer",       "desc": "Аура: враги атакуют медленнее",                      "desc_en": "Aura: enemies attack slower"},
+	"virus":       {"icon": "☣", "name": "Вирус",        "name_en": "Virus",        "desc": "AoE вешает яд-DoT, растёт по толпе",                 "desc_en": "AoE applies poison DoT, grows on crowds"},
+	"sync":        {"icon": "🔗", "name": "Синхра",       "name_en": "Sync",         "desc": "Взлом заряжает ульту всему отряду",                  "desc_en": "Hack charges the whole squad's ult"},
+	"datamine":    {"icon": "💰", "name": "Дата-майнинг", "name_en": "Data-Mining",  "desc": "Убийства дают доп-золото",                           "desc_en": "Kills grant bonus gold"},
+}
+var squad_pick := {}          # {cls(0-3): hero_id} — кто в слоте класса. Дефолт = базовые.
+var heroes_owned := {}        # {hero_id: true} — открытые герои (пока все открыты для теста Дианы)
+func _hero_by_id(hid: String) -> Dictionary:
+	for h in HERO_ROSTER:
+		if h["id"] == hid: return h
+	return HERO_ROSTER[0]
+func _squad_hero(cls: int) -> Dictionary:   # выбранный герой для слота класса (дефолт — базовый)
+	var hid: String = str(squad_pick.get(cls, ["snp_base", "asl_base", "tnk_base", "hak_base"][cls]))
+	var h := _hero_by_id(hid)
+	return h if int(h["cls"]) == cls else _hero_by_id(["snp_base", "asl_base", "tnk_base", "hak_base"][cls])
+func _hero_owned(hid: String) -> bool:
+	return true if heroes_owned.is_empty() else bool(heroes_owned.get(hid, false))   # пусто = все открыты (тест)
+func _has_passive(p: String) -> bool:
+	for hh in heroes:
+		if hh["alive"] and hh.get("passive", "") == p: return true
+	return false
+func _taunt_hero():   # 🧲 живой носитель «Приманки» (стягивает удар)
+	for hh in heroes:
+		if hh["alive"] and hh.get("passive", "") == "taunt": return hh
+	return null
+var squad_spd_t := 0.0   # 📣 «Очередь»: таймер баффа скорости отряду
+var dot_acc := 0.0       # ☣ аккумулятор тика яда (Вирус)
+
 const W := 600.0
 const H := 960.0
 const GROUND_Y := 0.55 * H   # горизонт выше → дорога ещё шире (под крупные модели + ромб)
@@ -44,7 +109,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.39" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.40" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -644,6 +709,7 @@ const TR := {
 	"g_allitems": {"ru": "🎒 ВСЕ ВЕЩИ", "en": "🎒 ALL ITEMS"},
 	"g_hint": {"ru": "Тап по пушке/спецмодулю → сравнить и надеть. Лут падает с боссов.", "en": "Tap weapon/module → compare & equip. Loot drops from bosses."},
 	"g_info": {"ru": "ℹ инфо", "en": "ℹ info"},
+	"g_pick": {"ru": "👤 сменить бойца", "en": "👤 change hero"},
 	"g_weapon": {"ru": "оружие", "en": "weapon"},
 	"g_weapon_caps": {"ru": "ОРУЖИЕ", "en": "WEAPON"},
 	"g_module": {"ru": "модуль", "en": "module"},
@@ -890,6 +956,14 @@ const TR := {
 	"pass_single":       {"ru": "🔫 Перфорация — шредит броню цели, весь отряд бьёт по ней больнее", "en": "🔫 Perforation — shreds target armor, whole squad hits it harder"},
 	"pass_tank":         {"ru": "🦾 Живой купол — пока танк жив, весь отряд получает −12% урона", "en": "🦾 Living Dome — while the tank lives, the whole squad takes −12% damage"},
 	"pass_aoe":          {"ru": "💻 Эксплойт — метит цель: +20% урона всего отряда по ней", "en": "💻 Exploit — marks a target: +20% squad damage to it"},
+	"hp_title":          {"ru": "ВЫБОР БОЙЦА · %s", "en": "PICK HERO · %s"},
+	"hp_active":         {"ru": "✓ В ОТРЯДЕ", "en": "✓ IN SQUAD"},
+	"hp_pick":           {"ru": "Поставить в отряд", "en": "Add to squad"},
+	"hp_swapped":        {"ru": "✓ %s в отряде", "en": "✓ %s in the squad"},
+	"rar1":              {"ru": "Обычный", "en": "Common"},
+	"rar2":              {"ru": "Редкий", "en": "Rare"},
+	"rar3":              {"ru": "Эпический", "en": "Epic"},
+	"rar4":              {"ru": "Легендарный", "en": "Legendary"},
 	"reboot_done":       {"ru": "♻ ПЕРЕЗАГРУЗКА +%d 🧬 ЯДЕР", "en": "♻ REBOOT +%d 🧬 CORES"},
 	"cls_for_30min":     {"ru": "на 30 мин", "en": "for 30 min"},
 	"clan_name_prefix":  {"ru": "Клан ", "en": "Clan "},
@@ -1868,7 +1942,7 @@ func _recalc_auras() -> void:
 	var fc := {"zeno": 0, "slum": 0, "dock": 0}
 	for hh in heroes:
 		if hh["alive"]:
-			var f: String = str(hh["data"].get("fac", ""))
+			var f: String = str(hh.get("fac", hh["data"].get("fac", "")))
 			if fc.has(f): fc[f] += 1
 	if fc["zeno"] >= 2: aura_ult *= 0.92        # 🏢 корпы → ульты ещё быстрее
 	if fc["slum"] >= 2: aura_atk += 0.08        # 🔪 банды → +скорость атаки
@@ -1958,9 +2032,10 @@ func _recalc_hero(hh: Dictionary) -> void:
 	var is_tank: bool = hh["data"]["atk_type"] == "tank"
 	# УРОН: у ТАНКА качается ОТВРАТИТЕЛЬНО (он HP-двигатель, не дамагер); у остальных полный ×уровень×излом
 	var dmg_scale: float = (1.0 + lv * 0.04) if is_tank else (lv * milestone)
-	hh["dmg"] = min(base_dmg * dmg_scale * aug_dmg * _ad_mult("dmg") * _clan_boost_mult("dmg") * meta_pow * _prestige_mult(), STAT_CAP)   # float: int64 overflow при stage>133
+	var rar: float = RARITY_MULT.get(int(hh.get("rarity", 1)), 1.0)   # бонус героя за редкость (гача-прогрессия)
+	hh["dmg"] = min(base_dmg * dmg_scale * rar * aug_dmg * _ad_mult("dmg") * _clan_boost_mult("dmg") * meta_pow * _prestige_mult(), STAT_CAP)   # float: int64 overflow при stage>133
 	# HP: НЕ от своего уровня, а от АУРЫ ТАНКА (его уровень, экспонента) + аугменты/модуль/surv. Качаешь танка = HP всему отряду.
-	hh["max"] = min(base_hp * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0) * _prestige_mult(), STAT_CAP)   # float; ×perma-множитель — HP растёт с престижами как и урон (иначе бот дохнет на глубине, survival-плато)
+	hh["max"] = min(base_hp * rar * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0) * _prestige_mult(), STAT_CAP)   # float; ×perma-множитель — HP растёт с престижами как и урон (иначе бот дохнет на глубине, survival-плато)
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
@@ -2581,7 +2656,7 @@ func _reset() -> void:
 	cores_peak = 0.0
 	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
-	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}
 	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	tut_step = 0; _tut_t = 0.0   # форсед-туториал: свежий старт → показать с шага 1
@@ -2606,7 +2681,8 @@ func _reset() -> void:
 	status_label.text = ""
 	# спавн отряда
 	for i in HEROES.size():
-		var h = HEROES[i]
+		var h = HEROES[i]                     # класс-база (atk_type/цвет/ульта)
+		var hero := _squad_hero(i)            # выбранный герой-вариант в слоте (фракция/редкость/пассивка/имя)
 		var fp = FORMATION[i]
 		var d := _make_char("hero%d" % (i + 1), 1, fp["s"], h["color"])
 		d.position = Vector2(fp["x"], GROUND_Y + fp["y"])
@@ -2615,6 +2691,7 @@ func _reset() -> void:
 		var g: Dictionary = _new_gear(i)
 		heroes.append({
 			"data": h, "node": d, "hp": h["hp"], "max": h["hp"], "cls": i,
+			"hid": hero["id"], "hname": _tloc(hero, "name"), "fac": hero["fac"], "rarity": int(hero["rarity"]), "passive": hero["passive"],
 			"dmg": h["dmg"], "atk_spd": h["atk"],
 			"level": 1, "lvl_cost": 30,
 			"gear": g["gear"], "equip": g["equip"],
@@ -3052,7 +3129,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3104,6 +3181,9 @@ func _load() -> void:
 	ach_claimed = {}
 	for k in ach_raw: ach_claimed[str(k)] = int(ach_raw[k])
 	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0)); daily_total = int(d.get("daily_total", 0))
+	squad_pick = {}   # JSON-ключи приходят строками → возвращаем в int(cls)
+	for k in _dct(d.get("squad_pick", {})): squad_pick[int(k)] = str(_dct(d.get("squad_pick", {}))[k])
+	heroes_owned = _dct(d.get("heroes_owned", {}))
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
 	quest_done = _arr(d.get("quest_done", [])).map(func(x): return str(x))
 	dialog_seen = _dct(d.get("dialog_seen", {}))
@@ -3228,6 +3308,8 @@ func _back_hero() -> Variant:
 
 func _spawn_wave() -> void:
 	marked_enemy = null   # 💻 сброс метки хакера при новой волне (старая цель мертва)
+	for hh in heroes: hh["oc_n"] = 0   # ⏩ сброс разгона «Оверклок» между волнами
+	squad_spd_t = 0.0
 	if endless_active:
 		_spawn_endless_wave()
 		return
@@ -3440,12 +3522,16 @@ func _process(delta: float) -> void:
 		return
 
 	# FIGHT
+	if squad_spd_t > 0.0: squad_spd_t -= delta   # 📣 бафф скорости от «Очереди» тает
 	for hh in heroes:
 		if not hh["alive"]: continue
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
+		# 🔷 «Экзо-щит»: носитель barrier на низком HP раз в 8с вешает себе барьер
+		if hh.get("passive", "") == "barrier" and hh["hp"] < 0.4 * float(hh["max"]) and hh["hp"] > 0.0 and Time.get_unix_time_from_system() >= float(hh.get("barrier_cd", 0.0)):
+			hh["shield"] = max(hh["shield"], 3.0); hh["hp"] = min(float(hh["max"]), hh["hp"] + 0.15 * float(hh["max"])); hh["barrier_cd"] = Time.get_unix_time_from_system() + 8.0
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
-			var spd: float = aura_atk * hh["atk_mult"] * (1.4 if atk_buff_t > 0.0 else 1.0)
+			var spd: float = aura_atk * hh["atk_mult"] * (1.4 if atk_buff_t > 0.0 else 1.0) * (1.0 + 0.03 * int(hh.get("oc_n", 0))) * (1.15 if squad_spd_t > 0.0 else 1.0)   # ×⏩оверклок ×📣очередь
 			var interval: float = hh["atk_spd"] / spd
 			# скорость-атаки быстрее кадра → не теряем ДПС: «лишние» атаки идут в множитель урона
 			if interval < delta:
@@ -3458,12 +3544,26 @@ func _process(delta: float) -> void:
 			_hero_hit(hh)
 	if auto_battle:
 		_auto_cast()
+	var slow: float = 1.25 if _has_passive("slowaura") else 1.0   # 🐌 «Глушилка»: враги атакуют медленнее
 	for e in enemies:
 		if not e["alive"]: continue
 		e["t"] -= delta
 		if e["t"] <= 0.0:
-			e["t"] = e["atk"]
+			e["t"] = e["atk"] * slow
 			_enemy_hit(e)
+	# ☣ ТИК ЯДА (Вирус): раз в 0.5с урон по заражённым врагам
+	dot_acc += delta
+	if dot_acc >= 0.5:
+		dot_acc = 0.0
+		var tnow := Time.get_unix_time_from_system()
+		for e in enemies:
+			if e["alive"] and int(e.get("dot_n", 0)) > 0 and float(e.get("dot_t", 0.0)) > tnow:
+				var dd: float = float(e.get("dot_dmg", 0.0)) * int(e["dot_n"])
+				if dd > 0.0:
+					e["hp"] = max(0.0, e["hp"] - dd)
+					if show_dmg: _popup(_fmt_n(dd), Color("#7ee08a"), e["node"].position + Vector2(randf_range(-8, 8), -70), 20)
+					if e["hp"] <= 0.0 and e["alive"]:
+						e["alive"] = false; _stat_add("mobs", 1); _fall_enemy(e["node"])
 	for hh in heroes:
 		if hh["shield"] > 0.0: hh["shield"] = max(0.0, hh["shield"] - delta)
 	if in_boss:
@@ -3582,36 +3682,57 @@ func _priority_target(arr: Array):
 	return best if best != null else _first_alive(arr)
 
 func _hero_hit(hh: Dictionary) -> void:
-	var e = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)
+	var atype: String = hh["data"]["atk_type"]
+	var pas: String = str(hh.get("passive", ""))
+	var e = _priority_target(enemies) if atype == "snipe" else _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.9   # атака 0.9с — медленнее/видно; между атаками — боевая стойка
 	_fire_shot(hh, e)      # 🔫 ЛЕТЯЩИЙ снаряд от дула к цели (пуля/рельса/дрон по классу) — оживляж боя
 	var base: float = min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)   # float: int64 overflow при stage>133
-	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
-	var is_crit: bool = randf() < crit_ch
+	var is_crit: bool = randf() < hh["crit"]
+	# 🗡 Вскрытие: первый удар по «свежей» цели — гарант-крит +40%
+	var fstrike := false
+	if pas == "firststrike" and not e.get("hit_seen", false):
+		is_crit = true; fstrike = true; e["hit_seen"] = true
 	if is_crit: base = min(base * hh.get("critx", hh["data"]["critx"]), STAT_CAP)
-	var atype: String = hh["data"]["atk_type"]
+	if fstrike: base = min(base * 1.4, STAT_CAP)
+	if pas == "overclock": hh["oc_n"] = min(int(hh.get("oc_n", 0)) + 1, 10)   # ⏩ копит стак скорости (применяется в _process)
+	if pas == "squadspeed":   # 📣 каждый 10-й выстрел → бафф скорости отряду
+		hh["shot_n"] = int(hh.get("shot_n", 0)) + 1
+		if hh["shot_n"] % 10 == 0: squad_spd_t = 3.0
 	# СИНХРА урон↔кадр-выстрела (Рамиль): анимация уже стартовала, урон наносим в момент вспышки (~0.4с в анимацию)
 	await get_tree().create_timer(0.4).timeout
 	if not hh.get("alive", false): return   # герой умер до выстрела — урон не проходит
+	var now := Time.get_unix_time_from_system()
 	if atype == "aoe":
-		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть + 💻 «Эксплойт» метит приоритетную цель
-		var mk = _priority_target(enemies)
-		if mk != null: marked_enemy = mk; marked_until = Time.get_unix_time_from_system() + P_MARK_DUR
+		if pas == "mark":   # 💻 «Эксплойт» метит приоритетную цель
+			var mk = _priority_target(enemies)
+			if mk != null: marked_enemy = mk; marked_until = now + P_MARK_DUR
 		for en in enemies:
 			if en["alive"]:
 				_deal(hh, en, max(1.0, base * 0.55), is_crit)
+				if pas == "virus":   # ☣ стак-DoT (яд), растёт по толпе
+					en["dot_n"] = int(en.get("dot_n", 0)) + 1
+					en["dot_t"] = now + 3.0
+					en["dot_dmg"] = max(float(en.get("dot_dmg", 0.0)), base * 0.15)
+		if pas == "sync":   # 🔗 взлом заряжает ульту всему отряду
+			for ph in heroes: ph["ult_t"] = max(0.0, ph["ult_t"] - 0.4)
 	else:
 		var tgt = _priority_target(enemies) if atype == "snipe" else _first_alive(enemies)   # перевыбор: первая цель могла умереть за 0.4с
 		if tgt != null:
-			if atype == "single":   # 🔫 «Перфорация»: штурм шредит броню цели (усиливает урон всего отряда)
-				var t := Time.get_unix_time_from_system()
-				tgt["shred_n"] = min((int(tgt.get("shred_n", 0)) + 1) if float(tgt.get("shred_t", 0.0)) > t else 1, P_SHRED_MAX)
-				tgt["shred_t"] = t + P_SHRED_DUR
-			elif atype == "snipe":   # 🎯 «Контрольный»: добить цель с низким HP (босс — строже)
+			if pas == "shred":   # 🔩 «Перфорация»: шред брони цели
+				tgt["shred_n"] = min((int(tgt.get("shred_n", 0)) + 1) if float(tgt.get("shred_t", 0.0)) > now else 1, P_SHRED_MAX)
+				tgt["shred_t"] = now + P_SHRED_DUR
+			elif pas == "exec":   # 🎯 «Контрольный»: добить цель с низким HP (босс — строже)
 				var thr: float = P_EXEC_PCT * (0.5 if tgt.get("boss", false) else 1.0)
 				if tgt["hp"] <= tgt["max"] * thr: base = max(base, tgt["hp"] + 1.0)
+			if pas == "multistrike" and randf() < 0.15:   # 🔀 «Раздвоение»: задеть 2-го врага
+				for en in enemies:
+					if en["alive"] and en != tgt:
+						_deal(hh, en, base * 0.5, is_crit); break
 			_deal(hh, tgt, base, is_crit)   # снайпер/штурм/танк — одна цель
+			if pas == "echo" and is_crit and randf() < 0.30:   # 🔁 «Эхо»: крит бьёт второй раз
+				_deal(hh, tgt, base * 0.6, true)
 
 func _stat_add(k: String, n) -> void:   # п.7: накопить и в текущий забег, и за всё время
 	stats_run[k] = stats_run.get(k, 0) + n
@@ -3641,7 +3762,9 @@ func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
 		_popup(_fmt_n(d) + ("!" if is_crit else ""), col, e["node"].position + Vector2(randf_range(-10, 10), -86), sz)
 	if e["hp"] <= 0 and e["alive"]:
 		e["alive"] = false
-		var kg: float = (50.0 if e.get("boss", false) else 5.0) * pow(GOLD_PER_STAGE, stage - 1) * aug_gold * _ad_mult("gold") * _clan_boost_mult("gold") * _event_gold_mult() * _vip_gold_mult()   # ×бусты золота ×ивент ×VIP
+		var pas: String = str(hh.get("passive", ""))
+		if pas == "chainkill": hh["ult_t"] = 0.0   # 💀 «Цепь смерти»: килл сбрасывает КД ульты (чейн-киллы)
+		var kg: float = (50.0 if e.get("boss", false) else 5.0) * pow(GOLD_PER_STAGE, stage - 1) * aug_gold * _ad_mult("gold") * _clan_boost_mult("gold") * _event_gold_mult() * _vip_gold_mult() * (1.5 if pas == "datamine" else 1.0)   # ×бусты ×ивент ×VIP ×💰дата-майнинг
 		gold += kg
 		_stat_add("gold", kg)
 		if e.get("boss", false): _stat_add("bosses", 1)
@@ -3671,13 +3794,18 @@ func _enemy_hit(e: Dictionary) -> void:
 				_popup("+" + _fmt_n(heal), Color("#3ad97a"), o["node"].position + Vector2(0, -86))
 				return
 		# некого хилить → бьёт как обычный
+	# 🧲 «Приманка»: живой боец с taunt стягивает удар на себя (кроме стрелка по бэклайну)
+	var taunter = _taunt_hero()
 	# СТРЕЛОК бьёт ЗАДНЮЮ линию (мимо танка), остальные — фронт
-	var hh = _back_hero() if et == "archer" else _front_hero()
+	var hh = _back_hero() if et == "archer" else (taunter if taunter != null else _front_hero())
 	if hh == null: return
 	e["atk_anim"] = 0.18
 	var dmg: float = e["dmg"]
 	if hh["shield"] > 0.0: dmg = dmg * 0.4
-	if _tank_alive(): dmg = dmg * (1.0 - P_TANK_DR)   # 🦾 «Живой купол»: пока танк жив — весь отряд получает меньше урона
+	if _has_passive("dome"): dmg = dmg * (1.0 - P_TANK_DR)   # 🛡 «Живой купол»: пока жив носитель — отряд получает меньше урона
+	var pas: String = str(hh.get("passive", ""))
+	if pas == "taunt" and randf() < 0.15: dmg = 0.0                       # 🧲 15% блок
+	if pas == "ceramic" and dmg < 0.10 * float(hh["max"]): dmg = dmg * 0.5   # 🧱 «Керамика»: −50% от мелких ударов
 	hh["hp"] = max(0.0, hh["hp"] - dmg)
 	_popup("-" + _fmt_n(dmg), Color("#ff4d4d"), hh["node"].position + Vector2(0, -86))
 	if hh["hp"] <= 0 and hh["alive"]:
@@ -4197,7 +4325,7 @@ func _refresh_hud() -> void:
 		var ready_ult: bool = hh["alive"] and hh["ult_t"] <= 0.0
 		hero_ults[i].disabled = not ready_ult
 		var cdtxt := ("⚡ " + _t("ready") if ready_ult else "⏱ %.0f%s" % [hh["ult_t"], _t("sec")]) if show_cd else ("⚡" if ready_ult else "")
-		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], _hname(hh["cls"]), cdtxt]
+		hero_ults[i].text = "%s %s\n%s" % [hh["data"]["icon"], hh.get("hname", _hname(hh["cls"])), cdtxt]
 		# свечение когда ульта готова (border ignite à la AFK Arena)
 		if not hh["alive"]:
 			hero_ults[i].modulate = Color(0.4, 0.4, 0.4, 1)
@@ -5873,6 +6001,42 @@ func _show_daily() -> void:
 		cb.pressed.connect(func(): panel.queue_free()); v.add_child(cb)
 
 # описание класса (Диана: непонятно чем герои различаются / что делают ульты)
+func _rarity_color(r: int) -> Color:
+	return {1: Color("#9aa0b5"), 2: Color("#5ad1ff"), 3: Color("#b46bff"), 4: Color("#ffd24a")}.get(r, Color.WHITE)
+
+func _apply_hero_pick(cls: int) -> void:   # применить выбранного героя к живому слоту (сохраняя уровень/шмот слота)
+	if cls < 0 or cls >= heroes.size(): return
+	var hero := _squad_hero(cls)
+	var hh = heroes[cls]
+	hh["hid"] = hero["id"]; hh["hname"] = _tloc(hero, "name"); hh["fac"] = hero["fac"]; hh["rarity"] = int(hero["rarity"]); hh["passive"] = hero["passive"]
+	_recalc_hero(hh); _recalc_auras(); _refresh_hud()
+
+func _open_hero_picker(cls: int) -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.82); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var title := _lbl(_t("hp_title") % _hname(cls), 19, HEROES[cls]["color"], HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 26); title.size = Vector2(W, 28); panel.add_child(title)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 62); scroll.custom_minimum_size = Vector2(440, 770); scroll.size = Vector2(440, 770); panel.add_child(scroll)
+	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 8); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
+	var cur: String = _squad_hero(cls)["id"]
+	for h in HERO_ROSTER:
+		if int(h["cls"]) != cls or not _hero_owned(str(h["id"])): continue
+		var rc := _rarity_color(int(h["rarity"]))
+		var box := PanelContainer.new()
+		var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.09, 0.11, 0.18, 0.96); sb.set_corner_radius_all(10); sb.border_color = rc; sb.set_border_width_all(3 if h["id"] == cur else 1); sb.set_content_margin_all(10)
+		box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
+		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
+		var pm = PASSIVE_META[h["passive"]]
+		v.add_child(_lbl("%s %s   [%s]   %s%s" % [HEROES[cls]["icon"], _tloc(h, "name"), _t("rar%d" % int(h["rarity"])), _tloc(FACTIONS[h["fac"]], "name"), ("   " + _t("hp_active")) if h["id"] == cur else ""], 15, rc, HORIZONTAL_ALIGNMENT_LEFT))
+		v.add_child(_lbl("%s %s — %s" % [pm["icon"], _tloc(pm, "name"), _tloc(pm, "desc")], 11, Color("#c9a6ff"), HORIZONTAL_ALIGNMENT_LEFT))
+		var pick := Button.new(); pick.text = _t("hp_active") if h["id"] == cur else _t("hp_pick"); pick.custom_minimum_size = Vector2(0, 34); pick.disabled = h["id"] == cur
+		var hid: String = str(h["id"]); var hnm: String = _tloc(h, "name")
+		pick.pressed.connect(func(): squad_pick[cls] = hid; _apply_hero_pick(cls); _save(); _popup_center(_t("hp_swapped") % hnm, HEROES[cls]["color"], 1.8); panel.queue_free(); if impl_open: _refresh_impl())
+		v.add_child(pick)
+		list.add_child(box)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 842); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+
 func _show_hero_desc(i: int) -> void:
 	var h = HEROES[i]
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
@@ -6574,7 +6738,7 @@ func _build_implants() -> void:
 		cell["hinfo"] = hinfo
 		var hbtn := Button.new(); hbtn.flat = true; hbtn.position = Vector2(16, ry); hbtn.size = Vector2(168, 134); hbtn.custom_minimum_size = Vector2(168, 134)
 		var hidx := i
-		hbtn.pressed.connect(func(): _show_hero_desc(hidx))
+		hbtn.pressed.connect(func(): _open_hero_picker(hidx))   # 👤 первая колонка = ВЫБОР ПЕРСОНАЖА (Рамиль)
 		impl_panel.add_child(hbtn)
 		cell["hlv"] = hlv
 		var wi := i
@@ -6621,8 +6785,11 @@ func _refresh_impl_static() -> void:
 	if impl_close_btn: impl_close_btn.text = _t("close_caps")
 	for i in impl_grid.size():
 		var cell = impl_grid[i]
-		if cell.has("hnm"): cell["hnm"].text = _hname(i)
-		if cell.has("hinfo"): cell["hinfo"].text = _t("g_info")
+		var hero := _squad_hero(i)   # показываем ВЫБРАННОГО героя слота (имя + цвет редкости) + подсказку «сменить»
+		if cell.has("hnm"):
+			cell["hnm"].text = "%s %s" % [PASSIVE_META[hero["passive"]]["icon"], _tloc(hero, "name")]
+			cell["hnm"].add_theme_color_override("font_color", _rarity_color(int(hero["rarity"])))
+		if cell.has("hinfo"): cell["hinfo"].text = _t("g_pick")
 
 func _refresh_impl() -> void:
 	_refresh_impl_static()
