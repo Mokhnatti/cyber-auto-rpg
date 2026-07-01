@@ -40,6 +40,7 @@ func _scroll_tex(tex: Texture2D, y0: float, h: float, factor: float, mirror := t
 		idx += 1
 
 func _process(delta: float) -> void:
+	if speed == 0.0: return   # фон стоит (в бою speed=0) → не редрисовать каждый кадр впустую (перф-ревью). Форс-редрав при смене палитры/текстур — в set_palette/set_textures.
 	scroll += speed * delta
 	queue_redraw()
 

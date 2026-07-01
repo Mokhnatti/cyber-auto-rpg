@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.30" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.31" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -593,12 +593,12 @@ const TR := {
 	"off": {"ru": "ВЫКЛ ⬜", "en": "OFF ⬜"},
 	"set_records": {"ru": "🏆 РЕКОРДЫ / СТАТИСТИКА", "en": "🏆 RECORDS / STATS"},
 	"set_refresh": {"ru": "🔄 ОБНОВИТЬ ИГРУ (свежая версия)", "en": "🔄 REFRESH GAME (latest version)"},
-	"set_nick_lbl": {"ru": "Твой ник (для теста):", "en": "Your nickname (for testing):"},
+	"set_nick_lbl": {"ru": "Твой позывной:", "en": "Your callsign:"},
 	"set_nick_btn": {"ru": "✏ Сменить ник", "en": "✏ Change nickname"},
 	"set_nick_saved": {"ru": "Ник: %s", "en": "Nickname: %s"},
 	# экран ввода ника (онбординг)
-	"nick_title": {"ru": "ВВЕДИ НИК", "en": "ENTER NICKNAME"},
-	"nick_sub": {"ru": "для теста (прогресс сохраняется по нику)", "en": "for testing (progress is saved per nickname)"},
+	"nick_title": {"ru": "ТВОЙ ПОЗЫВНОЙ", "en": "YOUR CALLSIGN"},
+	"nick_sub": {"ru": "Прогресс сохраняется по позывному", "en": "Progress is saved per callsign"},
 	"nick_unset": {"ru": "ник не задан", "en": "nickname not set"},
 	"nick_enter_btn": {"ru": "✏ ВВЕСТИ НИК", "en": "✏ ENTER NICKNAME"},
 	"nick_play_btn": {"ru": "▶ ИГРАТЬ", "en": "▶ PLAY"},
@@ -859,7 +859,7 @@ const TR := {
 	# кнопка обновления в меню «Ещё»
 	"update_btn":        {"ru": "🔄  v%s · обновить игру", "en": "🔄  v%s · update game"},
 	# QA-локализация: дочистка пропусков
-	"nick_prompt":       {"ru": "Введи ник для теста:", "en": "Enter a nickname (for testing):"},
+	"nick_prompt":       {"ru": "Введи позывной:", "en": "Enter your callsign:"},
 	"offline_title":     {"ru": "🌙 ОТРЯД РАБОТАЛ БЕЗ ТЕБЯ", "en": "🌙 YOUR SQUAD KEPT WORKING WHILE YOU WERE AWAY"},
 	"offline_body":      {"ru": "Тебя не было: %s\n\n💰 Заработано: %s золота", "en": "You were away: %s\n\n💰 Earned: %s gold"},
 	"offline_collect":   {"ru": "ЗАБРАТЬ", "en": "COLLECT"},
@@ -3892,7 +3892,9 @@ func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2
 	root.add_child(hf)
 	return root
 
+var _frames_cache := {}   # кэш SpriteFrames по имени папки (перф-ревью: не пересобирать на КАЖДЫЙ спавн — SpriteFrames можно шарить между нодами)
 func _frames(folder: String) -> SpriteFrames:
+	if _frames_cache.has(folder): return _frames_cache[folder]
 	var sf := SpriteFrames.new()
 	for spec in [["walk", 11.0, true], ["idle", 8.0, true], ["stance", 6.0, true], ["hit", 14.0, false]]:   # 4 состояния (Рамиль): idle/walk/боевая-стойка(прицел)/быстрый-выстрел
 		var anim: String = spec[0]
@@ -3906,6 +3908,7 @@ func _frames(folder: String) -> SpriteFrames:
 				break
 			sf.add_frame(anim, load(path))
 			i += 1
+	_frames_cache[folder] = sf
 	return sf
 
 func _ellipse_pts(rx: float, ry: float, n: int = 24) -> PackedVector2Array:
