@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.25" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.26" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -658,6 +658,7 @@ const TR := {
 	"rb_info": {"ru": "💪 Мощь: %s    🧬 Ядра: %d", "en": "💪 Power: %s    🧬 Cores: %d"},
 	# UI Этап 3: блок «что будет при престиже» — чтоб игрок видел что это РОСТ, а не потеря
 	"rb_keep": {"ru": "✅ ОСТАЁТСЯ НАВСЕГДА: усиления, ядра 🧬, сингулярность ⚛, ачивки и рекорды", "en": "✅ KEPT FOREVER: augments, cores 🧬, singularity ⚛, achievements & records"},
+	"rb_short": {"ru": "♻ Сбрасывает стадии и уровни → даёт ЯДРА 🧬 на вечные усиления. Что именно остаётся/сбрасывается — жми «?» сверху.", "en": "♻ Resets stages and levels → grants CORES 🧬 for permanent augments. Tap «?» above for what's kept/reset."},
 	"rb_reset": {"ru": "♻ Сбросятся: стадия и уровни бойцов — но заработаешь заново и куда быстрее", "en": "♻ Resets: stage & fighter levels — but you regain them, much faster"},
 	"rb_reward_perma": {"ru": "💪 НАГРАДА: +%d🧬 ядер → новые усиления НАВСЕГДА", "en": "💪 REWARD: +%d🧬 cores → new augments FOREVER"},
 	"rb_reward_perma_locked": {"ru": "💪 Дойди до престижа → ядра 🧬 на усиления НАВСЕГДА", "en": "💪 Reach prestige → cores 🧬 for augments FOREVER"},
@@ -2254,8 +2255,7 @@ func _refresh_reboot() -> void:
 	wsb.border_color = Color("#b46bff"); wsb.set_border_width_all(1); wsb.set_content_margin_all(10)
 	wbox.add_theme_stylebox_override("panel", wsb); wbox.custom_minimum_size = Vector2(516, 0)
 	var wv := VBoxContainer.new(); wv.add_theme_constant_override("separation", 5); wbox.add_child(wv)
-	var wk := _lbl(_t("rb_keep"), 13, Color("#7ee08a")); wk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wk.custom_minimum_size = Vector2(492, 0); wv.add_child(wk)
-	var wr := _lbl(_t("rb_reset"), 13, Color("#ff9a6b")); wr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wr.custom_minimum_size = Vector2(492, 0); wv.add_child(wr)
+	var wk := _lbl(_t("rb_short"), 13, Color("#cfe6ff")); wk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wk.custom_minimum_size = Vector2(492, 0); wv.add_child(wk)   # упрощено (фидбэк Дианы): 1 строка вместо 2 длинных боксов, детали под «?»
 	var wgt: String = (_t("rb_reward_perma") % _cores_gain()) if unlocked else _t("rb_reward_perma_locked")
 	var wg := _lbl(wgt, 14, Color("#ffd24a")); wg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wg.custom_minimum_size = Vector2(492, 0); wv.add_child(wg)
 	reboot_list.add_child(wbox)
@@ -5386,6 +5386,14 @@ func _ach_reward_text(idx: int) -> String:
 	if r.has("cores"): return _t("ach_rew_cores") % r["cores"]
 	return _t("ach_rew_scrap") % r.get("scrap", 0)
 
+func _ach_sort_key(a: Dictionary) -> int:
+	# сорт достижений (фидбэк Дианы): готовые к забору → ВЕРХ, в процессе → середина, всё выполнено+забрано → низ
+	var reached := _ach_reached(a)
+	var claimed := int(ach_claimed.get(a["id"], 0))
+	if reached > claimed: return 0
+	if claimed < a["tiers"].size(): return 1
+	return 2
+
 func _open_achievements() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -5400,8 +5408,11 @@ func _open_achievements() -> void:
 		ca.pressed.connect(func(): _ach_claim_all(); panel.queue_free(); _open_achievements())
 		panel.add_child(ca)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 222, 130); scroll.custom_minimum_size = Vector2(444, 580); scroll.size = Vector2(444, 580); panel.add_child(scroll)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED   # только вертикаль → тач-скролл не глючит (фидбэк Дианы: криво двигалось)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(444, 0); scroll.add_child(list)
-	for a in ACHIEVEMENTS:
+	var _achs := ACHIEVEMENTS.duplicate()
+	_achs.sort_custom(func(x, y): return _ach_sort_key(x) < _ach_sort_key(y))   # выполненные наверх (фидбэк Дианы)
+	for a in _achs:
 		list.add_child(_ach_row(a, panel))
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 720); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
