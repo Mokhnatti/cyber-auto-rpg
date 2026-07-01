@@ -44,7 +44,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.34" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.35" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -787,6 +787,8 @@ const TR := {
 	# батлпас
 	"bp_title":     {"ru": "🎟 БАТЛПАС — награды за стадии", "en": "🎟 BATTLE PASS — stage rewards"},
 	"bp_sub":       {"ru": "Текущая лучшая стадия: %d   ·   до след. тира: %d стадий", "en": "Best stage: %d   ·   next tier in: %d stages"},
+	"bp_season":    {"ru": "🗓 Сезон: осталось %s   ·   премиум обновится", "en": "🗓 Season: %s left   ·   premium resets"},
+	"bp_new_season":{"ru": "🎟 НОВЫЙ СЕЗОН БАТЛПАССА! Премиум-трек обновлён — оформи заново.", "en": "🎟 NEW BATTLE PASS SEASON! Premium track reset — buy again."},
 	"bp_buy_btn":   {"ru": "💎 Премиум-батлпас (жирнее награды) — %d 💎", "en": "💎 Premium pass (better rewards) — %d 💎"},
 	"bp_free_hdr":  {"ru": "🆓 БЕСПЛАТНО", "en": "🆓 FREE"},
 	"bp_prem_hdr":  {"ru": "💎 ПРЕМИУМ", "en": "💎 PREMIUM"},
@@ -950,6 +952,9 @@ const TR := {
 	"starter_btn":       {"ru": "🎁 СТАРТ-ПАК — 2.99$  (разово)", "en": "🎁 STARTER PACK — $2.99  (one-time)"},
 	"starter_perks":     {"ru": "%d💎 + %d♻ + %d🧬 — лучшая сделка новичку", "en": "%d💎 + %d♻ + %d🧬 — best newbie deal"},
 	"starter_pop":       {"ru": "🎁 Старт-пак получен! +%d💎", "en": "🎁 Starter pack claimed! +%d💎"},
+	"starter_offer_t":   {"ru": "🎁 ПРЕДЛОЖЕНИЕ НОВИЧКУ", "en": "🎁 NEWCOMER OFFER"},
+	"starter_offer_sub": {"ru": "Разовый набор для быстрого старта — больше не повторится", "en": "One-time boost to get ahead — won't repeat"},
+	"starter_later":     {"ru": "Может позже", "en": "Maybe later"},
 	"event_offer_btn":   {"ru": "📅 ИВЕНТ-ПАК (осталось %s) — 4.99$", "en": "📅 EVENT PACK (%s left) — $4.99"},
 	"event_offer_perks": {"ru": "%d💎 бонус — только на этот ивент", "en": "%d💎 bonus — this event only"},
 	"event_offer_pop":   {"ru": "📅 Ивент-пак получен! +%d💎", "en": "📅 Event pack claimed! +%d💎"},
@@ -1527,6 +1532,7 @@ const VIP_GOLD_MULT := 2.0         # ×2 всё золото пока актив
 const VIP_DAILY_DIAMONDS := 30     # стипенд алмазов при клейме дейлика, пока VIP активен
 # 🎁 СТАРТ-ПАК — разовый оффер новичку (топ-конверсия среди IAP): много ценности за низкий прайс, покупается ОДИН раз
 var starter_bought := false
+var starter_offer_seen := false    # проактивный показ старт-пака сделан (1 раз, на 2-3 сессии когда игрок уже зацепился — ресёрч FTUE: не монетизировать до хука)
 const STARTER_DIAMONDS := 500
 const STARTER_SCRAP := 250
 const STARTER_CORES := 40
@@ -1594,9 +1600,11 @@ const DAILY_REWARDS := [
 ]
 # === БАТЛПАС (Рамиль): награды по пройденным стадиям, тир каждые BP_STEP стадий ===
 const BP_STEP := 5
-var bp_claimed := []      # забранные бесплатные тиры (стадии-вехи)
-var bp_claimed_prem := [] # забранные премиум-тиры
-var bp_premium := false   # куплен ли премиум-трек
+var bp_claimed := []      # забранные бесплатные тиры (стадии-вехи) — one-time, НЕ сбрасываются посезонно
+var bp_claimed_prem := [] # забранные премиум-тиры — сбрасываются каждый сезон (перепродажа премиума)
+var bp_premium := false   # куплен ли премиум-трек (сбрасывается каждый сезон)
+var bp_season := -1       # индекс текущего сезона БП (-1 = ещё не инициализирован; сезон = BP_SEASON_DAYS дней). Классическая месячная модель: премиум-трек обновляется/перепродаётся каждый сезон
+const BP_SEASON_DAYS := 30
 const BP_PREMIUM_COST := 500   # алмазов за премиум-батлпас
 var last_discovered := "" # последнее открытое усиление (можно перебросить за алмазы — хук Tap Titans)
 const REROLL_COST := 50   # алмазов за переброс усиления
@@ -2195,7 +2203,9 @@ func _build_nick_prompt() -> void:
 		_save()
 		_send_telemetry("start")
 		if not seen_intro: _show_intro()   # первый запуск → интро-обучение
-		elif _daily_available(): _show_daily())
+		elif _daily_available(): _show_daily()
+		elif not starter_bought and not starter_offer_seen and max(best_stage, stage) >= 3:   # вернувшийся зацепившийся новичок → разовый старт-оффер (не в 1-ю сессию, не поверх дейлика)
+			starter_offer_seen = true; _save(); _show_starter_offer())
 	var upd := Button.new(); upd.text = _t("nick_refresh_btn"); upd.add_theme_font_size_override("font_size", 13); upd.custom_minimum_size = Vector2(0, 40); v.add_child(upd)
 	upd.pressed.connect(_clear_cache)
 	upd.visible = OS.has_feature("web")   # обновление кэша билда — только web (на Android обновления через стор)
@@ -2526,9 +2536,9 @@ func _reset() -> void:
 	scrap = 0
 	cores = 0
 	cores_peak = 0.0
-	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}
+	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
-	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; ach_claimed = {}; daily_day = 0; daily_streak = 0
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0
 	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	tut_step = 0; _tut_t = 0.0   # форсед-туториал: свежий старт → показать с шага 1
@@ -2999,7 +3009,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3038,7 +3048,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
-	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false))
+	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false))
 	gacha_pity = int(d.get("gacha_pity", 0)); offline_cap_lvl = clampi(int(d.get("offline_cap_lvl", 0)), 0, OFFLINE_CAP_MAX); ad_boosts = d.get("ad_boosts", {}); clan_boosts = d.get("clan_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
@@ -3046,6 +3056,7 @@ func _load() -> void:
 	bp_claimed = _arr(d.get("bp_claimed", [])).map(func(x): return int(x))
 	bp_claimed_prem = _arr(d.get("bp_claimed_prem", [])).map(func(x): return int(x))
 	bp_premium = bool(d.get("bp_premium", false))
+	bp_season = int(d.get("bp_season", -1))
 	var ach_raw: Dictionary = _dct(d.get("ach_claimed", {}))   # защита от JSON int→float (как bp_claimed): тиры строго int
 	ach_claimed = {}
 	for k in ach_raw: ach_claimed[str(k)] = int(ach_raw[k])
@@ -3355,6 +3366,7 @@ func _process(delta: float) -> void:
 	save_t -= delta
 	if save_t <= 0.0:
 		save_t = 10.0
+		_bp_check_season()   # ролловер сезона БП (перепродажа премиума) — проверяем на save-тике, UI уже построен → попап безопасен
 		_save()
 		print("TTSTATE t=%d stage=%d sub=%d boss=%d best=%d cores=%d scrap=%d gold=%d maxlvl=%d slots=%d/%d augs=%d" % [int(Time.get_ticks_msec() / 1000), stage, sub, (1 if in_boss else 0), best_stage, cores, scrap, int(gold), _max_hero_level(), equipped_augs.size(), _slot_total(), aug_lvl.size()])
 		if bot: _bot_telemetry()
@@ -4641,6 +4653,29 @@ func _buy_starter() -> void:
 	_save(); _refresh_hud()
 	_popup_center(_t("starter_pop") % STARTER_DIAMONDS, Color("#3ad97a"), 2.6)
 
+func _show_starter_offer() -> void:
+	# проактивный показ старт-пака (1 раз, вернувшемуся зацепившемуся игроку). Не всплывает в первую сессию (FTUE-ресёрч).
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3300; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.78); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.05, 0.13, 0.08, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#3ad97a"); sb.set_border_width_all(2); sb.set_content_margin_all(20)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 200, 320); card.custom_minimum_size = Vector2(400, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	v.add_child(_lbl(_t("starter_offer_t"), 20, Color("#9affc0"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("starter_offer_sub"), 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("starter_perks") % [STARTER_DIAMONDS, STARTER_SCRAP, STARTER_CORES], 14, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	var buy := Button.new(); buy.text = _t("starter_btn"); buy.custom_minimum_size = Vector2(0, 52); buy.add_theme_font_size_override("font_size", 16)
+	var bsb := StyleBoxFlat.new(); bsb.bg_color = Color("#1f7a3a"); bsb.set_corner_radius_all(10); bsb.border_color = Color("#3ad97a"); bsb.set_border_width_all(2)
+	buy.add_theme_stylebox_override("normal", bsb)
+	buy.pressed.connect(func(): _buy_starter(); panel.queue_free())
+	v.add_child(buy)
+	var later := Button.new(); later.text = _t("starter_later"); later.custom_minimum_size = Vector2(0, 40); later.add_theme_font_size_override("font_size", 13)
+	later.pressed.connect(func(): panel.queue_free())
+	v.add_child(later)
+
 func _buy_event_offer() -> void:
 	# 📅 Ивент-пак — лимитированный по времени недельного ивента (FOMO/urgency). СТАБ биллинга.
 	diamonds += 1000
@@ -4866,6 +4901,25 @@ func _gacha_result_text(results: Array) -> String:
 	return "%s\n%s\n%s" % [head, ", ".join(parts), _t("gacha_result_foot")]
 
 # === БАТЛПАС: награды по пройденным стадиям ===
+func _bp_season_idx() -> int:
+	return int(Time.get_unix_time_from_system() / (float(BP_SEASON_DAYS) * 86400.0))
+
+func _bp_season_secs_left() -> int:
+	return int(ceil(float(_bp_season_idx() + 1) * float(BP_SEASON_DAYS) * 86400.0 - Time.get_unix_time_from_system()))
+
+func _bp_check_season() -> void:
+	# новый сезон → премиум-трек обновляется (перепродажа = рекуррентный доход). Free-трек НЕ трогаем (one-time, чтоб не «отнять» у тестеров).
+	var idx := _bp_season_idx()
+	if bp_season == -1:
+		bp_season = idx; return   # первый запуск/миграция: просто зафиксировать сезон, ничего не сбрасывать
+	if idx != bp_season:
+		bp_season = idx
+		bp_premium = false
+		bp_claimed_prem = []
+		_bp_cache_stage = -1
+		_save()
+		if not bot: _popup_center(_t("bp_new_season"), Color("#ffd24a"), 3.6)
+
 func _bp_free_reward(m: int) -> Dictionary:
 	var r := {"cores": m}                       # ядра = веха (растёт со стадией)
 	if m % 25 == 0: r["diamonds"] = 30          # на круглых тирах — алмазы
@@ -5433,13 +5487,15 @@ func _open_submenu(title: String, items: Array) -> void:
 		panel.add_child(b)
 
 func _open_battlepass() -> void:
+	_bp_check_season()   # актуализировать сезон при открытии (мог смениться)
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var title := _lbl(_t("bp_title"), 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 30); title.size = Vector2(W, 30); panel.add_child(title)
+	var title := _lbl(_t("bp_title"), 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 26); title.size = Vector2(W, 28); panel.add_child(title)
+	var seas := _lbl(_t("bp_season") % _fmt_dur(_bp_season_secs_left()), 11, Color("#c9b06a"), HORIZONTAL_ALIGNMENT_CENTER); seas.position = Vector2(0, 50); seas.size = Vector2(W, 16); panel.add_child(seas)
 	var nextm: int = (int(best_stage / BP_STEP) + 1) * BP_STEP
-	var sub := _lbl(_t("bp_sub") % [best_stage, nextm - best_stage], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 62); sub.size = Vector2(W, 20); panel.add_child(sub)
+	var sub := _lbl(_t("bp_sub") % [best_stage, nextm - best_stage], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 68); sub.size = Vector2(W, 20); panel.add_child(sub)
 	if not bp_premium:
 		var pb := Button.new(); pb.text = _t("bp_buy_btn") % BP_PREMIUM_COST; pb.add_theme_font_size_override("font_size", 14); pb.add_theme_color_override("font_color", Color("#ffd24a"))
 		pb.position = Vector2(W * 0.5 - 200, 88); pb.size = Vector2(400, 38); pb.disabled = diamonds < BP_PREMIUM_COST
