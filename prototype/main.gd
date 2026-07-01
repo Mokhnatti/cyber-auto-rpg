@@ -53,16 +53,16 @@ const PASSIVE_META := {
 	"sync":        {"icon": "🔗", "name": "Синхра",       "name_en": "Sync",         "desc": "Взлом заряжает ульту всему отряду",                  "desc_en": "Hack charges the whole squad's ult"},
 	"datamine":    {"icon": "💰", "name": "Дата-майнинг", "name_en": "Data-Mining",  "desc": "Убийства дают доп-золото",                           "desc_en": "Kills grant bonus gold"},
 }
-var squad_pick := {}          # {cls(0-3): hero_id} — кто в слоте класса. Дефолт = базовые.
+var squad_pick := {}          # {slot(0-3): hero_id} — кто в слоте (свободный состав). Дефолт = базовые.
 var heroes_owned := {}        # {hero_id: true} — открытые герои (пока все открыты для теста Дианы)
+var _test_comp := ""          # бот-флаг состава (--comp=...) для баланс-теста
 func _hero_by_id(hid: String) -> Dictionary:
 	for h in HERO_ROSTER:
 		if h["id"] == hid: return h
 	return HERO_ROSTER[0]
-func _squad_hero(cls: int) -> Dictionary:   # выбранный герой для слота класса (дефолт — базовый)
-	var hid: String = str(squad_pick.get(cls, ["snp_base", "asl_base", "tnk_base", "hak_base"][cls]))
-	var h := _hero_by_id(hid)
-	return h if int(h["cls"]) == cls else _hero_by_id(["snp_base", "asl_base", "tnk_base", "hak_base"][cls])
+func _squad_hero(slot: int) -> Dictionary:   # выбранный герой для слота (СВОБОДНЫЙ состав — любой класс)
+	var hid: String = str(squad_pick.get(slot, ["snp_base", "asl_base", "tnk_base", "hak_base"][slot]))
+	return _hero_by_id(hid)
 func _hero_owned(hid: String) -> bool:
 	return true if heroes_owned.is_empty() else bool(heroes_owned.get(hid, false))   # пусто = все открыты (тест)
 func _has_passive(p: String) -> bool:
@@ -109,7 +109,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.40" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.41" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -959,6 +959,7 @@ const TR := {
 	"hp_title":          {"ru": "ВЫБОР БОЙЦА · %s", "en": "PICK HERO · %s"},
 	"hp_active":         {"ru": "✓ В ОТРЯДЕ", "en": "✓ IN SQUAD"},
 	"hp_pick":           {"ru": "Поставить в отряд", "en": "Add to squad"},
+	"hp_free":           {"ru": "Свободный состав: любой боец в любой слот", "en": "Free comp: any hero in any slot"},
 	"hp_swapped":        {"ru": "✓ %s в отряде", "en": "✓ %s in the squad"},
 	"rar1":              {"ru": "Обычный", "en": "Common"},
 	"rar2":              {"ru": "Редкий", "en": "Rare"},
@@ -1938,15 +1939,23 @@ func _recalc_auras() -> void:
 	aura_dmg = 1.0 + (0.08 if snipe else 0.0)  # снайпер → +8% урон всем
 	aura_atk = 1.0 + (0.10 if storm else 0.0)  # штурм → +10% скор. атаки
 	aura_ult = 0.82 if hak else 1.0            # хакер → ульты заряжаются быстрее
-	# ⚔ ФРАКЦ-СИНЕРГИЯ: 2+ живых бойца одной фракции → бонус (растёт с ростером под моно-фракцию)
+	# ⚔ ФРАКЦ-СИНЕРГИЯ + 🤝 КЛАСС-КОМБО: считаем живых по фракции и по классу
 	var fc := {"zeno": 0, "slum": 0, "dock": 0}
+	var cc := {"snipe": 0, "single": 0, "tank": 0, "aoe": 0}
 	for hh in heroes:
 		if hh["alive"]:
 			var f: String = str(hh.get("fac", hh["data"].get("fac", "")))
 			if fc.has(f): fc[f] += 1
+			var at: String = str(hh["data"]["atk_type"])
+			if cc.has(at): cc[at] += 1
 	if fc["zeno"] >= 2: aura_ult *= 0.92        # 🏢 корпы → ульты ещё быстрее
 	if fc["slum"] >= 2: aura_atk += 0.08        # 🔪 банды → +скорость атаки
 	if fc["dock"] >= 2: aura_hp *= 1.10         # ⚓ доки → +HP отряду
+	# 🤝 КЛАСС-КОМБО (Рамиль «2 брата-штурмовика работают вместе»): 2+ одного класса = бонус этого класса
+	if cc["snipe"] >= 2: aura_dmg += 0.15       # 🎯🎯 дуэт снайперов → +урон отряду (крит-братство)
+	if cc["single"] >= 2: aura_atk += 0.15      # 🔫🔫 братья-штурмовики → +скорость атаки
+	if cc["tank"] >= 2: aura_hp *= 1.20         # 🦾🦾 стена из танков → +HP отряду
+	if cc["aoe"] >= 2: aura_ult *= 0.88         # 💻💻 дуэт хакеров → ульты ещё быстрее
 	for hh in heroes:
 		_recalc_hero(hh)
 
@@ -2605,11 +2614,19 @@ func _ready() -> void:
 			bot_tactic = a.split("=")[1]
 		elif a.begins_with("--slot="):
 			save_slot = "_" + a.split("=")[1]
+		elif a.begins_with("--comp="):
+			_test_comp = a.split("=")[1]   # бот-тест состава (свободный состав уже включён)
 	http = HTTPRequest.new()
 	add_child(http)
 	_build_nick_prompt()
 	_reset()
 	_load()   # подхватить сейв (по слоту)
+	if _test_comp != "":   # бот-тест состава (свободный состав)
+		match _test_comp:
+			"assaults": squad_pick = {0: "asl_base", 1: "asl_lead", 2: "asl_double", 3: "asl_barrage"}   # 4 штурмовика (комбо)
+			"snipers":  squad_pick = {0: "snp_base", 1: "snp_widow", 2: "snp_ghost", 3: "snp_marta"}      # 4 снайпера
+			"mixed":    squad_pick = {0: "snp_widow", 1: "asl_lead", 2: "tnk_boris", 3: "hak_virus"}      # микс редких
+		print("TTCOMP test=%s pick=%s" % [_test_comp, str(squad_pick)])
 	_apply_location_theme()   # тема фона под активную локацию
 	_dq_refresh()   # ежедневные квесты на сегодня
 	if bot:
@@ -2681,16 +2698,17 @@ func _reset() -> void:
 	status_label.text = ""
 	# спавн отряда
 	for i in HEROES.size():
-		var h = HEROES[i]                     # класс-база (atk_type/цвет/ульта)
-		var hero := _squad_hero(i)            # выбранный герой-вариант в слоте (фракция/редкость/пассивка/имя)
-		var fp = FORMATION[i]
-		var d := _make_char("hero%d" % (i + 1), 1, fp["s"], h["color"])
+		var hero := _squad_hero(i)            # выбранный герой-вариант в слоте (свободный состав: любой класс в любой слот)
+		var hcls: int = int(hero["cls"])
+		var h = HEROES[hcls]                  # класс-БАЗА боя = КЛАСС ГЕРОЯ (atk_type/цвет/ульта/пушки/спрайт)
+		var fp = FORMATION[i]                 # позиция — по слоту
+		var d := _make_char("hero%d" % (hcls + 1), 1, fp["s"], h["color"])   # спрайт — по классу героя
 		d.position = Vector2(fp["x"], GROUND_Y + fp["y"])
 		d.z_index = int(d.position.y)   # ближние (танк) поверх дальних (снайпер)
 		world.add_child(d)
-		var g: Dictionary = _new_gear(i)
+		var g: Dictionary = _new_gear(hcls)
 		heroes.append({
-			"data": h, "node": d, "hp": h["hp"], "max": h["hp"], "cls": i,
+			"data": h, "node": d, "hp": h["hp"], "max": h["hp"], "cls": hcls,
 			"hid": hero["id"], "hname": _tloc(hero, "name"), "fac": hero["fac"], "rarity": int(hero["rarity"]), "passive": hero["passive"],
 			"dmg": h["dmg"], "atk_spd": h["atk"],
 			"level": 1, "lvl_cost": 30,
@@ -6004,10 +6022,17 @@ func _show_daily() -> void:
 func _rarity_color(r: int) -> Color:
 	return {1: Color("#9aa0b5"), 2: Color("#5ad1ff"), 3: Color("#b46bff"), 4: Color("#ffd24a")}.get(r, Color.WHITE)
 
-func _apply_hero_pick(cls: int) -> void:   # применить выбранного героя к живому слоту (сохраняя уровень/шмот слота)
-	if cls < 0 or cls >= heroes.size(): return
-	var hero := _squad_hero(cls)
-	var hh = heroes[cls]
+func _apply_hero_pick(slot: int) -> void:   # применить выбранного героя к живому слоту
+	if slot < 0 or slot >= heroes.size(): return
+	var hero := _squad_hero(slot)
+	var hh = heroes[slot]
+	var newcls: int = int(hero["cls"])
+	if int(hh["cls"]) != newcls:   # сменился КЛАСС → перенастроить бой/спрайт/шмот
+		hh["data"] = HEROES[newcls]; hh["cls"] = newcls; hh["atk_spd"] = HEROES[newcls]["atk"]
+		hh["gear"] = {"module": {}, "weapon": {}}; hh["equip"] = {"module": "", "weapon": ""}   # шмот классовый → чистим при смене класса (стейдж-4: инвентарь пер-герой)
+		if is_instance_valid(hh.get("node")):
+			var spr = hh["node"].get_node("Spr")
+			if spr: spr.sprite_frames = _frames("hero%d" % (newcls + 1)); spr.play("idle")
 	hh["hid"] = hero["id"]; hh["hname"] = _tloc(hero, "name"); hh["fac"] = hero["fac"]; hh["rarity"] = int(hero["rarity"]); hh["passive"] = hero["passive"]
 	_recalc_hero(hh); _recalc_auras(); _refresh_hud()
 
@@ -6016,23 +6041,25 @@ func _open_hero_picker(cls: int) -> void:
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.82); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	var title := _lbl(_t("hp_title") % _hname(cls), 19, HEROES[cls]["color"], HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 26); title.size = Vector2(W, 28); panel.add_child(title)
-	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 62); scroll.custom_minimum_size = Vector2(440, 770); scroll.size = Vector2(440, 770); panel.add_child(scroll)
+	var title := _lbl(_t("hp_title") % ("#%d" % (cls + 1)), 19, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 26); title.size = Vector2(W, 28); panel.add_child(title)
+	var subt := _lbl(_t("hp_free"), 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER); subt.position = Vector2(0, 48); subt.size = Vector2(W, 16); panel.add_child(subt)
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 66); scroll.custom_minimum_size = Vector2(440, 766); scroll.size = Vector2(440, 766); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 8); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
 	var cur: String = _squad_hero(cls)["id"]
 	for h in HERO_ROSTER:
-		if int(h["cls"]) != cls or not _hero_owned(str(h["id"])): continue
+		if not _hero_owned(str(h["id"])): continue   # СВОБОДНЫЙ состав — показываем ВСЕХ (любой класс в любой слот)
+		var hc: int = int(h["cls"])
 		var rc := _rarity_color(int(h["rarity"]))
 		var box := PanelContainer.new()
 		var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.09, 0.11, 0.18, 0.96); sb.set_corner_radius_all(10); sb.border_color = rc; sb.set_border_width_all(3 if h["id"] == cur else 1); sb.set_content_margin_all(10)
 		box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
 		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
 		var pm = PASSIVE_META[h["passive"]]
-		v.add_child(_lbl("%s %s   [%s]   %s%s" % [HEROES[cls]["icon"], _tloc(h, "name"), _t("rar%d" % int(h["rarity"])), _tloc(FACTIONS[h["fac"]], "name"), ("   " + _t("hp_active")) if h["id"] == cur else ""], 15, rc, HORIZONTAL_ALIGNMENT_LEFT))
+		v.add_child(_lbl("%s %s  ·  %s [%s] %s%s" % [HEROES[hc]["icon"], _tloc(h, "name"), _hname(hc), _t("rar%d" % int(h["rarity"])), _tloc(FACTIONS[h["fac"]], "name"), ("   " + _t("hp_active")) if h["id"] == cur else ""], 14, rc, HORIZONTAL_ALIGNMENT_LEFT))
 		v.add_child(_lbl("%s %s — %s" % [pm["icon"], _tloc(pm, "name"), _tloc(pm, "desc")], 11, Color("#c9a6ff"), HORIZONTAL_ALIGNMENT_LEFT))
 		var pick := Button.new(); pick.text = _t("hp_active") if h["id"] == cur else _t("hp_pick"); pick.custom_minimum_size = Vector2(0, 34); pick.disabled = h["id"] == cur
-		var hid: String = str(h["id"]); var hnm: String = _tloc(h, "name")
-		pick.pressed.connect(func(): squad_pick[cls] = hid; _apply_hero_pick(cls); _save(); _popup_center(_t("hp_swapped") % hnm, HEROES[cls]["color"], 1.8); panel.queue_free(); if impl_open: _refresh_impl())
+		var hid: String = str(h["id"]); var hnm: String = _tloc(h, "name"); var hcol: Color = HEROES[hc]["color"]
+		pick.pressed.connect(func(): squad_pick[cls] = hid; _apply_hero_pick(cls); _save(); _popup_center(_t("hp_swapped") % hnm, hcol, 1.8); panel.queue_free(); if impl_open: _refresh_impl())
 		v.add_child(pick)
 		list.add_child(box)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 842); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
