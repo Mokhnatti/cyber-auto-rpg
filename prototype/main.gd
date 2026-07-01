@@ -6,10 +6,10 @@ extends Control
 
 const HEROES := [
 	# atk_type: snipe/single/aoe/tank · hpg/dmgg = рост HP/урона за уровень (профиль класса)
-	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "hpg": 0.09, "dmgg": 0.18, "crit": 0.30, "critx": 2.2, "ult": "burst",  "ult_cd": 9.0,  "wname": "Рельса-винтовка", "wicon": "🔭", "role": "Снайпер · урон по одной цели", "role_en": "Sniper · single-target damage", "desc": "Бьёт ОДНУ цель издалека, огромный крит (30% шанс, ×2.2). В автобою сам выбирает приоритетную цель.\nУЛЬТА «Залп»: тапаешь врага → мега-крит-выстрел.", "desc_en": "Hits ONE target from afar, huge crit (30% chance, ×2.2). In auto-battle it picks the priority target itself.\nULT «Volley»: tap an enemy → mega-crit shot."},
-	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "hpg": 0.13, "dmgg": 0.15, "crit": 0.10, "critx": 1.6, "ult": "barrage","ult_cd": 8.0,  "wname": "Штурм-ган", "wicon": "🔫", "role": "Штурмовик · стабильный ДПС", "role_en": "Assault · steady DPS", "desc": "Быстрый одиночный урон, рабочая лошадка отряда. Высокая скорость атаки.\nУЛЬТА «Шквал»: очередь выстрелов по врагам, всплеск урона.", "desc_en": "Fast single-target damage, the squad's workhorse. High attack speed.\nULT «Barrage»: a burst of shots at enemies, a damage spike."},
-	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0, "wname": "Тяж-орудие", "wicon": "💥", "role": "Танк · держит удар", "role_en": "Tank · soaks hits", "desc": "Огромный запас HP (×3.75 от других), принимает урон на себя, защищает сквиши.\nУЛЬТА «Щит»: даёт щит ВСЕМУ отряду — пережить опасный момент.", "desc_en": "Huge HP pool (×3.75 of the others), soaks damage, protects the squishies.\nULT «Shield»: shields the WHOLE squad — survive a dangerous moment."},
-	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0, "wname": "Взлом-дрон", "wicon": "📡", "role": "Хакер · урон по площади", "role_en": "Hacker · area damage", "desc": "Бьёт по ВСЕМ врагам сразу (AoE) — чистит толпы.\nУЛЬТА «Взлом»: мощный импульс урона по площади + отряд бьёт +20% урона 5 сек.", "desc_en": "Hits ALL enemies at once (AoE) — clears crowds.\nULT «Hack»: a powerful AoE damage pulse + the squad deals +20% damage for 5s."},
+	{"name": "СНАЙП", "icon": "🎯", "color": Color("#00f0ff"), "hp": 80,  "dmg": 34, "atk": 2.8, "atk_type": "snipe",  "fac": "dock", "hpg": 0.09, "dmgg": 0.18, "crit": 0.30, "critx": 2.2, "ult": "burst",  "ult_cd": 9.0,  "wname": "Рельса-винтовка", "wicon": "🔭", "role": "Снайпер · урон по одной цели", "role_en": "Sniper · single-target damage", "desc": "Бьёт ОДНУ цель издалека, огромный крит (30% шанс, ×2.2). В автобою сам выбирает приоритетную цель.\nУЛЬТА «Залп»: тапаешь врага → мега-крит-выстрел.", "desc_en": "Hits ONE target from afar, huge crit (30% chance, ×2.2). In auto-battle it picks the priority target itself.\nULT «Volley»: tap an enemy → mega-crit shot."},
+	{"name": "ШТУРМ", "icon": "🔫", "color": Color("#ffb02e"), "hp": 120, "dmg": 9,  "atk": 0.7, "atk_type": "single", "fac": "slum", "hpg": 0.13, "dmgg": 0.15, "crit": 0.10, "critx": 1.6, "ult": "barrage","ult_cd": 8.0,  "wname": "Штурм-ган", "wicon": "🔫", "role": "Штурмовик · стабильный ДПС", "role_en": "Assault · steady DPS", "desc": "Быстрый одиночный урон, рабочая лошадка отряда. Высокая скорость атаки.\nУЛЬТА «Шквал»: очередь выстрелов по врагам, всплеск урона.", "desc_en": "Fast single-target damage, the squad's workhorse. High attack speed.\nULT «Barrage»: a burst of shots at enemies, a damage spike."},
+	{"name": "ТАНК",  "icon": "🦾", "color": Color("#3ad97a"), "hp": 300, "dmg": 6,  "atk": 1.6, "atk_type": "tank",   "fac": "zeno", "hpg": 0.22, "dmgg": 0.10, "crit": 0.05, "critx": 1.5, "ult": "shield", "ult_cd": 11.0, "wname": "Тяж-орудие", "wicon": "💥", "role": "Танк · держит удар", "role_en": "Tank · soaks hits", "desc": "Огромный запас HP (×3.75 от других), принимает урон на себя, защищает сквиши.\nУЛЬТА «Щит»: даёт щит ВСЕМУ отряду — пережить опасный момент.", "desc_en": "Huge HP pool (×3.75 of the others), soaks damage, protects the squishies.\nULT «Shield»: shields the WHOLE squad — survive a dangerous moment."},
+	{"name": "ХАКЕР", "icon": "💻", "color": Color("#ff2d95"), "hp": 90,  "dmg": 6,  "atk": 1.4, "atk_type": "aoe",    "fac": "zeno", "hpg": 0.13, "dmgg": 0.14, "crit": 0.08, "critx": 1.6, "ult": "hack",   "ult_cd": 10.0, "wname": "Взлом-дрон", "wicon": "📡", "role": "Хакер · урон по площади", "role_en": "Hacker · area damage", "desc": "Бьёт по ВСЕМ врагам сразу (AoE) — чистит толпы.\nУЛЬТА «Взлом»: мощный импульс урона по площади + отряд бьёт +20% урона 5 сек.", "desc_en": "Hits ALL enemies at once (AoE) — clears crowds.\nULT «Hack»: a powerful AoE damage pulse + the squad deals +20% damage for 5s."},
 ]
 const W := 600.0
 const H := 960.0
@@ -44,7 +44,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.37" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.38" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -884,6 +884,12 @@ const TR := {
 	"ok_btn":            {"ru": "OK", "en": "OK"},
 	"skipped_loot":      {"ru": "🎁 Лут за %d пропущенных боссов:\n+%d в инвентарь · +%d ♻ лом", "en": "🎁 Loot from %d skipped bosses:\n+%d to inventory · +%d ♻ scrap"},
 	"hero_desc_close":   {"ru": "× закрыть", "en": "× close"},
+	"hero_fac_lbl":      {"ru": "⚔ Фракция: %s", "en": "⚔ Faction: %s"},
+	"hero_pass_lbl":     {"ru": "🧬 Пассив: %s", "en": "🧬 Passive: %s"},
+	"pass_snipe":        {"ru": "🎯 Прицел — критами копит крит-урон · Контрольный — добивает раненых (≤15% HP)", "en": "🎯 Focus — crits stack crit-dmg · Execute — finishes low-HP (≤15%) targets"},
+	"pass_single":       {"ru": "🔫 Перфорация — шредит броню цели, весь отряд бьёт по ней больнее", "en": "🔫 Perforation — shreds target armor, whole squad hits it harder"},
+	"pass_tank":         {"ru": "🦾 Живой купол — пока танк жив, весь отряд получает −12% урона", "en": "🦾 Living Dome — while the tank lives, the whole squad takes −12% damage"},
+	"pass_aoe":          {"ru": "💻 Эксплойт — метит цель: +20% урона всего отряда по ней", "en": "💻 Exploit — marks a target: +20% squad damage to it"},
 	"reboot_done":       {"ru": "♻ ПЕРЕЗАГРУЗКА +%d 🧬 ЯДЕР", "en": "♻ REBOOT +%d 🧬 CORES"},
 	"cls_for_30min":     {"ru": "на 30 мин", "en": "for 30 min"},
 	"clan_name_prefix":  {"ru": "Клан ", "en": "Clan "},
@@ -1815,6 +1821,35 @@ var aura_hp := 1.0
 var aura_dmg := 1.0
 var aura_atk := 1.0
 var aura_ult := 1.0
+# === ПАССИВКИ КЛАССОВ (ресёрч по топ auto-RPG) — числа = ручки под калибровку ботами ===
+const P_AIM_PCT := 0.25       # 🎯 «Прицел»: +крит-урон за стак
+const P_AIM_MAX := 3
+const P_AIM_DUR := 4.0
+const P_EXEC_PCT := 0.15      # 🎯 «Контрольный»: добивание цели с HP ниже доли (босс — вдвое строже)
+const P_SHRED_PCT := 0.04     # 🔫 «Перфорация»: +урон ВСЕГО отряда по цели за стак (шред брони)
+const P_SHRED_MAX := 6
+const P_SHRED_DUR := 3.0
+const P_MARK_PCT := 0.20      # 💻 «Эксплойт»: +урон отряда по меченой цели
+const P_MARK_DUR := 5.0
+const P_TANK_DR := 0.12       # 🦾 «Живой купол»: −урон всему отряду пока танк жив
+const FACTIONS := {
+	"zeno": {"name": "🏢 ZenoCore",          "name_en": "🏢 ZenoCore"},
+	"slum": {"name": "🔪 Трущобные банды",   "name_en": "🔪 Slum Gangs"},
+	"dock": {"name": "⚓ Доковый синдикат",   "name_en": "⚓ Dock Syndicate"},
+}
+var marked_enemy = null       # 💻 текущая цель-метка хакера
+var marked_until := 0.0
+func _tank_alive() -> bool:   # 🦾 «Живой купол» активен пока жив хоть один танк
+	for hh in heroes:
+		if hh["alive"] and hh["data"]["atk_type"] == "tank": return true
+	return false
+func _aim_stacks(hh: Dictionary) -> int:   # 🎯 действующие стаки «Прицела»
+	return int(hh.get("aim_n", 0)) if float(hh.get("aim_t", 0.0)) > Time.get_unix_time_from_system() else 0
+func _target_amp(e: Dictionary) -> float:  # множитель урона по цели от дебафов (шред брони + метка)
+	var m := 1.0; var t := Time.get_unix_time_from_system()
+	if float(e.get("shred_t", 0.0)) > t: m += P_SHRED_PCT * int(e.get("shred_n", 0))
+	if e == marked_enemy and marked_until > t: m += P_MARK_PCT
+	return m
 var atk_buff_t := 0.0   # временный бафф скорости атаки от ульты штурма
 var aim_mode := false   # снайпер целится (ждём тап по врагу)
 var aim_hero = null
@@ -1834,6 +1869,15 @@ func _recalc_auras() -> void:
 	aura_dmg = 1.0 + (0.08 if snipe else 0.0)  # снайпер → +8% урон всем
 	aura_atk = 1.0 + (0.10 if storm else 0.0)  # штурм → +10% скор. атаки
 	aura_ult = 0.82 if hak else 1.0            # хакер → ульты заряжаются быстрее
+	# ⚔ ФРАКЦ-СИНЕРГИЯ: 2+ живых бойца одной фракции → бонус (растёт с ростером под моно-фракцию)
+	var fc := {"zeno": 0, "slum": 0, "dock": 0}
+	for hh in heroes:
+		if hh["alive"]:
+			var f: String = str(hh["data"].get("fac", ""))
+			if fc.has(f): fc[f] += 1
+	if fc["zeno"] >= 2: aura_ult *= 0.92        # 🏢 корпы → ульты ещё быстрее
+	if fc["slum"] >= 2: aura_atk += 0.08        # 🔪 банды → +скорость атаки
+	if fc["dock"] >= 2: aura_hp *= 1.10         # ⚓ доки → +HP отряду
 	for hh in heroes:
 		_recalc_hero(hh)
 
@@ -3188,6 +3232,7 @@ func _back_hero() -> Variant:
 	return null
 
 func _spawn_wave() -> void:
+	marked_enemy = null   # 💻 сброс метки хакера при новой волне (старая цель мертва)
 	if endless_active:
 		_spawn_endless_wave()
 		return
@@ -3550,17 +3595,30 @@ func _hero_hit(hh: Dictionary) -> void:
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
 	if is_crit: base = min(base * hh.get("critx", hh["data"]["critx"]), STAT_CAP)
+	var atype: String = hh["data"]["atk_type"]
+	if atype == "snipe" and is_crit:   # 🎯 «Прицел»: текущие стаки усиливают ЭТОТ крит, затем растёт стак
+		base = min(base * (1.0 + P_AIM_PCT * _aim_stacks(hh)), STAT_CAP)
+		hh["aim_n"] = min(_aim_stacks(hh) + 1, P_AIM_MAX); hh["aim_t"] = Time.get_unix_time_from_system() + P_AIM_DUR
 	# СИНХРА урон↔кадр-выстрела (Рамиль): анимация уже стартовала, урон наносим в момент вспышки (~0.4с в анимацию)
 	await get_tree().create_timer(0.4).timeout
 	if not hh.get("alive", false): return   # герой умер до выстрела — урон не проходит
-	if hh["data"]["atk_type"] == "aoe":
-		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть
+	if atype == "aoe":
+		# ХАКЕР: взлом — бьёт ВСЕХ врагов по чуть-чуть + 💻 «Эксплойт» метит приоритетную цель
+		var mk = _priority_target(enemies)
+		if mk != null: marked_enemy = mk; marked_until = Time.get_unix_time_from_system() + P_MARK_DUR
 		for en in enemies:
 			if en["alive"]:
 				_deal(hh, en, max(1.0, base * 0.55), is_crit)
 	else:
-		var tgt = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)   # перевыбор: первая цель могла умереть за 0.4с
+		var tgt = _priority_target(enemies) if atype == "snipe" else _first_alive(enemies)   # перевыбор: первая цель могла умереть за 0.4с
 		if tgt != null:
+			if atype == "single":   # 🔫 «Перфорация»: штурм шредит броню цели (усиливает урон всего отряда)
+				var t := Time.get_unix_time_from_system()
+				tgt["shred_n"] = min((int(tgt.get("shred_n", 0)) + 1) if float(tgt.get("shred_t", 0.0)) > t else 1, P_SHRED_MAX)
+				tgt["shred_t"] = t + P_SHRED_DUR
+			elif atype == "snipe":   # 🎯 «Контрольный»: добить цель с низким HP (босс — строже)
+				var thr: float = P_EXEC_PCT * (0.5 if tgt.get("boss", false) else 1.0)
+				if tgt["hp"] <= tgt["max"] * thr: base = max(base, tgt["hp"] + 1.0)
 			_deal(hh, tgt, base, is_crit)   # снайпер/штурм/танк — одна цель
 
 func _stat_add(k: String, n) -> void:   # п.7: накопить и в текущий забег, и за всё время
@@ -3579,7 +3637,7 @@ func _load_stats(dst: Dictionary, src) -> void:
 			dst[k] = float(src[k]) if k in ["dmg", "gold", "time"] else int(src[k])
 
 func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
-	d = min(d, STAT_CAP)   # кламп: ульт/босс-множители (×12 снайпер, ×5 хак) не должны раздуть dmg за 1.8e308→inf
+	d = min(d * _target_amp(e), STAT_CAP)   # ×дебафы цели (🔫шред брони + 💻метка) · кламп от int64/inf раздува ульт-множителями
 	e["hp"] = max(0.0, e["hp"] - d)
 	_stat_add("dmg", d)                     # п.7: статистика урона/критов/рекорд удара
 	hero_dmg_run[hh["data"]["name"]] = float(hero_dmg_run.get(hh["data"]["name"], 0.0)) + d   # урон per-герой → % вклада в статистике (фидбэк Дианы)
@@ -3627,6 +3685,7 @@ func _enemy_hit(e: Dictionary) -> void:
 	e["atk_anim"] = 0.18
 	var dmg: float = e["dmg"]
 	if hh["shield"] > 0.0: dmg = dmg * 0.4
+	if _tank_alive(): dmg = dmg * (1.0 - P_TANK_DR)   # 🦾 «Живой купол»: пока танк жив — весь отряд получает меньше урона
 	hh["hp"] = max(0.0, hh["hp"] - dmg)
 	_popup("-" + _fmt_n(dmg), Color("#ff4d4d"), hh["node"].position + Vector2(0, -86))
 	if hh["hp"] <= 0 and hh["alive"]:
@@ -5836,6 +5895,11 @@ func _show_hero_desc(i: int) -> void:
 	v.add_child(_lbl("%s %s" % [h["icon"], _hname(i)], 22, h["color"], HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(_tloc(h, "role"), 14, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
 	var d := _lbl(_tloc(h, "desc"), 14, Color("#c7ccea"), HORIZONTAL_ALIGNMENT_CENTER); d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; d.custom_minimum_size = Vector2(384, 0); v.add_child(d)
+	# ⚔ фракция + 🧬 пассивка (Рамиль: бойцы должны быть разные)
+	var fac_key: String = str(h.get("fac", "zeno"))
+	v.add_child(_lbl(_t("hero_fac_lbl") % _tloc(FACTIONS.get(fac_key, FACTIONS["zeno"]), "name"), 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	var pk: String = {"snipe": "pass_snipe", "single": "pass_single", "tank": "pass_tank", "aoe": "pass_aoe"}.get(h["atk_type"], "pass_snipe")
+	var pl := _lbl(_t("hero_pass_lbl") % _t(pk), 12, Color("#b46bff"), HORIZONTAL_ALIGNMENT_CENTER); pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; pl.custom_minimum_size = Vector2(384, 0); v.add_child(pl)
 	v.add_child(_lbl("🔫 %s   ❤ %d   ⚔ %d   🎯 %d%%" % [h["wname"], h["hp"], h["dmg"], int(h["crit"] * 100)], 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
 	var bc := Button.new(); bc.text = _t("hero_desc_close"); bc.custom_minimum_size = Vector2(0, 44); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
