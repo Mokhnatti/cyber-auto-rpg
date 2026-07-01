@@ -44,7 +44,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.35" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.36" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -782,6 +782,8 @@ const TR := {
 	"dr_day_short": {"ru": "Д%d", "en": "D%d"},
 	"dr_claim_btn": {"ru": "🎁 ЗАБРАТЬ ДЕНЬ %d (+%s)", "en": "🎁 CLAIM DAY %d (+%s)"},
 	"dr_pop":       {"ru": "🎁 День %d: +%s!", "en": "🎁 Day %d: +%s!"},
+	"login_milestone_pop": {"ru": "🏅 %d-й день в игре! Бонус за верность: +%d💎", "en": "🏅 Day %d in game! Loyalty bonus: +%d💎"},
+	"dr_total":     {"ru": "🏅 Всего дней: %d", "en": "🏅 Total days: %d"},
 	"dr_done":      {"ru": "✅ Награда забрана. Возвращайся завтра за днём %d!", "en": "✅ Reward claimed. Come back tomorrow for day %d!"},
 	"dr_close":     {"ru": "ЗАКРЫТЬ", "en": "CLOSE"},
 	# батлпас
@@ -1589,6 +1591,8 @@ var last_wipe_stage := 0
 # === ДЕЙЛИКИ + СТРИК (Рамиль): награда за заход в новый день, 7-дневный цикл ===
 var daily_day := 0        # номер последнего дня когда забрал (unix/86400)
 var daily_streak := 0     # текущий день цикла 1..7
+var daily_total := 0      # ВСЕГО забранных дней (кумулятивно, не сбрасывается) — для вех «за верность» (ретеншн-ресёрч; не FOMO-сброс, чтобы не ломать прощающий дизайн стрика Дианы)
+const LOGIN_MILESTONES := {7: 50, 14: 90, 30: 220, 60: 450, 100: 900}   # день N всего → бонус 💎 (разово)
 const DAILY_REWARDS := [
 	{"scrap": 100},                  # день 1
 	{"cores": 20, "scrap": 150},     # день 2
@@ -2538,7 +2542,7 @@ func _reset() -> void:
 	cores_peak = 0.0
 	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
-	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0
 	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	tut_step = 0; _tut_t = 0.0   # форсед-туториал: свежий старт → показать с шага 1
@@ -3009,7 +3013,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3060,7 +3064,7 @@ func _load() -> void:
 	var ach_raw: Dictionary = _dct(d.get("ach_claimed", {}))   # защита от JSON int→float (как bp_claimed): тиры строго int
 	ach_claimed = {}
 	for k in ach_raw: ach_claimed[str(k)] = int(ach_raw[k])
-	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0))
+	daily_day = int(d.get("daily_day", 0)); daily_streak = int(d.get("daily_streak", 0)); daily_total = int(d.get("daily_total", 0))
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
 	quest_done = _arr(d.get("quest_done", [])).map(func(x): return str(x))
 	dialog_seen = _dct(d.get("dialog_seen", {}))
@@ -5690,6 +5694,11 @@ func _claim_daily(panel: Control) -> void:
 	var r: Dictionary = DAILY_REWARDS[ns - 1]
 	cores += int(r.get("cores", 0)); diamonds += int(r.get("diamonds", 0)); scrap += int(r.get("scrap", 0))
 	daily_day = _today_num(); daily_streak = ns
+	daily_total += 1   # кумулятивный счётчик верности
+	if LOGIN_MILESTONES.has(daily_total):   # 🏅 веха «за верность» — разовый бонус на N-й день всего
+		var mbonus: int = LOGIN_MILESTONES[daily_total]
+		diamonds += mbonus
+		_popup_center(_t("login_milestone_pop") % [daily_total, mbonus], Color("#b46bff"), 3.2)
 	if _vip_active():   # 👑 VIP-стипенд: доп. алмазы каждый день пока подписка активна (рекуррентная ценность)
 		diamonds += VIP_DAILY_DIAMONDS
 		_popup_center(_t("vip_daily_pop") % VIP_DAILY_DIAMONDS, Color("#ffd24a"), 2.0)
@@ -5711,6 +5720,7 @@ func _show_daily() -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
 	v.add_child(_lbl(_t("dr_title"), 19, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(_t("dr_streak") % ns, 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("dr_total") % daily_total, 11, Color("#b46bff"), HORIZONTAL_ALIGNMENT_CENTER))   # 🏅 кумулятивная верность + вехи
 	# трек 7 дней
 	var grid := HBoxContainer.new(); grid.add_theme_constant_override("separation", 5); grid.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_child(grid)
 	for day in range(1, 8):
