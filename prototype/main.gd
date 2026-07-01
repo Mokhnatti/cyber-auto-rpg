@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.24" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.25" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -788,7 +788,7 @@ const TR := {
 	"bp_stage_n":   {"ru": "ст.%d", "en": "stg %d"},
 	# ачивки
 	"ach_title":     {"ru": "📖 ДОСТИЖЕНИЯ", "en": "📖 ACHIEVEMENTS"},
-	"ach_sub":       {"ru": "Готово к забору: %d   ·   награда → 💎/🧬/♻", "en": "Ready to claim: %d   ·   reward → 💎/🧬/♻"},
+	"ach_sub":       {"ru": "Готово к забору: %d   ·   награда → 💎/♻", "en": "Ready to claim: %d   ·   reward → 💎/♻"},
 	"ach_claim_all": {"ru": "✨ ЗАБРАТЬ ВСЁ (%d)", "en": "✨ CLAIM ALL (%d)"},
 	"ach_all_done":  {"ru": "✓ ВСЁ ВЫПОЛНЕНО", "en": "✓ ALL COMPLETED"},
 	"ach_progress":  {"ru": "%s / %s  → награда %s", "en": "%s / %s  → reward %s"},
@@ -5445,8 +5445,10 @@ func _daily_available() -> bool:
 	return not bot and _today_num() > daily_day
 
 func _daily_next_streak() -> int:
-	if _today_num() == daily_day + 1: return (daily_streak % 7) + 1   # подряд → следующий день цикла
-	return 1                                                          # пропуск/первый → сброс на день 1
+	# ЛЮБОЙ новый день (не строго подряд) → следующий день цикла. Фикс бага «залипает на дне 1» (фидбэк Дианы):
+	# раньше требовалось _today_num()==daily_day+1 (ровно завтра), пропуск дня сбрасывал на 1 → тестер всегда получал первый.
+	if daily_day > 0 and _today_num() > daily_day: return (daily_streak % 7) + 1
+	return 1                                                          # самый первый заход
 
 func _daily_reward_text(r: Dictionary) -> String:
 	var p := []
