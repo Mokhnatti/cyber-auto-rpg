@@ -44,7 +44,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.38" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.39" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -886,7 +886,7 @@ const TR := {
 	"hero_desc_close":   {"ru": "× закрыть", "en": "× close"},
 	"hero_fac_lbl":      {"ru": "⚔ Фракция: %s", "en": "⚔ Faction: %s"},
 	"hero_pass_lbl":     {"ru": "🧬 Пассив: %s", "en": "🧬 Passive: %s"},
-	"pass_snipe":        {"ru": "🎯 Прицел — критами копит крит-урон · Контрольный — добивает раненых (≤15% HP)", "en": "🎯 Focus — crits stack crit-dmg · Execute — finishes low-HP (≤15%) targets"},
+	"pass_snipe":        {"ru": "🎯 Контрольный — добивает раненых врагов (HP ≤15%) мгновенно", "en": "🎯 Execute — instantly finishes wounded enemies (HP ≤15%)"},
 	"pass_single":       {"ru": "🔫 Перфорация — шредит броню цели, весь отряд бьёт по ней больнее", "en": "🔫 Perforation — shreds target armor, whole squad hits it harder"},
 	"pass_tank":         {"ru": "🦾 Живой купол — пока танк жив, весь отряд получает −12% урона", "en": "🦾 Living Dome — while the tank lives, the whole squad takes −12% damage"},
 	"pass_aoe":          {"ru": "💻 Эксплойт — метит цель: +20% урона всего отряда по ней", "en": "💻 Exploit — marks a target: +20% squad damage to it"},
@@ -1821,10 +1821,7 @@ var aura_hp := 1.0
 var aura_dmg := 1.0
 var aura_atk := 1.0
 var aura_ult := 1.0
-# === ПАССИВКИ КЛАССОВ (ресёрч по топ auto-RPG) — числа = ручки под калибровку ботами ===
-const P_AIM_PCT := 0.25       # 🎯 «Прицел»: +крит-урон за стак
-const P_AIM_MAX := 3
-const P_AIM_DUR := 4.0
+# === ПАССИВКИ КЛАССОВ (ресёрч по топ auto-RPG) — ПО 1 сигнатурной на класс (Рамиль: «по 1»), числа = ручки под калибровку ботами ===
 const P_EXEC_PCT := 0.15      # 🎯 «Контрольный»: добивание цели с HP ниже доли (босс — вдвое строже)
 const P_SHRED_PCT := 0.04     # 🔫 «Перфорация»: +урон ВСЕГО отряда по цели за стак (шред брони)
 const P_SHRED_MAX := 6
@@ -1843,8 +1840,6 @@ func _tank_alive() -> bool:   # 🦾 «Живой купол» активен п
 	for hh in heroes:
 		if hh["alive"] and hh["data"]["atk_type"] == "tank": return true
 	return false
-func _aim_stacks(hh: Dictionary) -> int:   # 🎯 действующие стаки «Прицела»
-	return int(hh.get("aim_n", 0)) if float(hh.get("aim_t", 0.0)) > Time.get_unix_time_from_system() else 0
 func _target_amp(e: Dictionary) -> float:  # множитель урона по цели от дебафов (шред брони + метка)
 	var m := 1.0; var t := Time.get_unix_time_from_system()
 	if float(e.get("shred_t", 0.0)) > t: m += P_SHRED_PCT * int(e.get("shred_n", 0))
@@ -3596,9 +3591,6 @@ func _hero_hit(hh: Dictionary) -> void:
 	var is_crit: bool = randf() < crit_ch
 	if is_crit: base = min(base * hh.get("critx", hh["data"]["critx"]), STAT_CAP)
 	var atype: String = hh["data"]["atk_type"]
-	if atype == "snipe" and is_crit:   # 🎯 «Прицел»: текущие стаки усиливают ЭТОТ крит, затем растёт стак
-		base = min(base * (1.0 + P_AIM_PCT * _aim_stacks(hh)), STAT_CAP)
-		hh["aim_n"] = min(_aim_stacks(hh) + 1, P_AIM_MAX); hh["aim_t"] = Time.get_unix_time_from_system() + P_AIM_DUR
 	# СИНХРА урон↔кадр-выстрела (Рамиль): анимация уже стартовала, урон наносим в момент вспышки (~0.4с в анимацию)
 	await get_tree().create_timer(0.4).timeout
 	if not hh.get("alive", false): return   # герой умер до выстрела — урон не проходит
