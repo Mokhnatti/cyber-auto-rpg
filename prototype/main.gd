@@ -44,7 +44,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.36" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.37" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -3545,6 +3545,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	var e = _priority_target(enemies) if hh["data"]["atk_type"] == "snipe" else _first_alive(enemies)
 	if e == null: return
 	hh["atk_anim"] = 0.9   # атака 0.9с — медленнее/видно; между атаками — боевая стойка
+	_fire_shot(hh, e)      # 🔫 ЛЕТЯЩИЙ снаряд от дула к цели (пуля/рельса/дрон по классу) — оживляж боя
 	var base: float = min(hh["dmg"] * aura_dmg * hack_mult * hh.get("hitmult", 1.0), STAT_CAP)   # float: int64 overflow при stage>133
 	var crit_ch: float = hh["crit"]   # база крит + надетые шмотки
 	var is_crit: bool = randf() < crit_ch
@@ -3934,6 +3935,83 @@ func _popup(txt: String, col: Color, pos: Vector2, size := 26) -> void:
 		l.visible = false
 		_popup_active -= 1
 		_popup_pool.append(l))
+
+# --- СНАРЯДЫ (Рамиль: «пули/дрон должны ЛЕТЕТЬ», а не просто урон у врага) ---
+func _fire_shot(hh: Dictionary, tgt: Dictionary) -> void:
+	if bot: return   # ботам визуал не нужен (16x headless-прогоны — экономим)
+	if not is_instance_valid(hh.get("node")) or not is_instance_valid(tgt.get("node")): return
+	var from: Vector2 = hh["node"].position + Vector2(30, -58)   # дуло (герои смотрят вправо, враги справа)
+	var to: Vector2 = tgt["node"].position + Vector2(0, -55)
+	var col: Color = hh["data"]["color"]
+	match hh["data"]["atk_type"]:
+		"snipe": _proj_tracer(from, to, Color("#7ff0ff"))                 # рельса — мгновенный яркий луч
+		"aoe":   _proj_drone(from, to, Color("#ff2d95"))                  # хакер — дрон летит и рвётся кольцом
+		"tank":  _proj_bullet(from, to, Color("#8affab"), 0.28, 7.0, 20.0)  # тяж-снаряд, медленнее/толще
+		_:       _proj_bullet(from, to, Color("#ffce6a"), 0.18, 4.0, 15.0)  # штурм — быстрая пуля
+	_muzzle_flash(from, col)
+
+func _muzzle_flash(pos: Vector2, col: Color) -> void:
+	var f := Polygon2D.new()
+	f.polygon = _ellipse_pts(8.0, 8.0, 8)
+	f.color = Color(col.r, col.g, col.b, 0.9); f.position = pos; f.z_index = 46
+	world.add_child(f)
+	var tw := create_tween(); tw.set_parallel(true)
+	tw.tween_property(f, "scale", Vector2(2.0, 2.0), 0.12)
+	tw.tween_property(f, "modulate:a", 0.0, 0.12)
+	tw.chain().tween_callback(f.queue_free)
+
+func _proj_bullet(from: Vector2, to: Vector2, col: Color, dur: float, w: float, trail: float) -> void:
+	var p := Line2D.new()
+	var dir := (to - from).normalized()
+	p.points = PackedVector2Array([Vector2.ZERO, -dir * trail])   # короткий хвост-трейл за пулей
+	p.width = w; p.default_color = col; p.z_index = 45
+	p.begin_cap_mode = Line2D.LINE_CAP_ROUND; p.end_cap_mode = Line2D.LINE_CAP_ROUND
+	p.position = from
+	world.add_child(p)
+	var tw := create_tween()
+	tw.tween_property(p, "position", to, dur)
+	tw.tween_callback(func(): _impact_spark(to, col); p.queue_free())
+
+func _proj_tracer(from: Vector2, to: Vector2, col: Color) -> void:
+	var p := Line2D.new()   # рельса: длинный луч на всю трассу, быстро гаснет
+	p.points = PackedVector2Array([from, to])
+	p.width = 5.0; p.default_color = Color(col.r, col.g, col.b, 0.95); p.z_index = 45
+	p.begin_cap_mode = Line2D.LINE_CAP_ROUND; p.end_cap_mode = Line2D.LINE_CAP_ROUND
+	world.add_child(p)
+	_impact_spark(to, col)
+	var tw := create_tween()
+	tw.tween_property(p, "modulate:a", 0.0, 0.16)
+	tw.tween_callback(p.queue_free)
+
+func _proj_drone(from: Vector2, to: Vector2, col: Color) -> void:
+	var d := Polygon2D.new()   # ромб-дрон, крутится в полёте, на месте — кольцо-взрыв (AoE)
+	d.polygon = PackedVector2Array([Vector2(0, -7), Vector2(7, 0), Vector2(0, 7), Vector2(-7, 0)])
+	d.color = col; d.z_index = 45; d.position = from
+	world.add_child(d)
+	var tw := create_tween()
+	tw.tween_property(d, "position", to, 0.26)
+	tw.parallel().tween_property(d, "rotation", TAU, 0.26)
+	tw.tween_callback(func(): _aoe_ring(to, col); d.queue_free())
+
+func _impact_spark(pos: Vector2, col: Color) -> void:
+	var s := Polygon2D.new()
+	s.polygon = _ellipse_pts(5.0, 5.0, 8)
+	s.color = Color(col.r, col.g, col.b, 0.85); s.position = pos; s.z_index = 46
+	world.add_child(s)
+	var tw := create_tween(); tw.set_parallel(true)
+	tw.tween_property(s, "scale", Vector2(2.4, 2.4), 0.18)
+	tw.tween_property(s, "modulate:a", 0.0, 0.18)
+	tw.chain().tween_callback(s.queue_free)
+
+func _aoe_ring(pos: Vector2, col: Color) -> void:
+	var r := Line2D.new()   # расширяющееся кольцо (взлом по площади)
+	var pts := _ellipse_pts(10.0, 10.0, 20); pts.append(pts[0])   # замкнуть контур
+	r.points = pts; r.width = 3.0; r.default_color = col; r.position = pos; r.z_index = 44
+	world.add_child(r)
+	var tw := create_tween(); tw.set_parallel(true)
+	tw.tween_property(r, "scale", Vector2(4.5, 4.5), 0.32)
+	tw.tween_property(r, "modulate:a", 0.0, 0.32)
+	tw.chain().tween_callback(r.queue_free)
 
 # --- КОНСТРУКТОР БОЛВАНЧИКА ---
 func _make_char(folder: String, facing: int, scale: float, glow: Color) -> Node2D:
