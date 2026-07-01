@@ -43,7 +43,7 @@ var march_t := 0.0
 var save_t := 5.0         # автосейв-таймер
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.27" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.28" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -618,6 +618,9 @@ const TR := {
 	"st_prestiges": {"ru": "♻ Престижей сделано", "en": "♻ Prestiges done"},
 	"st_maxhit": {"ru": "💥 Самый большой удар", "en": "💥 Biggest hit"},
 	"st_stats_title": {"ru": "📊 СТАТИСТИКА", "en": "📊 STATISTICS"},
+	"st_heroes_title": {"ru": "🦾 ПО БОЙЦАМ (урон · вклад)", "en": "🦾 BY FIGHTER (dmg · share)"},
+	"st_hero_dmg": {"ru": "урон", "en": "damage"},
+	"st_hero_share": {"ru": "% за забег", "en": "run %"},
 	"st_col_run": {"ru": "забег", "en": "run"},
 	"st_col_all": {"ru": "всего", "en": "total"},
 	"st_mobs": {"ru": "☠ Убито мобов", "en": "☠ Mobs killed"},
@@ -1594,6 +1597,7 @@ var meta_slot := 0
 # === РЕКОРДЫ/СТАТИСТИКА (п.7) ===
 var stats_run := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
 var stats_all := {"dmg": 0.0, "mobs": 0, "bosses": 0, "crits": 0, "gold": 0.0, "scrap": 0, "cores": 0, "time": 0.0, "ads": 0, "pulls": 0, "drops": 0}
+var hero_dmg_run := {}    # накопленный урон ПО КАЖДОМУ герою за забег (ключ = имя класса) → для % вклада в статистике (фидбэк Дианы)
 # === ЕЖЕДНЕВНЫЕ КВЕСТЫ (Рамиль): 3 задачи/день, прогресс = текущий стат − снимок на старте дня ===
 const DAILY_QUESTS := [
 	{"id": "kill",  "icon": "🗡", "name": "Зачистка",         "name_en": "Sweep",           "desc": "dq_d_kill",  "stat": "mobs",   "target": 200,    "rew": {"diamonds": 30}},
@@ -1940,7 +1944,8 @@ func _reboot() -> void:
 	rec_prestiges += 1
 	onboarded = true   # онбординг: 1-й престиж → гол-баннер исчезает навсегда
 	if goal_banner: goal_banner.visible = false
-	_zero_stats(stats_run)          # новый забег → текущая статистика обнуляется (рекорды/all — нет)
+	_zero_stats(stats_run)          # новый забег → текущая статистика обнуляется
+	hero_dmg_run.clear()            # + сброс урона per-герой (фидбэк Дианы: % вклада за забег) (рекорды/all — нет)
 	cores_peak = max(cores_peak, _prestige_score())   # подняли планку (пока уровни/стадия ещё не сброшены)
 	best_stage = max(best_stage, stage)
 	stage = max(1, int(floor(best_stage * 0.5)))   # Memory-Bonus: старт от лучшей стадии
@@ -2856,6 +2861,15 @@ func _refresh_stats() -> void:
 	_stat_3col(_t("st_scrap"), _fmt_n(stats_run["scrap"]), _fmt_n(stats_all["scrap"]))
 	_stat_3col(_t("st_cores"), _fmt_n(stats_run["cores"]), _fmt_n(stats_all["cores"]))
 	_stat_3col(_t("st_time"), _fmt_time(stats_run["time"]), _fmt_time(stats_all["time"]))
+	# --- ПО БОЙЦАМ: текущий урон каждого + % вклада в урон за забег (фидбэк Дианы) ---
+	_stat_section(_t("st_heroes_title"))
+	_stat_3col("", _t("st_hero_dmg"), _t("st_hero_share"), Color("#7a7f99"))
+	var total_hd := 0.0
+	for v in hero_dmg_run.values(): total_hd += float(v)
+	for hh in heroes:
+		var nm: String = hh["data"]["name"]
+		var share := (float(hero_dmg_run.get(nm, 0.0)) / total_hd * 100.0) if total_hd > 0.0 else 0.0
+		_stat_3col(nm, _fmt_n(hh.get("dmg", 0.0)), "%d%%" % int(round(share)), hh["data"]["color"])
 
 func _ask_restart() -> void:
 	if restart_confirm:
@@ -3138,7 +3152,7 @@ func _spawn_wave() -> void:
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
 			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
 		# босс впереди-центр, СВИТА позади него (бэклайн); обычные — рядком
-		var px: float = (420.0 if iboss else 506.0 + j * 50.0) if boss else 420.0 + j * 60.0
+		var px: float = (400.0 if iboss else 452.0 + j * 42.0) if boss else 372.0 + j * 44.0   # фит в экран 600: враги ≤~548 полностью видны, не клипятся справа (фидбэк Дианы)
 		var ey: float = GROUND_Y + 62.0 - ((0.0 if iboss else 20.0 + j * 12.0) if boss else j * 20.0)
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
@@ -3191,7 +3205,7 @@ func _spawn_endless_wave() -> void:
 		if etype == "shield":
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
 			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
-		var px: float = 420.0 + j * 60.0
+		var px: float = 372.0 + j * 44.0   # фит в экран (как основная волна) — не клипить врагов справа (фидбэк Дианы)
 		var ey: float = GROUND_Y + 62.0 - j * 20.0
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
@@ -3486,6 +3500,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
 	d = min(d, STAT_CAP)   # кламп: ульт/босс-множители (×12 снайпер, ×5 хак) не должны раздуть dmg за 1.8e308→inf
 	e["hp"] = max(0.0, e["hp"] - d)
 	_stat_add("dmg", d)                     # п.7: статистика урона/критов/рекорд удара
+	hero_dmg_run[hh["data"]["name"]] = float(hero_dmg_run.get(hh["data"]["name"], 0.0)) + d   # урон per-герой → % вклада в статистике (фидбэк Дианы)
 	if is_crit: _stat_add("crits", 1)
 	if d > rec_maxhit: rec_maxhit = d
 	var col: Color = Color("#ffe14d") if is_crit else hh["data"]["color"]
@@ -6472,14 +6487,17 @@ func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
 	box.add_child(head)
 	var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 14); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
-	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 14); eqb.custom_minimum_size = Vector2(0, 40)
+	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 14); eqb.custom_minimum_size = Vector2(0, 46)
 	eqb.text = _t("g_equipped") if equipped else _t("g_equip"); eqb.disabled = equipped
+	eqb.add_theme_color_override("font_color", Color("#7ee08a"))   # НАДЕТЬ = зелёная (главное действие)
 	eqb.pressed.connect(func(): _equip(slot, key))
 	box.add_child(eqb)
+	var eq_gap := Control.new(); eq_gap.custom_minimum_size = Vector2(0, 16); box.add_child(eq_gap)   # разрыв надеть↔улучшить чтоб не мисклик (фидбэк Дианы)
 	# простой апгрейд за лом (casual-core: заменил реролл) — +10% к вкладу предмета
 	var ucost := _gear_upgrade_cost(inst)
-	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 14); upb.custom_minimum_size = Vector2(0, 40)
+	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 14); upb.custom_minimum_size = Vector2(0, 46)
 	upb.text = _t("g_upgrade") % ucost
+	upb.add_theme_color_override("font_color", Color("#8fbcff"))   # УЛУЧШИТЬ = синяя (визуально отличается от надеть)
 	upb.disabled = scrap < ucost
 	upb.pressed.connect(func(): _gear_upgrade(slot, key))
 	box.add_child(upb)
