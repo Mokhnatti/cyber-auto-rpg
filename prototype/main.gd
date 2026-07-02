@@ -1196,6 +1196,8 @@ func _qa_poll() -> void:
 		return
 	if cmd == "lang":
 		lang = ("en" if lang == "ru" else "ru"); _apply_lang(); return
+	if cmd == "notut":   # QA: скип форсед-туториала для чистых скринов
+		tut_step = 99; onboarded = true; onboard_hidden = true; return
 	if cmd.begins_with("loc"):   # QA: сменить локацию для скрин-проверки фонов (loc0..loc3)
 		cur_location = clamp(int(cmd.substr(3)), 0, LOCATIONS.size() - 1)
 		_apply_location_theme(); return
