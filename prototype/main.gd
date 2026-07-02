@@ -101,10 +101,10 @@ const GROUND_Y := 0.55 * H   # горизонт выше → дорога ещё
 # РОМБ-формация (индекс = HEROES: 0 снайпер, 1 штурм, 2 танк, 3 хакер). y относит. центра, s = масштаб
 # Гибкая: на будущее отряд набирается сам (3 в ряд) — массив легко расширяется.
 const FORMATION := [
-	{"x": 60.0,  "y": 70.0,  "s": 0.80},   # СНАЙПЕР — тыл (центр-лево)
-	{"x": 175.0, "y": 22.0,  "s": 0.88},   # ШТУРМОВИК — верх-бок (дальняя сторона)
-	{"x": 305.0, "y": 74.0,  "s": 1.02},   # ТАНК — остриё/фронт (центр-право, крупный)
-	{"x": 180.0, "y": 122.0, "s": 0.92},   # ХАКЕР — низ-бок (ближняя сторона)
+	{"x": 48.0,  "y": 44.0,  "s": 0.82},   # СНАЙПЕР — тыл (дальний-лево)
+	{"x": 170.0, "y": 22.0,  "s": 0.90},   # ШТУРМОВИК — центр-верх (глубже)
+	{"x": 262.0, "y": 80.0,  "s": 1.00},   # ТАНК — остриё/фронт (ближе к врагам, крупный)
+	{"x": 110.0, "y": 108.0, "s": 0.88},   # ХАКЕР — низ-перед (между снайпом и штурмом, не за штурмом)
 ]
 
 var heroes := []
@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.47" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.48" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -3415,7 +3415,7 @@ func _spawn_wave() -> void:
 		var iboss: bool = etype == "boss"
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
 		var glow := Color("#ff2d95") if iboss else Color(et["col"])
-		var es: float = 1.9 if iboss else (1.3 - j * 0.08) * et["s"]
+		var es: float = 1.7 if iboss else (1.15 - j * 0.07) * et["s"]   # враги чуть меньше (были крупнее героев — фидбэк Рамиля)
 		var d := _make_char(efolder, -1, es, glow)
 		# 🏷 значок-тип над головой (грейбокс-читаемость). Контр-флип т.к. враг смотрит влево.
 		var eicon: String = "" if iboss else str(et.get("icon", ""))
@@ -3433,9 +3433,9 @@ func _spawn_wave() -> void:
 		# ЖЁСТКИЙ фит в экран 600: КАЖДЫЙ враг ≤545 (спрайт центр+полширины ≤ край) → не клипается справа (фидбэк Дианы, скрин босса ст.15).
 		var px: float
 		if boss:
-			px = 404.0 if iboss else min(440.0 + j * 28.0, 545.0)   # босс-центр, свита плотнее+в глубину, клампим правый край
+			px = 420.0 if iboss else min(452.0 + j * 30.0, 548.0)   # босс-центр, свита плотнее+в глубину, клампим правый край
 		else:
-			px = min(360.0 + j * 42.0, 545.0)                        # рядок врагов, крайний ≤545
+			px = min(352.0 + j * 48.0, 548.0)                        # рядок врагов — шире растянут по дороге, крайний ≤548
 		var ey: float = GROUND_Y + 62.0 - ((0.0 if iboss else 20.0 + j * 12.0) if boss else j * 20.0)
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
@@ -3475,7 +3475,7 @@ func _spawn_endless_wave() -> void:
 	for j in spawn_types.size():
 		var etype: String = spawn_types[j]
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
-		var es: float = (1.3 - j * 0.08) * et["s"]
+		var es: float = (1.15 - j * 0.07) * et["s"]   # враги чуть меньше (endless, как основная волна)
 		var d := _make_char(efolder, -1, es, Color(et["col"]))
 		var eicon: String = str(et.get("icon", ""))
 		if eicon != "":
@@ -3488,7 +3488,7 @@ func _spawn_endless_wave() -> void:
 		if etype == "shield":
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
 			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
-		var px: float = min(360.0 + j * 42.0, 545.0)   # фит в экран (как основная волна) — крайний ≤545, не клипить справа (фидбэк Дианы)
+		var px: float = min(352.0 + j * 48.0, 548.0)   # фит в экран (как основная волна) — шире растянут, крайний ≤548
 		var ey: float = GROUND_Y + 62.0 - j * 20.0
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
@@ -4565,6 +4565,14 @@ func _build() -> void:
 	login_btn.position = Vector2(W - 88, 242)
 	login_btn.pressed.connect(_show_daily)
 	hud.add_child(login_btn)
+	# 💎 МАГАЗИН/БОНУСЫ — отдельная кнопка (фидбэк Дианы: магазин+реклама нелогично лежали в меню Скорости)
+	var shop_btn := Button.new()
+	shop_btn.text = "💎"
+	shop_btn.add_theme_font_size_override("font_size", 15)
+	shop_btn.custom_minimum_size = Vector2(82, 36)
+	shop_btn.position = Vector2(W - 178, 242)
+	shop_btn.pressed.connect(_open_diamonds_hub)
+	hud.add_child(shop_btn)
 	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
 	boss_btn = Button.new()
 	boss_btn.text = _t("to_boss")
@@ -4902,10 +4910,25 @@ func _open_speed_menu() -> void:
 	if x3_unlocked: b3.text = _t("spd_x3_bought"); b3.pressed.connect(func(): _set_speed(3.0); panel.queue_free())
 	else: b3.text = _t("spd_x3_buy"); b3.disabled = diamonds < 100; b3.pressed.connect(func(): _buy_x3(); panel.queue_free())
 	v.add_child(b3)
-	var bab := Button.new(); bab.text = _t("ad_bonuses"); bab.custom_minimum_size = Vector2(0, 44); bab.add_theme_font_size_override("font_size", 14); bab.add_theme_color_override("font_color", Color("#3ad97a"))
-	bab.pressed.connect(func(): panel.queue_free(); _open_ad_boosts()); v.add_child(bab)
-	var bs := Button.new(); bs.text = _t("diamond_shop"); bs.custom_minimum_size = Vector2(0, 44); bs.add_theme_font_size_override("font_size", 14); bs.add_theme_color_override("font_color", Color("#ffd24a"))
+	# реклама+магазин ВЫНЕСЕНЫ отсюда в отдельную 💎-кнопку HUD (_open_diamonds_hub) — фидбэк Дианы: в меню Скорости нелогично
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+
+# 💎 ХАБ АЛМАЗОВ: магазин алмазов + бонусы за рекламу (вынесены из меню Скорости — фидбэк Дианы)
+func _open_diamonds_hub() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.07, 0.09, 0.16, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 200, 200); card.custom_minimum_size = Vector2(400, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl(_t("shop_title") % diamonds, 18, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	var bs := Button.new(); bs.text = _t("diamond_shop"); bs.custom_minimum_size = Vector2(0, 48); bs.add_theme_font_size_override("font_size", 15); bs.add_theme_color_override("font_color", Color("#ffd24a"))
 	bs.pressed.connect(func(): panel.queue_free(); _open_shop()); v.add_child(bs)
+	var bab := Button.new(); bab.text = _t("ad_bonuses"); bab.custom_minimum_size = Vector2(0, 48); bab.add_theme_font_size_override("font_size", 15); bab.add_theme_color_override("font_color", Color("#3ad97a"))
+	bab.pressed.connect(func(): panel.queue_free(); _open_ad_boosts()); v.add_child(bab)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _watch_ad_x2() -> void:
@@ -5861,7 +5884,6 @@ func _open_more() -> void:
 	var rew_b := "   ●%d" % rew_n if rew_n > 0 else ""
 	var more_items := [
 		[_t("m_story") + story_b, Callable(self, "_open_story_group")],
-		[_t("m_lore"), Callable(self, "_open_lore")],
 		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
 		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 	]
@@ -5891,6 +5913,7 @@ func _open_story_group() -> void:
 		[_t("story_dossier"), Callable(self, "_open_dossier")],
 		[_t("story_case") + ("   ✅" if case_solved else ("   🧩%d" % _frags_open() if _frags_open() > 0 else "")), Callable(self, "_open_case")],
 		[_t("story_finale") + ("   %s" % str(ENDINGS[endgame_mode]["icon"]) if endgame_mode != "" else ("   ✦" if _all_quests_done() else "   🔒")), Callable(self, "_open_finale")],
+		[_t("m_lore"), Callable(self, "_open_lore")],   # Мир/Лор внутри Сюжета (фидбэк Дианы: не отдельным пунктом в «Ещё»)
 	])
 
 func _open_rewards_group() -> void:
