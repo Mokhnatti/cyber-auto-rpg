@@ -1199,6 +1199,13 @@ func _qa_poll() -> void:
 	if cmd.begins_with("loc"):   # QA: сменить локацию для скрин-проверки фонов (loc0..loc3)
 		cur_location = clamp(int(cmd.substr(3)), 0, LOCATIONS.size() - 1)
 		_apply_location_theme(); return
+	if cmd.begins_with("pick"):   # QA: форс-пик героя в слот для скрин-проверки анимаций, напр. "pick0=asl_double"
+		var parts: PackedStringArray = str(cmd).substr(4).split("=")
+		if parts.size() == 2:
+			var slot: int = int(parts[0]); var qhid: String = str(parts[1]).strip_edges()
+			if int(hero_ranks.get(qhid, 0)) < 1: hero_ranks[qhid] = 1   # QA: открыть героя чтоб пик не откатился
+			squad_pick[slot] = qhid; _apply_hero_pick(slot)
+		return
 	var m := {
 		"upgrade": "_toggle_inv", "gear": "_toggle_impl", "prestige": "_toggle_reboot",
 		"singularity": "_open_singularity", "settings": "_toggle_settings", "stats": "_toggle_stats",
