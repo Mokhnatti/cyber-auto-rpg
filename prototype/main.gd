@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.43" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.44" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -4057,10 +4057,12 @@ func _toggle_auto() -> void:
 		aim_mode = false; aim_hero = null; status_label.text = ""
 
 # тап по врагу в режиме прицела снайпера → мощный выстрел в него
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
+	# режим прицела снайп-ульты. БЫЛО _unhandled_input → полноэкранный HUD (Control) СЪЕДАЛ тап, ульта не срабатывала (баг Насти).
+	# _input ловит событие ДО GUI; помечаем обработанным чтоб тап не кликнул кнопку HUD.
 	if not aim_mode:
 		return
-	var tap_pos = null   # мышь (десктоп) ИЛИ тач (мобила) — иначе на телефоне ультра не срабатывала
+	var tap_pos = null   # мышь (десктоп) ИЛИ тач (мобила)
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		tap_pos = get_global_mouse_position()
 	elif event is InputEventScreenTouch and event.pressed:
@@ -4080,6 +4082,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		aim_hero = null
 		status_label.text = ""
 		_refresh_hud()
+		get_viewport().set_input_as_handled()   # тап поглощён прицелом — не кликаем кнопки HUD под ним
 
 func _die() -> void:
 	phase = "dead"
