@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.45" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.46" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -2744,7 +2744,11 @@ func _reset() -> void:
 		var hcls: int = int(hero["cls"])
 		var h = HEROES[hcls]                  # класс-БАЗА боя = КЛАСС ГЕРОЯ (atk_type/цвет/ульта/пушки/спрайт)
 		var fp = FORMATION[i]                 # позиция — по слоту
-		var d := _make_char("hero%d" % (hcls + 1), 1, fp["s"], h["color"])   # спрайт — по классу героя
+		# спрайт: если у ГЕРОЯ есть свой набор анимаций sprites/<id>/ — берём его (новые фракции), иначе класс-фолбэк hero<N>
+		var sfolder := "hero%d" % (hcls + 1)
+		var _hid := str(hero.get("id", ""))
+		if _hid != "" and ResourceLoader.exists("res://sprites/%s/idle_0.png" % _hid): sfolder = _hid
+		var d := _make_char(sfolder, 1, fp["s"], h["color"])
 		d.position = Vector2(fp["x"], GROUND_Y + fp["y"])
 		d.z_index = int(d.position.y)   # ближние (танк) поверх дальних (снайпер)
 		world.add_child(d)
@@ -6171,12 +6175,16 @@ func _apply_hero_pick(slot: int) -> void:   # применить выбранн�
 	var hero := _squad_hero(slot)
 	var hh = heroes[slot]
 	var newcls: int = int(hero["cls"])
-	if int(hh["cls"]) != newcls:   # сменился КЛАСС → перенастроить бой/спрайт/шмот
+	if int(hh["cls"]) != newcls:   # сменился КЛАСС → перенастроить бой/шмот
 		hh["data"] = HEROES[newcls]; hh["cls"] = newcls; hh["atk_spd"] = HEROES[newcls]["atk"]
 		hh["gear"] = {"module": {}, "weapon": {}}; hh["equip"] = {"module": "", "weapon": ""}   # шмот классовый → чистим при смене класса (стейдж-4: инвентарь пер-герой)
-		if is_instance_valid(hh.get("node")):
-			var spr = hh["node"].get_node("Spr")
-			if spr: spr.sprite_frames = _frames("hero%d" % (newcls + 1)); spr.play("idle")
+	# спрайт: у героя свой набор sprites/<id>/ (новые фракции) иначе класс-фолбэк — обновляем при ЛЮБОЙ смене героя
+	if is_instance_valid(hh.get("node")):
+		var spr = hh["node"].get_node("Spr")
+		if spr:
+			var pf := "hero%d" % (newcls + 1)
+			if ResourceLoader.exists("res://sprites/%s/idle_0.png" % str(hero["id"])): pf = str(hero["id"])
+			spr.sprite_frames = _frames(pf); spr.play("idle")
 	hh["hid"] = hero["id"]; hh["hname"] = _tloc(hero, "name"); hh["fac"] = hero["fac"]; hh["rarity"] = int(hero["rarity"]); hh["passive"] = hero["passive"]
 	_recalc_hero(hh); _recalc_auras(); _refresh_hud()
 
