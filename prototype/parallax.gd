@@ -33,7 +33,10 @@ func _scroll_tex(tex: Texture2D, y0: float, h: float, factor: float, mirror := t
 	var idx := first_idx
 	while x < W:
 		if mirror and (idx % 2 + 2) % 2 == 1:
-			draw_texture_rect(tex, Rect2(x + tw, y0, -tw, h), false)   # зеркало по X
+			# зеркало по X через transform (negative-width Rect2 в Godot4 НЕ рендерится → была чёрная дыра)
+			draw_set_transform(Vector2(x + tw, y0), 0.0, Vector2(-1, 1))
+			draw_texture_rect(tex, Rect2(0, 0, tw, h), false)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:
 			draw_texture_rect(tex, Rect2(x, y0, tw, h), false)
 		x += tw
@@ -48,7 +51,7 @@ func _draw() -> void:
 	# небо
 	draw_rect(Rect2(0, 0, W, GROUND_Y), Color("#0b0d18"))
 	if bg_tex != null:
-		_scroll_tex(bg_tex, 0, GROUND_Y, 0.3)   # рисованный фон-сцена (медленно)
+		_scroll_tex(bg_tex, 0, GROUND_Y, 0.3, true)   # рисованный фон-сцена (медленно); mirror=true (бесшовно, зеркалит на стыке) — теперь через transform корректно заполняет весь экран (фидбэк Рамиля «половина чёрная»)
 	else:
 		# процедурные здания (фолбэк)
 		_buildings(0.25, 150.0, 0.34 * H, Color("#11152a"), 7, pal[2])
