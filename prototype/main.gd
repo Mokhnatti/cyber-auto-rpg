@@ -20,13 +20,13 @@ const HERO_ROSTER := [
 	{"id": "hak_base",    "cls": 3, "name": "Хакер",         "name_en": "Hacker",           "fac": "zeno", "rarity": 1, "passive": "mark"},
 	{"id": "snp_widow",   "cls": 0, "name": "Вдова",         "name_en": "Widow",            "fac": "dock", "rarity": 2, "passive": "echo"},
 	{"id": "snp_ghost",   "cls": 0, "name": "Призрак",       "name_en": "Ghost",            "fac": "zeno", "rarity": 3, "passive": "firststrike"},
-	{"id": "snp_marta",   "cls": 0, "name": "Тихая Марта",   "name_en": "Silent Marta",     "fac": "slum", "rarity": 4, "passive": "chainkill"},
-	{"id": "asl_lead",    "cls": 1, "name": "Свинец",        "name_en": "Lead",             "fac": "slum", "rarity": 1, "passive": "overclock"},
+	{"id": "snp_marta",   "cls": 0, "name": "Могильщик",     "name_en": "Gravedigger",      "fac": "slum", "rarity": 4, "passive": "chainkill"},
+	{"id": "asl_lead",    "cls": 1, "name": "Оса",           "name_en": "Wasp",             "fac": "slum", "rarity": 1, "passive": "overclock"},
 	{"id": "asl_double",  "cls": 1, "name": "Двустволка",    "name_en": "Double-Barrel",    "fac": "dock", "rarity": 2, "passive": "multistrike"},
 	{"id": "asl_barrage", "cls": 1, "name": "Капрал Барраж", "name_en": "Corporal Barrage", "fac": "zeno", "rarity": 3, "passive": "squadspeed"},
 	{"id": "tnk_beton",   "cls": 2, "name": "Бетон",         "name_en": "Concrete",         "fac": "slum", "rarity": 1, "passive": "ceramic"},
 	{"id": "tnk_boris",   "cls": 2, "name": "Экзо-Борис",    "name_en": "Exo-Boris",        "fac": "zeno", "rarity": 2, "passive": "barrier"},
-	{"id": "tnk_wall",    "cls": 2, "name": "Стена",         "name_en": "The Wall",         "fac": "dock", "rarity": 3, "passive": "taunt"},
+	{"id": "tnk_wall",    "cls": 2, "name": "Катана",        "name_en": "Katana",           "fac": "dock", "rarity": 3, "passive": "taunt"},
 	{"id": "hak_glitch",  "cls": 3, "name": "Глюк",          "name_en": "Glitch",           "fac": "zeno", "rarity": 1, "passive": "slowaura"},
 	{"id": "hak_virus",   "cls": 3, "name": "Вирусолог",     "name_en": "Virologist",       "fac": "slum", "rarity": 2, "passive": "virus"},
 	{"id": "hak_zero",    "cls": 3, "name": "Нуль-Дэй",      "name_en": "Zero-Day",         "fac": "dock", "rarity": 4, "passive": "sync"},
@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.44" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.45" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -251,8 +251,8 @@ const IMPL_DEFS := {
 # Каждый: иконка/имя слота + 3 варианта-модели (primary-стат может отличаться → билды).
 const HERO_MODULE := {
 	0: {"icon": "👁", "name": "Глаза", "name_en": "Eyes", "variants": [
-		{"id": "eye1", "name": "Оптика-MK1", "stat": "crit"},
-		{"id": "eye2", "name": "Орлиный глаз", "stat": "crit"},
+		{"id": "eye1", "name": "Оптика-MK1", "stat": "dmg"},
+		{"id": "eye2", "name": "Орлиный глаз", "stat": "hp"},
 		{"id": "eye3", "name": "Тепловизор", "stat": "dmg"}]},
 	1: {"icon": "🦾", "name": "Сервоприводы", "name_en": "Servos", "variants": [
 		{"id": "arm1", "name": "Серво-MK1", "stat": "dmg"},
@@ -265,7 +265,7 @@ const HERO_MODULE := {
 	3: {"icon": "🧠", "name": "Нейрочип", "name_en": "Neurochip", "variants": [
 		{"id": "chip1", "name": "Нейро-MK1", "stat": "ult"},
 		{"id": "chip2", "name": "Овердрайв", "stat": "ult"},
-		{"id": "chip3", "name": "Тихий-протокол", "stat": "crit"}]},
+		{"id": "chip3", "name": "Тихий-протокол", "stat": "hp"}]},
 }
 # ОРУЖИЕ-КАК-ПРЕДМЕТ (п.А): пушка — полноценный слот gear["weapon"] (редкость/статы/уровень, куча).
 # primary-стат "wdmg" = главный урон (отдельная ступень, бьёт сильнее модулей). По 2 модели на класс → билды/куча.
@@ -1196,6 +1196,9 @@ func _qa_poll() -> void:
 		return
 	if cmd == "lang":
 		lang = ("en" if lang == "ru" else "ru"); _apply_lang(); return
+	if cmd.begins_with("loc"):   # QA: сменить локацию для скрин-проверки фонов (loc0..loc3)
+		cur_location = clamp(int(cmd.substr(3)), 0, LOCATIONS.size() - 1)
+		_apply_location_theme(); return
 	var m := {
 		"upgrade": "_toggle_inv", "gear": "_toggle_impl", "prestige": "_toggle_reboot",
 		"singularity": "_open_singularity", "settings": "_toggle_settings", "stats": "_toggle_stats",
@@ -3413,8 +3416,13 @@ func _spawn_wave() -> void:
 		if not iboss and etype == "shield":   # полупрозрачный пузырь-щит
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
 			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
-		# босс впереди-центр, СВИТА позади него (бэклайн); обычные — рядком
-		var px: float = (400.0 if iboss else 452.0 + j * 42.0) if boss else 372.0 + j * 44.0   # фит в экран 600: враги ≤~548 полностью видны, не клипятся справа (фидбэк Дианы)
+		# босс впереди-центр, СВИТА позади него (бэклайн); обычные — рядком.
+		# ЖЁСТКИЙ фит в экран 600: КАЖДЫЙ враг ≤545 (спрайт центр+полширины ≤ край) → не клипается справа (фидбэк Дианы, скрин босса ст.15).
+		var px: float
+		if boss:
+			px = 404.0 if iboss else min(440.0 + j * 28.0, 545.0)   # босс-центр, свита плотнее+в глубину, клампим правый край
+		else:
+			px = min(360.0 + j * 42.0, 545.0)                        # рядок врагов, крайний ≤545
 		var ey: float = GROUND_Y + 62.0 - ((0.0 if iboss else 20.0 + j * 12.0) if boss else j * 20.0)
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
@@ -3467,7 +3475,7 @@ func _spawn_endless_wave() -> void:
 		if etype == "shield":
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
 			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
-		var px: float = 372.0 + j * 44.0   # фит в экран (как основная волна) — не клипить врагов справа (фидбэк Дианы)
+		var px: float = min(360.0 + j * 42.0, 545.0)   # фит в экран (как основная волна) — крайний ≤545, не клипить справа (фидбэк Дианы)
 		var ey: float = GROUND_Y + 62.0 - j * 20.0
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
@@ -7183,20 +7191,28 @@ func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	head.add_theme_color_override("font_color", Color(RARITY[rar]["col"]))
 	box.add_child(head)
 	var st := Label.new(); st.text = _rolls_text(inst); st.add_theme_font_size_override("font_size", 14); st.add_theme_color_override("font_color", Color("#c7ccea")); box.add_child(st)
-	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 14); eqb.custom_minimum_size = Vector2(0, 46)
+	var eqb := Button.new(); eqb.add_theme_font_size_override("font_size", 15); eqb.custom_minimum_size = Vector2(0, 50)
 	eqb.text = _t("g_equipped") if equipped else _t("g_equip"); eqb.disabled = equipped
 	eqb.add_theme_color_override("font_color", Color("#7ee08a"))   # НАДЕТЬ = зелёная (главное действие)
 	eqb.pressed.connect(func(): _equip(slot, key))
 	box.add_child(eqb)
-	var eq_gap := Control.new(); eq_gap.custom_minimum_size = Vector2(0, 16); box.add_child(eq_gap)   # разрыв надеть↔улучшить чтоб не мисклик (фидбэк Дианы)
-	# простой апгрейд за лом (casual-core: заменил реролл) — +10% к вкладу предмета
+	# БОЛЬШОЙ разрыв надеть↔улучшить чтоб не мисклик (фидбэк Дианы: случайно жала обе)
+	var eq_gap := Control.new(); eq_gap.custom_minimum_size = Vector2(0, 30); box.add_child(eq_gap)
+	# простой апгрейд за лом (casual-core: заменил реролл) — +10% к вкладу предмета.
+	# УЛУЧШИТЬ = вторичное действие: уже (55%), справа, ниже → отдельная цель, не путать с НАДЕТЬ
 	var ucost := _gear_upgrade_cost(inst)
-	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 14); upb.custom_minimum_size = Vector2(0, 46)
+	var uprow := HBoxContainer.new(); box.add_child(uprow)
+	var usp := Control.new(); usp.size_flags_horizontal = Control.SIZE_EXPAND_FILL; uprow.add_child(usp)
+	var upb := Button.new(); upb.add_theme_font_size_override("font_size", 13); upb.custom_minimum_size = Vector2(0, 40)
+	upb.size_flags_horizontal = Control.SIZE_EXPAND_FILL; upb.size_flags_stretch_ratio = 1.3
 	upb.text = _t("g_upgrade") % ucost
 	upb.add_theme_color_override("font_color", Color("#8fbcff"))   # УЛУЧШИТЬ = синяя (визуально отличается от надеть)
+	var upsb := StyleBoxFlat.new(); upsb.bg_color = Color(0.10, 0.13, 0.22, 0.9); upsb.set_corner_radius_all(8)
+	upsb.border_color = Color("#8fbcff"); upsb.set_border_width_all(1); upsb.set_content_margin_all(6)
+	upb.add_theme_stylebox_override("normal", upsb)
 	upb.disabled = scrap < ucost
 	upb.pressed.connect(func(): _gear_upgrade(slot, key))
-	box.add_child(upb)
+	uprow.add_child(upb)
 	return card
 
 func _close_detail() -> void:

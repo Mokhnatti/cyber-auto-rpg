@@ -20,6 +20,12 @@ with sync_playwright() as p:
             x, y = pt.split(",")
             page.mouse.click(float(x), float(y))
             time.sleep(1.5)
-    page.screenshot(path="/tmp/game_shot.png")
+    # опц. 4-й арг "qa:CMD" — послать команду QA-мосту (напр. qa:loc2 сменить локацию)
+    outp = "/tmp/game_shot.png"
+    if len(sys.argv) > 4 and sys.argv[4].startswith("qa:"):
+        page.evaluate("window._qa=%r" % sys.argv[4][3:])
+        time.sleep(2.0)
+        outp = sys.argv[5] if len(sys.argv) > 5 else outp
+    page.screenshot(path=outp)
     browser.close()
     print("OK saved /tmp/game_shot.png")
