@@ -54,17 +54,36 @@ const PASSIVE_META := {
 	"datamine":    {"icon": "💰", "name": "Дата-майнинг", "name_en": "Data-Mining",  "desc": "Убийства дают доп-золото",                           "desc_en": "Kills grant bonus gold"},
 }
 var squad_pick := {}          # {slot(0-3): hero_id} — кто в слоте (свободный состав). Дефолт = базовые.
-var heroes_owned := {}        # {hero_id: true} — открытые герои (пока все открыты для теста Дианы)
+var heroes_owned := {}        # (устар.) {hero_id: true} — читаем для миграции
+# === ЭТАП-4: ГАЧА ГЕРОЕВ / РАНГИ / ОСКОЛКИ ===
+var hero_ranks := {}          # {hero_id: rank(int≥1)} — rank≥1 = ОТКРЫТ. Ранг ↑ = сильнее (осколки).
+var hero_shards := {}         # {hero_id: осколки(int)} — дубли героя дают осколки
+const BASE_HEROES := ["snp_base", "asl_base", "tnk_base", "hak_base"]
+const HERO_MAX_RANK := 6
+const RANK_MULT := 0.09       # +9% к урону/HP за каждый ранг выше 1
+const HERO_GACHA_COST1 := 80
+const HERO_GACHA_COST10 := 720
+const HG_SOFT_PITY := 60      # с этого пулла шанс легендарки растёт
+const HG_HARD_PITY := 80      # гарант легендарки
+var hg_pity := 0              # пуллов с последней легендарки
+# осколки за дубль по редкости; сколько осколков на ранг R→R+1
+const SHARDS_ON_DUPE := {1: 5, 2: 10, 3: 20, 4: 40}
+func _rankup_cost(rank: int) -> int: return rank * 15   # ранг R→R+1 стоит R*15 осколков
 var _test_comp := ""          # бот-флаг состава (--comp=...) для баланс-теста
 func _hero_by_id(hid: String) -> Dictionary:
 	for h in HERO_ROSTER:
 		if h["id"] == hid: return h
 	return HERO_ROSTER[0]
 func _squad_hero(slot: int) -> Dictionary:   # выбранный герой для слота (СВОБОДНЫЙ состав — любой класс)
-	var hid: String = str(squad_pick.get(slot, ["snp_base", "asl_base", "tnk_base", "hak_base"][slot]))
+	var hid: String = str(squad_pick.get(slot, BASE_HEROES[slot]))
+	if not _hero_owned(hid): return _hero_by_id(BASE_HEROES[slot])   # не открыт → откат на базового
 	return _hero_by_id(hid)
-func _hero_owned(hid: String) -> bool:
-	return true if heroes_owned.is_empty() else bool(heroes_owned.get(hid, false))   # пусто = все открыты (тест)
+func _hero_rank(hid: String) -> int: return int(hero_ranks.get(hid, 0))
+func _hero_owned(hid: String) -> bool: return _hero_rank(hid) >= 1
+func _hero_rank_mult(hid: String) -> float: return 1.0 + RANK_MULT * max(0, _hero_rank(hid) - 1)
+func _grant_base_heroes() -> void:   # база 4 всегда открыты (rank≥1)
+	for bid in BASE_HEROES:
+		if _hero_rank(bid) < 1: hero_ranks[bid] = 1
 func _has_passive(p: String) -> bool:
 	for hh in heroes:
 		if hh["alive"] and hh.get("passive", "") == p: return true
@@ -109,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.41" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.42" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1055,6 +1074,21 @@ const TR := {
 	"reactor_pop":       {"ru": "🔋 Реактор: окно +2 ч", "en": "🔋 Reactor: window +2 h"},
 	# гача
 	"gacha_title":       {"ru": "🎰 ГАЧА — призыв снаряжения", "en": "🎰 GACHA — summon equipment"},
+	"hg_title":          {"ru": "🦸 ГАЧА ГЕРОЕВ", "en": "🦸 HERO GACHA"},
+	"hg_pity":           {"ru": "💎 %d   ·   до гаранта Легенды: %d", "en": "💎 %d   ·   to guaranteed Legendary: %d"},
+	"hg_rates":          {"ru": "Обычный 60% · Редкий 28% · Эпик 10% · Легенда 2%\n(с 60-й крутки шанс легенды растёт, на 80-й — гарант)", "en": "Common 60% · Rare 28% · Epic 10% · Legendary 2%\n(from pull 60 legendary chance rises, at 80 — guaranteed)"},
+	"hg_pull1":          {"ru": "🎲 1 крутка — %d 💎", "en": "🎲 Pull 1 — %d 💎"},
+	"hg_pull10":         {"ru": "🎲 10 круток — %d 💎", "en": "🎲 Pull 10 — %d 💎"},
+	"hg_new":            {"ru": "🆕 НОВЫЙ: %s %s [%s]", "en": "🆕 NEW: %s %s [%s]"},
+	"hg_dupe":           {"ru": "%s %s [%s] → +%d💠", "en": "%s %s [%s] → +%d💠"},
+	"hg_btn":            {"ru": "🦸 ГАЧА ГЕРОЕВ — собери отряд", "en": "🦸 HERO GACHA — build your squad"},
+	"hg_nogems":         {"ru": "Не хватает алмазов", "en": "Not enough diamonds"},
+	"hp_rank":           {"ru": "⭐%d", "en": "⭐%d"},
+	"hp_shards":         {"ru": "💠 %d/%d", "en": "💠 %d/%d"},
+	"hp_rankup":         {"ru": "⭐ Ранг↑ (%d💠)", "en": "⭐ Rank up (%d💠)"},
+	"hp_maxrank":        {"ru": "⭐ МАКС ранг", "en": "⭐ MAX rank"},
+	"hp_locked":         {"ru": "🔒 Закрыт (гача)", "en": "🔒 Locked (gacha)"},
+	"hp_rankup_pop":     {"ru": "⭐ %s → ранг %d!", "en": "⭐ %s → rank %d!"},
 	"gacha_pity":        {"ru": "💎 %d   ·   до гаранта Эпического: %d пуллов", "en": "💎 %d   ·   to guaranteed Epic: %d pulls"},
 	"gacha_rates":       {"ru": "Шансы: Обычный 50% · Необычный 30% · Редкий 15% · Эпический 5%\n(с 74-го пулла шанс Эпического растёт, на 90-м — гарант)", "en": "Rates: Common 50% · Uncommon 30% · Rare 15% · Epic 5%\n(from pull 74 the Epic chance rises, at 90 — guaranteed)"},
 	"gacha_odds_btn":     {"ru": "ℹ️ ШАНСЫ ДРОПА", "en": "ℹ️ DROP RATES"},
@@ -1166,7 +1200,7 @@ func _qa_poll() -> void:
 		"upgrade": "_toggle_inv", "gear": "_toggle_impl", "prestige": "_toggle_reboot",
 		"singularity": "_open_singularity", "settings": "_toggle_settings", "stats": "_toggle_stats",
 		"clan": "_open_clan", "clanboss": "_open_clan_boss", "clanchat": "_open_clan_chat", "clanshop": "_open_clan_shop",
-		"speed": "_open_speed_menu", "ads": "_open_ad_boosts", "shop": "_open_shop", "gacha": "_open_gacha",
+		"speed": "_open_speed_menu", "ads": "_open_ad_boosts", "shop": "_open_shop", "gacha": "_open_gacha", "herogacha": "_open_hero_gacha",
 		"gachaodds": "_open_gacha_odds", "reactor": "_open_offline_reactor",
 		"map": "_open_map", "daily": "_open_daily_quests", "messages": "_open_messages",
 		"dossier": "_open_dossier", "case": "_open_case", "finale": "_open_finale",
@@ -2041,7 +2075,7 @@ func _recalc_hero(hh: Dictionary) -> void:
 	var is_tank: bool = hh["data"]["atk_type"] == "tank"
 	# УРОН: у ТАНКА качается ОТВРАТИТЕЛЬНО (он HP-двигатель, не дамагер); у остальных полный ×уровень×излом
 	var dmg_scale: float = (1.0 + lv * 0.04) if is_tank else (lv * milestone)
-	var rar: float = RARITY_MULT.get(int(hh.get("rarity", 1)), 1.0)   # бонус героя за редкость (гача-прогрессия)
+	var rar: float = RARITY_MULT.get(int(hh.get("rarity", 1)), 1.0) * _hero_rank_mult(str(hh.get("hid", "")))   # ×редкость ×РАНГ (осколки → сильнее; вот почему редких/легенд стоит фармить)
 	hh["dmg"] = min(base_dmg * dmg_scale * rar * aug_dmg * _ad_mult("dmg") * _clan_boost_mult("dmg") * meta_pow * _prestige_mult(), STAT_CAP)   # float: int64 overflow при stage>133
 	# HP: НЕ от своего уровня, а от АУРЫ ТАНКА (его уровень, экспонента) + аугменты/модуль/surv. Качаешь танка = HP всему отряду.
 	hh["max"] = min(base_hp * rar * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0) * _prestige_mult(), STAT_CAP)   # float; ×perma-множитель — HP растёт с престижами как и урон (иначе бот дохнет на глубине, survival-плато)
@@ -2621,11 +2655,16 @@ func _ready() -> void:
 	_build_nick_prompt()
 	_reset()
 	_load()   # подхватить сейв (по слоту)
-	if _test_comp != "":   # бот-тест состава (свободный состав)
-		match _test_comp:
-			"assaults": squad_pick = {0: "asl_base", 1: "asl_lead", 2: "asl_double", 3: "asl_barrage"}   # 4 штурмовика (комбо)
-			"snipers":  squad_pick = {0: "snp_base", 1: "snp_widow", 2: "snp_ghost", 3: "snp_marta"}      # 4 снайпера
-			"mixed":    squad_pick = {0: "snp_widow", 1: "asl_lead", 2: "tnk_boris", 3: "hak_virus"}      # микс редких
+	_grant_base_heroes()   # база 4 всегда открыты (новичок стартует с них, остальных — гачей)
+	if _test_comp != "":   # бот-тест состава (свободный состав). Формат: 4 id через запятую, либо пресет.
+		if "," in _test_comp:
+			var ids := _test_comp.split(",")
+			for si in range(min(4, ids.size())): squad_pick[si] = ids[si].strip_edges()
+		else:
+			match _test_comp:
+				"assaults": squad_pick = {0: "asl_base", 1: "asl_lead", 2: "asl_double", 3: "asl_barrage"}
+				"snipers":  squad_pick = {0: "snp_base", 1: "snp_widow", 2: "snp_ghost", 3: "snp_marta"}
+				"mixed":    squad_pick = {0: "snp_widow", 1: "asl_lead", 2: "tnk_boris", 3: "hak_virus"}
 		print("TTCOMP test=%s pick=%s" % [_test_comp, str(squad_pick)])
 	_apply_location_theme()   # тема фона под активную локацию
 	_dq_refresh()   # ежедневные квесты на сегодня
@@ -2673,7 +2712,7 @@ func _reset() -> void:
 	cores_peak = 0.0
 	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
-	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}; hero_ranks = {}; hero_shards = {}; hg_pity = 0
 	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	tut_step = 0; _tut_t = 0.0   # форсед-туториал: свежий старт → показать с шага 1
@@ -3147,7 +3186,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3202,6 +3241,12 @@ func _load() -> void:
 	squad_pick = {}   # JSON-ключи приходят строками → возвращаем в int(cls)
 	for k in _dct(d.get("squad_pick", {})): squad_pick[int(k)] = str(_dct(d.get("squad_pick", {}))[k])
 	heroes_owned = _dct(d.get("heroes_owned", {}))
+	hero_ranks = _dct(d.get("hero_ranks", {}))
+	hero_shards = _dct(d.get("hero_shards", {}))
+	hg_pity = int(d.get("hg_pity", 0))
+	if hero_ranks.is_empty():   # существующий сейв без гачи-героев → грандфазер: открыть весь ростер rank1 (не отнимать доступ у тестеров) + разовый стипенд алмазов на тест гачи
+		for h in HERO_ROSTER: hero_ranks[str(h["id"])] = 1
+		diamonds += 3000   # разовый бонус миграции — покрутить гачу героев/ранги
 	cur_location = clamp(int(d.get("cur_location", 0)), 0, LOCATIONS.size() - 1)
 	quest_done = _arr(d.get("quest_done", [])).map(func(x): return str(x))
 	dialog_seen = _dct(d.get("dialog_seen", {}))
@@ -5019,6 +5064,8 @@ func _open_shop() -> void:
 	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
 	var bg := Button.new(); bg.text = _t("shop_gacha_btn"); bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
 	bg.pressed.connect(func(): panel.queue_free(); _open_gacha()); v.add_child(bg)
+	var bhg := Button.new(); bhg.text = _t("hg_btn"); bhg.custom_minimum_size = Vector2(0, 46); bhg.add_theme_font_size_override("font_size", 15); bhg.add_theme_color_override("font_color", Color("#00f0ff"))
+	bhg.pressed.connect(func(): panel.queue_free(); _open_hero_gacha()); v.add_child(bhg)
 	var brk := Button.new(); brk.text = _t("reactor_btn"); brk.custom_minimum_size = Vector2(0, 46); brk.add_theme_font_size_override("font_size", 14); brk.add_theme_color_override("font_color", Color("#7adfff"))
 	brk.pressed.connect(func(): panel.queue_free(); _open_offline_reactor()); v.add_child(brk)
 	var ba := Button.new(); ba.text = _t("ad_bonuses"); ba.custom_minimum_size = Vector2(0, 46); ba.add_theme_font_size_override("font_size", 15); ba.add_theme_color_override("font_color", Color("#3ad97a"))
@@ -5135,6 +5182,91 @@ func _gacha_refresh_hdr(v: VBoxContainer) -> void:
 	# обновить строку алмазов/pity (2-й ребёнок) после пулла
 	if v.get_child_count() > 1 and v.get_child(1) is Label:
 		(v.get_child(1) as Label).text = _t("gacha_pity") % [diamonds, max(0, GACHA_HARD_PITY - gacha_pity)]
+
+# === ГАЧА ГЕРОЕВ (этап-4) ===
+func _hg_rarity() -> int:
+	hg_pity += 1
+	var leg := 0.02
+	if hg_pity >= HG_HARD_PITY: hg_pity = 0; return 4
+	if hg_pity >= HG_SOFT_PITY: leg += 0.06 * (hg_pity - HG_SOFT_PITY + 1)
+	var r := randf()
+	if r < leg: hg_pity = 0; return 4
+	if r < leg + 0.10: return 3
+	if r < leg + 0.38: return 2
+	return 1
+
+func _hg_heroes_of(rar: int) -> Array:
+	var out := []
+	for h in HERO_ROSTER:
+		if int(h["rarity"]) == rar: out.append(h)
+	return out
+
+func _hero_gacha_pull(n: int) -> Array:
+	var results := []
+	for i in n:
+		var rar := _hg_rarity()
+		var pool := _hg_heroes_of(rar)
+		if pool.is_empty(): pool = _hg_heroes_of(1)
+		var h = pool[randi() % pool.size()]
+		var hid: String = str(h["id"])
+		if _hero_owned(hid):   # дубль → осколки
+			var sh: int = int(SHARDS_ON_DUPE.get(rar, 5))
+			hero_shards[hid] = int(hero_shards.get(hid, 0)) + sh
+			results.append({"h": h, "new": false, "shards": sh})
+		else:                  # НОВЫЙ герой
+			hero_ranks[hid] = 1
+			results.append({"h": h, "new": true, "shards": 0})
+	_save(); _refresh_hud()
+	return results
+
+func _hg_result_text(results: Array) -> String:
+	var lines := []
+	for r in results:
+		var h = r["h"]; var rar: int = int(h["rarity"])
+		if r["new"]:
+			lines.append(_t("hg_new") % [HEROES[int(h["cls"])]["icon"], _tloc(h, "name"), _t("rar%d" % rar)])
+		else:
+			lines.append(_t("hg_dupe") % [HEROES[int(h["cls"])]["icon"], _tloc(h, "name"), _t("rar%d" % rar), r["shards"]])
+	return "\n".join(lines)
+
+func _hero_rankup(hid: String) -> bool:
+	var rank := _hero_rank(hid)
+	if rank < 1 or rank >= HERO_MAX_RANK: return false
+	var cost := _rankup_cost(rank)
+	if int(hero_shards.get(hid, 0)) < cost: return false
+	hero_shards[hid] = int(hero_shards.get(hid, 0)) - cost
+	hero_ranks[hid] = rank + 1
+	for si in range(heroes.size()):
+		if str(heroes[si].get("hid", "")) == hid: _recalc_hero(heroes[si])
+	_recalc_auras(); _save(); _refresh_hud()
+	return true
+
+func _open_hero_gacha() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.75); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.06, 0.08, 0.16, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 120); card.custom_minimum_size = Vector2(420, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 9); card.add_child(v)
+	v.add_child(_lbl(_t("hg_title"), 19, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("hg_pity") % [diamonds, max(0, HG_HARD_PITY - hg_pity)], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("hg_rates"), 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var res := _lbl("", 13, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); res.custom_minimum_size = Vector2(0, 130); res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(res)
+	var hdr := func(): (v.get_child(1) as Label).text = _t("hg_pity") % [diamonds, max(0, HG_HARD_PITY - hg_pity)]
+	var p1 := Button.new(); p1.text = _t("hg_pull1") % HERO_GACHA_COST1; p1.custom_minimum_size = Vector2(0, 46); p1.add_theme_font_size_override("font_size", 15); p1.add_theme_color_override("font_color", Color("#00f0ff"))
+	p1.pressed.connect(func():
+		if diamonds < HERO_GACHA_COST1: res.text = _t("hg_nogems"); return
+		diamonds -= HERO_GACHA_COST1; _track("hero_gacha", {"n": 1}); res.text = _hg_result_text(_hero_gacha_pull(1)); hdr.call())
+	v.add_child(p1)
+	var p10 := Button.new(); p10.text = _t("hg_pull10") % HERO_GACHA_COST10; p10.custom_minimum_size = Vector2(0, 46); p10.add_theme_font_size_override("font_size", 15); p10.add_theme_color_override("font_color", Color("#ffd24a"))
+	p10.pressed.connect(func():
+		if diamonds < HERO_GACHA_COST10: res.text = _t("hg_nogems"); return
+		diamonds -= HERO_GACHA_COST10; _track("hero_gacha", {"n": 10}); res.text = _hg_result_text(_hero_gacha_pull(10)); hdr.call())
+	v.add_child(p10)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 # === РАСКРЫТИЕ ШАНСОВ ГАЧИ (обязательно для Google Play / App Store) ===
 # Текст СТРОИТСЯ из тех же констант, что и роллер _gacha_rarity → показанные шансы = реальные.
@@ -6045,22 +6177,43 @@ func _open_hero_picker(cls: int) -> void:
 	var subt := _lbl(_t("hp_free"), 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER); subt.position = Vector2(0, 48); subt.size = Vector2(W, 16); panel.add_child(subt)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 66); scroll.custom_minimum_size = Vector2(440, 766); scroll.size = Vector2(440, 766); panel.add_child(scroll)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 8); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
+	# 🦸 кнопка гачи героев наверху списка
+	var gb := Button.new(); gb.text = _t("hg_btn"); gb.custom_minimum_size = Vector2(0, 40); gb.add_theme_font_size_override("font_size", 14)
+	var gsb := StyleBoxFlat.new(); gsb.bg_color = Color("#0a2033"); gsb.set_corner_radius_all(10); gsb.border_color = Color("#00f0ff"); gsb.set_border_width_all(2)
+	gb.add_theme_stylebox_override("normal", gsb); gb.add_theme_color_override("font_color", Color("#8fe6ff"))
+	gb.pressed.connect(func(): panel.queue_free(); _open_hero_gacha())
+	list.add_child(gb)
 	var cur: String = _squad_hero(cls)["id"]
 	for h in HERO_ROSTER:
-		if not _hero_owned(str(h["id"])): continue   # СВОБОДНЫЙ состав — показываем ВСЕХ (любой класс в любой слот)
-		var hc: int = int(h["cls"])
+		var hid: String = str(h["id"]); var hc: int = int(h["cls"]); var owned := _hero_owned(hid); var rank := _hero_rank(hid)
 		var rc := _rarity_color(int(h["rarity"]))
 		var box := PanelContainer.new()
-		var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.09, 0.11, 0.18, 0.96); sb.set_corner_radius_all(10); sb.border_color = rc; sb.set_border_width_all(3 if h["id"] == cur else 1); sb.set_content_margin_all(10)
+		var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.09, 0.11, 0.18, 0.96) if owned else Color(0.05, 0.05, 0.08, 0.9); sb.set_corner_radius_all(10); sb.border_color = rc if owned else Color("#39405a"); sb.set_border_width_all(3 if hid == cur else 1); sb.set_content_margin_all(10)
 		box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
 		var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 3); box.add_child(v)
 		var pm = PASSIVE_META[h["passive"]]
-		v.add_child(_lbl("%s %s  ·  %s [%s] %s%s" % [HEROES[hc]["icon"], _tloc(h, "name"), _hname(hc), _t("rar%d" % int(h["rarity"])), _tloc(FACTIONS[h["fac"]], "name"), ("   " + _t("hp_active")) if h["id"] == cur else ""], 14, rc, HORIZONTAL_ALIGNMENT_LEFT))
-		v.add_child(_lbl("%s %s — %s" % [pm["icon"], _tloc(pm, "name"), _tloc(pm, "desc")], 11, Color("#c9a6ff"), HORIZONTAL_ALIGNMENT_LEFT))
-		var pick := Button.new(); pick.text = _t("hp_active") if h["id"] == cur else _t("hp_pick"); pick.custom_minimum_size = Vector2(0, 34); pick.disabled = h["id"] == cur
-		var hid: String = str(h["id"]); var hnm: String = _tloc(h, "name"); var hcol: Color = HEROES[hc]["color"]
-		pick.pressed.connect(func(): squad_pick[cls] = hid; _apply_hero_pick(cls); _save(); _popup_center(_t("hp_swapped") % hnm, hcol, 1.8); panel.queue_free(); if impl_open: _refresh_impl())
-		v.add_child(pick)
+		var rankstr := ("  " + _t("hp_rank") % rank) if owned else ""
+		v.add_child(_lbl("%s %s%s  ·  %s [%s] %s%s" % [HEROES[hc]["icon"], _tloc(h, "name"), rankstr, _hname(hc), _t("rar%d" % int(h["rarity"])), _tloc(FACTIONS[h["fac"]], "name"), ("   " + _t("hp_active")) if hid == cur else ""], 14, rc if owned else Color("#7a819a"), HORIZONTAL_ALIGNMENT_LEFT))
+		v.add_child(_lbl("%s %s — %s" % [pm["icon"], _tloc(pm, "name"), _tloc(pm, "desc")], 11, Color("#c9a6ff") if owned else Color("#6a6f85"), HORIZONTAL_ALIGNMENT_LEFT))
+		if not owned:
+			v.add_child(_lbl(_t("hp_locked"), 12, Color("#8a6a2a"), HORIZONTAL_ALIGNMENT_LEFT))
+		else:
+			# осколки + ранг-ап
+			var sh: int = int(hero_shards.get(hid, 0))
+			if rank < HERO_MAX_RANK:
+				var cost := _rankup_cost(rank)
+				var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8)
+				row.add_child(_lbl(_t("hp_shards") % [sh, cost], 12, Color("#7adfff"), HORIZONTAL_ALIGNMENT_LEFT))
+				var ru := Button.new(); ru.text = _t("hp_rankup") % cost; ru.custom_minimum_size = Vector2(150, 30); ru.add_theme_font_size_override("font_size", 12); ru.disabled = sh < cost
+				var rhid := hid; var rnm := _tloc(h, "name")
+				ru.pressed.connect(func(): if _hero_rankup(rhid): _popup_center(_t("hp_rankup_pop") % [rnm, _hero_rank(rhid)], Color("#ffd24a"), 1.8); panel.queue_free(); _open_hero_picker(cls))
+				row.add_child(ru); v.add_child(row)
+			else:
+				v.add_child(_lbl(_t("hp_maxrank"), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
+			var pick := Button.new(); pick.text = _t("hp_active") if hid == cur else _t("hp_pick"); pick.custom_minimum_size = Vector2(0, 32); pick.disabled = hid == cur
+			var hnm: String = _tloc(h, "name"); var hcol: Color = HEROES[hc]["color"]
+			pick.pressed.connect(func(): squad_pick[cls] = hid; _apply_hero_pick(cls); _save(); _popup_center(_t("hp_swapped") % hnm, hcol, 1.8); panel.queue_free(); if impl_open: _refresh_impl())
+			v.add_child(pick)
 		list.add_child(box)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 842); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
