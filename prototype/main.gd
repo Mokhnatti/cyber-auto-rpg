@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.60" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.61" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1841,6 +1841,7 @@ var eq_wpn_stats: Label     # статы пушки (урон/скоростр/�
 var impl_detail: Control
 var det_title: Label
 var det_list: VBoxContainer
+var det_scroll: ScrollContainer   # скролл списка вещей (кап высоты — НАЗАД не уезжает за экран)
 # ПАНЕЛЬ ПРОКАЧКИ (B): открывается кнопкой «поднять уровень»
 var impl_confirm: Control
 var conf_item: Label
@@ -4021,16 +4022,18 @@ func _qte_tick(delta: float) -> void:
 		_qte_clear(); qte_seq = 0
 		return
 	var active := qte_seq > 0 or not qte_markers.is_empty()
+	# фидбэк тестера: на x2/x3 маркеры мелькали слишком быстро — QTE живёт в РЕАЛЬНОМ времени (пальцы игрока не ускоряются)
+	var rdelta := delta / maxf(Engine.time_scale, 0.001)
 	if active:
 		# таймеры жизни активных маркеров (истёк = мимо)
 		for m in qte_markers.duplicate():
-			m["life"] -= delta
+			m["life"] -= rdelta
 			if m["life"] <= 0.0:
 				if is_instance_valid(m["node"]): m["node"].queue_free()
 				qte_markers.erase(m)
 		# спавн следующего маркера серии
 		if qte_seq > 0:
-			qte_spawn_t -= delta
+			qte_spawn_t -= rdelta
 			if qte_spawn_t <= 0.0:
 				_qte_make_marker()
 				qte_idx += 1
@@ -7230,7 +7233,10 @@ func _build_impl_detail() -> void:
 	impl_detail.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
 	det_title = Label.new(); det_title.add_theme_font_size_override("font_size", 18); det_title.add_theme_color_override("font_color", Color("#00f0ff")); det_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(det_title)
-	det_list = VBoxContainer.new(); det_list.add_theme_constant_override("separation", 8); v.add_child(det_list)
+	# фидбэк тестера: при куче вещей кнопка закрытия уезжала за экран → список в скролле с капом высоты, НАЗАД всегда виден
+	det_scroll = ScrollContainer.new(); det_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	det_scroll.custom_minimum_size = Vector2(392, 90); v.add_child(det_scroll)
+	det_list = VBoxContainer.new(); det_list.add_theme_constant_override("separation", 8); det_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL; det_scroll.add_child(det_list)
 	var back := Button.new(); back.text = _t("g_back"); back.add_theme_font_size_override("font_size", 14); back.custom_minimum_size = Vector2(0, 40); back.pressed.connect(_close_detail); v.add_child(back)
 
 func _refresh_detail() -> void:
@@ -7251,6 +7257,8 @@ func _refresh_detail() -> void:
 		return hh["gear"][slot][a]["rarity"] > hh["gear"][slot][b]["rarity"])
 	for key in keys:
 		det_list.add_child(_variant_row(hh, slot, key))
+	# высота скролла по числу вещей, кап чтоб карточка+НАЗАД влезали в экран (фидбэк тестера: закрытие уезжало за край)
+	if det_scroll: det_scroll.custom_minimum_size.y = clampf(keys.size() * 92.0, 90.0, 540.0)
 
 func _variant_row(hh: Dictionary, slot: String, key: String) -> Control:
 	var inst = hh["gear"][slot][key]
