@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.57" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.58" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -3446,9 +3446,12 @@ func _spawn_wave() -> void:
 		if boss:
 			px = 420.0 if iboss else min(500.0 + j * 28.0, 542.0)   # босс-центр, свита правее-глубже
 		else:
-			px = min(352.0 + j * 48.0, 545.0)                        # рядок врагов — шире растянут по дороге, крайний ≤545
+			# шаг адаптивный: мало врагов → широко (2 шт = 80px), много → плотнее, но шахматка глубины разводит
+			var estep: float = clampf(155.0 / float(maxi(spawn_types.size() - 1, 1)), 42.0, 80.0)
+			px = min(390.0 + j * estep, 545.0)                       # крайний ≤545 → не клипается справа
 		# ещё ниже к центру дороги (Рамиль); СВИТА сильно ГЛУБЖЕ босса — головы видны над его плечом (фидбэк «накладывается»)
-		var ey: float = GROUND_Y + 140.0 - ((0.0 if iboss else 96.0 + j * 10.0) if boss else j * 20.0)
+		# обычные — ШАХМАТКОЙ: нечётные в глубину (не стоят впритык кучей)
+		var ey: float = GROUND_Y + 140.0 - ((0.0 if iboss else 96.0 + j * 10.0) if boss else float(j % 2) * 30.0 + j * 4.0)
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
 		var wstage := mini(stage, SOFT_END_STAGE)   # SOFT-END: со ст.2300 СТЕНА заморожена → pow не долетает к 1e300/inf (защита float-потолка)
@@ -3500,8 +3503,10 @@ func _spawn_endless_wave() -> void:
 		if etype == "shield":
 			var bub := Polygon2D.new(); bub.polygon = _ellipse_pts(42.0, 52.0); bub.color = Color(0.3, 0.62, 1.0, 0.16)
 			bub.position = Vector2(0, -52); bub.z_index = -1; d.add_child(bub)
-		var px: float = min(352.0 + j * 48.0, 545.0)   # фит в экран (как основная волна) — шире растянут, крайний ≤545
-		var ey: float = GROUND_Y + 140.0 - j * 20.0   # опущено к центру дороги (как основная волна)
+		# как основная волна: адаптивный шаг + шахматка глубины (не кучей впритык)
+		var estep: float = clampf(155.0 / float(maxi(spawn_types.size() - 1, 1)), 42.0, 80.0)
+		var px: float = min(390.0 + j * estep, 545.0)
+		var ey: float = GROUND_Y + 140.0 - float(j % 2) * 30.0 - j * 4.0
 		d.position = Vector2(720, ey); d.z_index = int(ey)
 		world.add_child(d)
 		var weff: float = min(eff, float(SOFT_END_STAGE))   # SOFT-END: стена этажей тоже заморожена со ст-эквивалента 2300 (защита float-потолка)
