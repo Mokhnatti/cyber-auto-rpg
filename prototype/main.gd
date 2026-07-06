@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.51" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.52" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1198,6 +1198,12 @@ func _qa_poll() -> void:
 		lang = ("en" if lang == "ru" else "ru"); _apply_lang(); return
 	if cmd == "notut":   # QA: скип форсед-туториала для чистых скринов
 		tut_step = 99; onboarded = true; onboard_hidden = true; return
+	if cmd == "goboss":   # QA: форс-босс (скрин-проверка уникального босс-арта)
+		in_boss = true
+		for e in enemies:
+			if e["node"]: e["node"].queue_free()
+		enemies.clear()
+		_spawn_wave(); return
 	if cmd.begins_with("loc"):   # QA: сменить локацию для скрин-проверки фонов (loc0..loc3)
 		cur_location = clamp(int(cmd.substr(3)), 0, LOCATIONS.size() - 1)
 		_apply_location_theme(); return
@@ -3416,7 +3422,12 @@ func _spawn_wave() -> void:
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
 		var glow := Color("#ff2d95") if iboss else Color(et["col"])
 		var es: float = 1.7 if iboss else (1.15 - j * 0.07) * et["s"]   # враги чуть меньше (были крупнее героев — фидбэк Рамиля)
-		var d := _make_char(efolder, -1, es, glow)
+		# УНИКАЛЬНЫЙ БОСС-АРТ: sprites/boss_<loc>/ если есть (свой спрайт+анимация), иначе увеличенный рядовой
+		var bfolder := efolder
+		if iboss:
+			var cand := "boss_" + str(_loc()["id"])
+			if ResourceLoader.exists("res://sprites/%s/idle_0.png" % cand): bfolder = cand
+		var d := _make_char(bfolder if iboss else efolder, -1, es, glow)
 		# 🏷 значок-тип над головой (грейбокс-читаемость). Контр-флип т.к. враг смотрит влево.
 		var eicon: String = "" if iboss else str(et.get("icon", ""))
 		if eicon != "":
