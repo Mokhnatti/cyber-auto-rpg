@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.58" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.59" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -333,6 +333,8 @@ const ROLL_TIERS := [1.0, 0.9, 0.8, 0.7]   # по 25% каждая
 const STAT_KEYS := ["hp", "dmg", "crit", "atk", "ult"]
 # === ТИПЫ ВРАГОВ (стат/поведение поверх стат-обмена) ===
 # hp/dmg/atk — множители; atk<1 = чаще бьёт; back=бьёт заднюю линию; heal=хилит союзников-врагов; s=масштаб
+# 🎨 визуальные ВАРИАНТЫ рядовых: лёгкие типы → спрайт "<loc>b", тяжёлые → "<loc>c", grunt → базовый (фолбэк если папки нет)
+const ENEMY_VARIANT := {"swift": "b", "swarm": "b", "archer": "b", "armor": "c", "shield": "c", "bomber": "c", "healer": "c"}
 const ENEMY_TYPES := {
 	"grunt":  {"name": "Грунт",      "name_en": "Grunt",    "hp": 1.0, "dmg": 1.0, "atk": 1.0, "col": "#ff5050", "s": 1.0, "icon": ""},
 	"armor":  {"name": "Бронебот",   "name_en": "Armorbot", "hp": 3.2, "dmg": 0.6, "atk": 1.4, "col": "#8a96a8", "s": 1.30, "icon": "🛡"},
@@ -3427,7 +3429,11 @@ func _spawn_wave() -> void:
 		if iboss:
 			var cand := "boss_" + str(_loc()["id"])
 			if ResourceLoader.exists("res://sprites/%s/idle_0.png" % cand): bfolder = cand
-		var d := _make_char(bfolder if iboss else efolder, -1, es, glow)
+		else:
+			# 🎨 вариант по типу: лёгкие → <loc>b, тяжёлые → <loc>c (если арт есть)
+			var suf: String = str(ENEMY_VARIANT.get(etype, ""))
+			if suf != "" and ResourceLoader.exists("res://sprites/%s%s/idle_0.png" % [efolder, suf]): bfolder = efolder + suf
+		var d := _make_char(bfolder, -1, es, glow)
 		# 🏷 значок-тип над головой (грейбокс-читаемость). Контр-флип т.к. враг смотрит влево.
 		var eicon: String = "" if iboss else str(et.get("icon", ""))
 		if eicon != "":
@@ -3491,7 +3497,11 @@ func _spawn_endless_wave() -> void:
 		var etype: String = spawn_types[j]
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
 		var es: float = (1.15 - j * 0.07) * et["s"]   # враги чуть меньше (endless, как основная волна)
-		var d := _make_char(efolder, -1, es, Color(et["col"]))
+		# 🎨 вариант по типу (как основная волна): лёгкие → <loc>b, тяжёлые → <loc>c
+		var vfold := efolder
+		var suf: String = str(ENEMY_VARIANT.get(etype, ""))
+		if suf != "" and ResourceLoader.exists("res://sprites/%s%s/idle_0.png" % [efolder, suf]): vfold = efolder + suf
+		var d := _make_char(vfold, -1, es, Color(et["col"]))
 		var eicon: String = str(et.get("icon", ""))
 		if eicon != "":
 			var il := Label.new(); il.text = eicon; il.add_theme_font_size_override("font_size", 13)
@@ -4465,7 +4475,7 @@ func _refresh_hud() -> void:
 func _refresh_goal() -> void:   # гол-баннер новичка: цель меняется по прогрессу, исчезает после 1-го престижа
 	# 📅 баннер недельного ивента — всегда (кроме открытых панелей); имя ивента + язык авто-рефреш
 	if event_banner and event_lbl:
-		event_lbl.text = "📅 " + _tloc(EVENT_LOC[_weekly_event()["id"]], "name")
+		event_lbl.text = "📅 " + str(_weekly_event()["icon"])   # компакт: только иконка ивента, имя+описание в попапе по тапу
 		event_banner.visible = not (inv_open or impl_open or (reboot_panel and reboot_panel.visible))
 	if not goal_banner: return
 	if bot or onboarded or onboard_hidden:
@@ -4581,14 +4591,7 @@ func _build() -> void:
 	login_btn.position = Vector2(W - 88, 242)
 	login_btn.pressed.connect(_show_daily)
 	hud.add_child(login_btn)
-	# 💎 МАГАЗИН/БОНУСЫ — отдельная кнопка (фидбэк Дианы: магазин+реклама нелогично лежали в меню Скорости)
-	var shop_btn := Button.new()
-	shop_btn.text = "💎"
-	shop_btn.add_theme_font_size_override("font_size", 15)
-	shop_btn.custom_minimum_size = Vector2(82, 36)
-	shop_btn.position = Vector2(W - 178, 242)
-	shop_btn.pressed.connect(_open_diamonds_hub)
-	hud.add_child(shop_btn)
+	# 💎 МАГАЗИН/БОНУСЫ — переехал в НИЖНИЙ бар (фидбэк Дианы: 6 блоков справа-сверху = перегруз)
 	# кнопка «К БОССУ» (ворота стадии) — видна в фарм-режиме
 	boss_btn = Button.new()
 	boss_btn.text = _t("to_boss")
@@ -4674,34 +4677,40 @@ func _build() -> void:
 	menubar.alignment = BoxContainer.ALIGNMENT_CENTER
 	menubar.position = Vector2(0, H - 56); menubar.size = Vector2(W, 50)
 	hud.add_child(menubar)
-	# UI-редизайн: навбар 4 кнопки (иконка + подпись), остальное в «☰ Ещё»
+	# UI-редизайн: навбар 5 кнопок (иконки), остальное в «☰ Ещё». 💎 сюда с верхнего HUD (фидбэк Дианы: перегруз справа-сверху)
 	# UI: иконки вместо текста (универсально, без перевода — идея Рамиля)
 	inv_btn = Button.new()
 	inv_btn.text = "📊"
 	inv_btn.tooltip_text = _t("tab_upgrade")
 	inv_btn.add_theme_font_size_override("font_size", 26)
-	inv_btn.custom_minimum_size = Vector2(112, 48)
+	inv_btn.custom_minimum_size = Vector2(104, 48)
 	inv_btn.pressed.connect(_toggle_inv)
 	menubar.add_child(inv_btn)
 	impl_btn = Button.new()
 	impl_btn.text = "🦾"
 	impl_btn.tooltip_text = _t("tab_gear")
 	impl_btn.add_theme_font_size_override("font_size", 26)
-	impl_btn.custom_minimum_size = Vector2(112, 48)
+	impl_btn.custom_minimum_size = Vector2(104, 48)
 	impl_btn.pressed.connect(_toggle_impl)
 	menubar.add_child(impl_btn)
 	var reboot_mb := Button.new()
 	reboot_mb.text = "♻"
 	reboot_mb.tooltip_text = _t("tab_prestige")
 	reboot_mb.add_theme_font_size_override("font_size", 26)
-	reboot_mb.custom_minimum_size = Vector2(112, 48)
+	reboot_mb.custom_minimum_size = Vector2(104, 48)
 	reboot_mb.pressed.connect(_toggle_reboot)
 	menubar.add_child(reboot_mb)
+	var shop_mb := Button.new()
+	shop_mb.text = "💎"
+	shop_mb.add_theme_font_size_override("font_size", 26)
+	shop_mb.custom_minimum_size = Vector2(104, 48)
+	shop_mb.pressed.connect(_open_diamonds_hub)
+	menubar.add_child(shop_mb)
 	more_btn = Button.new()
 	more_btn.text = "☰"
 	more_btn.tooltip_text = _t("tab_more")
 	more_btn.add_theme_font_size_override("font_size", 26)
-	more_btn.custom_minimum_size = Vector2(112, 48)
+	more_btn.custom_minimum_size = Vector2(104, 48)
 	more_btn.pressed.connect(_open_more)
 	menubar.add_child(more_btn)
 	_build_inventory()
@@ -4745,8 +4754,9 @@ func _build() -> void:
 	esb.bg_color = Color(0.12, 0.08, 0.04, 0.86); esb.set_corner_radius_all(9)
 	esb.border_color = Color("#ffb02e"); esb.set_border_width_all(1); esb.set_content_margin_all(5)
 	event_banner.add_theme_stylebox_override("panel", esb)
-	event_banner.position = Vector2(W - 270, 14)
-	event_banner.custom_minimum_size = Vector2(256, 0)
+	# компакт-пилюля «📅🪙» (фидбэк Дианы: перегруз верха; длинное имя наезжало на «волну») — детали по тапу в попапе
+	event_banner.position = Vector2(W - 92, 12)
+	event_banner.custom_minimum_size = Vector2(78, 0)
 	event_banner.z_index = 500
 	event_banner.gui_input.connect(func(ev):
 		if ev is InputEventMouseButton and ev.pressed: _open_event_popup())
