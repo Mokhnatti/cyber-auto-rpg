@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.59" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.60" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1202,6 +1202,12 @@ func _qa_poll() -> void:
 		tut_step = 99; onboarded = true; onboard_hidden = true; return
 	if cmd == "goboss":   # QA: форс-босс (скрин-проверка уникального босс-арта)
 		in_boss = true
+		for e in enemies:
+			if e["node"]: e["node"].queue_free()
+		enemies.clear()
+		_spawn_wave(); return
+	if cmd.begins_with("stage="):   # QA: форс-стадия (скрин-проверка видов врагов — на ст.1 только грунт)
+		stage = maxi(1, int(cmd.substr(6))); best_stage = maxi(best_stage, stage); sub = 1
 		for e in enemies:
 			if e["node"]: e["node"].queue_free()
 		enemies.clear()
@@ -5660,6 +5666,9 @@ func _open_daily_quests() -> void:
 			var qii := qi
 			b.pressed.connect(func(): _dq_claim(qii); panel.queue_free(); _open_daily_quests())
 			v.add_child(b)
+			# фидбэк тестера: забирать тапом по ВСЕЙ плашке (не целиться в кнопку)
+			box.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed: _dq_claim(qii); panel.queue_free(); _open_daily_quests())
 		panel.add_child(box)   # ← ФИКС: коробки квестов не добавлялись в панель → дейли были ПУСТЫЕ (Диана)
 	var dq_ready := _dq_ready_count()
 	var by := 196 + 3 * 104 + 16
@@ -6145,6 +6154,9 @@ func _ach_row(a: Dictionary, panel: Control) -> Control:
 			var aa: Dictionary = a
 			cb.pressed.connect(func(): _ach_claim(aa); panel.queue_free(); _open_achievements())
 			hrow.add_child(cb)
+			# фидбэк тестера: забирать тапом по ВСЕЙ плашке (не целиться в кнопку)
+			box.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed: _ach_claim(aa); panel.queue_free(); _open_achievements())
 	return box
 
 # === ДЕЙЛИКИ ===
