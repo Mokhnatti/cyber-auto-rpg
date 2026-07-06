@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.50" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.51" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -4167,12 +4167,11 @@ func _fall(node: Node2D) -> Tween:   # герои: падают/блёкнут (
 	tw.tween_property(node, "modulate:a", 0.25, 0.3)
 	return tw
 
-func _fall_enemy(node: Node2D) -> void:   # враги: падают и ИСЧЕЗАЮТ (труп убирается)
+func _fall_enemy(node: Node2D) -> void:   # враги: БЕЛАЯ ВСПЫШКА + растворение (ТЗ Рамиля: смерть простая, без красивого падения)
 	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(node, "rotation", 1.4, 0.35)
-	tw.tween_property(node, "modulate:a", 0.0, 0.45)
-	tw.chain().tween_callback(node.queue_free)
+	tw.tween_property(node, "modulate", Color(3.0, 3.0, 3.0, 1.0), 0.10)   # пере-экспон белым (вспышка)
+	tw.tween_property(node, "modulate", Color(2.0, 2.0, 2.0, 0.0), 0.22)   # растворение из белого
+	tw.tween_callback(node.queue_free)
 
 var _popup_pool: Array = []     # свободные Label-ноды урона (перф-ревью: не new/free на каждый удар)
 var _popup_active := 0          # сколько попапов сейчас летит
