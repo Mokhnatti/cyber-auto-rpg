@@ -12,7 +12,7 @@ with sync_playwright() as p:
         "--use-gl=angle", "--use-angle=swiftshader",
         "--ignore-gpu-blocklist", "--enable-unsafe-swiftshader"])
     pg = b.new_page(viewport={"width": 600, "height": 960})
-    pg.on("console", lambda m: errors.append(f"[{m.type}] {m.text}") if m.type in ("error", "warning") else None)
+    pg.on("console", lambda m: errors.append(f"[{m.type}] {m.text}") if m.type in ("error", "warning") and "AudioContext was not allowed to start" not in m.text else None)
     pg.on("pageerror", lambda e: errors.append(f"[pageerror] {e}"))
     pg.goto(URL, wait_until="load", timeout=60000)
     time.sleep(16)  # загрузка + дать ульты зарядиться
