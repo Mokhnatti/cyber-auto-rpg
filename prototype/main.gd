@@ -3438,8 +3438,8 @@ func _load() -> void:
 	_recalc_auras()
 	for hh in heroes:
 		hh["hp"] = hh["max"]
-	# ОФЛАЙН-ДОХОД: пока игрок отсутствовал — начисляем золото (кап 12ч)
-	if not bot:
+	# ОФЛАЙН-ДОХОД: пока игрок отсутствовал — начисляем золото (кап 12ч). Ботам — только в QA-режиме --dayofs (сверка математики)
+	if not bot or qa_day_ofs != 0:
 		var last_ts := int(d.get("ts", 0))
 		if last_ts > 0:
 			var away: int = int(_qa_now()) - last_ts
@@ -3448,6 +3448,7 @@ func _load() -> void:
 				var rate := _passive_rate()   # пассив (растёт со стадией) — тот же расчёт что и онлайн
 				_offline_gold = min(rate * capped, STAT_CAP)   # float-кламп офлайн-дохода (без int() — int64-overflow на глубоких стадиях)
 				_offline_secs = capped
+				if bot: print("TTOFFLINE away=%d capped=%d rate=%.2f gold=%.1f" % [away, capped, rate, _offline_gold])   # QA: числовая сверка оффлайн-математики
 				gold += max(0.0, _offline_gold)
 	_refresh_hud()
 
