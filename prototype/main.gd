@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.66" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.67" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1242,6 +1242,14 @@ func _qa_poll() -> void:
 		qa_day_ofs = int(cmd.substr(7))
 		_dq_refresh(); _ev_refresh(); _bp_check_season(); _refresh_hud()
 		print("QA dayofs=%d today=%d week=%d season=%d" % [qa_day_ofs, _today_num(), _week_num(), _bp_season_idx()])
+		return
+	if cmd == "dump":   # QA: дамп счётчиков в консоль (числовая сверка начислений)
+		print("QADUMP " + JSON.stringify({"diamonds": diamonds, "scrap": scrap, "cores": cores, "gold": int(gold),
+			"bp_boost": bp_boost, "bp_claimed": bp_claimed.size(), "bp_claimed_prem": bp_claimed_prem.size(),
+			"dq_idx": dq_idx, "dq_claimed": dq_claimed, "dq_day": dq_day,
+			"daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total,
+			"ev_week": ev_week, "ev_claimed": ev_claimed, "ev_prog": int(_ev_progress()),
+			"hg_pity": hg_pity, "gacha_pity": gacha_pity, "today": _today_num(), "week": _week_num(), "season": _bp_season_idx()}))
 		return
 	if cmd == "dqforce":   # QA: форс-прогресс всех дейликов дня (тест забора + 🎟 БП-буста)
 		_dq_refresh()
