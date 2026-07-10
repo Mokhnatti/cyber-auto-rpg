@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.84" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.85" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -741,6 +741,7 @@ const TR := {
 	"set_cd_btn": {"ru": "Цифры КД ульт: %s", "en": "Ult cooldown numbers: %s"},
 	"set_music_btn": {"ru": "🎵 Музыка: %s", "en": "🎵 Music: %s"},
 	"set_sfx_btn": {"ru": "🔊 Звуки: %s", "en": "🔊 Sounds: %s"},
+	"boss_alert_t": {"ru": "ОБНАРУЖЕН БОСС", "en": "BOSS DETECTED"},
 	"set_promo_btn": {"ru": "🎟 Промо-код", "en": "🎟 Promo code"},
 	"promo_prompt": {"ru": "Введи промо-код", "en": "Enter promo code"},
 	"promo_ok": {"ru": "✅ Код применён! Перезапуск…", "en": "✅ Code applied! Restarting…"},
@@ -3713,6 +3714,7 @@ func _spawn_wave() -> void:
 		spawn_types.append("boss")
 		for e in BOSS_ESCORTS[(stage - 1) % BOSS_ESCORTS.size()]: spawn_types.append(e)
 		_sfx("boss", -7.0)
+		_boss_alert()   # 🚨 телеграф босса (ресёрч: Survivor.io low-attention паттерн — игрок готов заранее)
 	else:
 		var count := clampi(2 + int(stage / 5), 2, 5)
 		for j in count: spawn_types.append(pool[(stage * 7 + sub * 3 + j * 2) % pool.size()])
@@ -7837,6 +7839,36 @@ func _grant_skipped_loot(upto_stage: int) -> void:
 		_recalc_hero(hh)
 	if kept > 0 or scr > 0:
 		_popup_center(_t("skipped_loot") % [upto_stage - 1, kept, scr], Color("#ffd24a"), 2.8)
+
+# 🚨 драматический алерт босса: красная вспышка-виньетка + баннер с именем (ресёрч P4: телеграф энкаунтера)
+func _boss_alert() -> void:
+	if bot: return
+	var bname := str(_loc().get("quest", {}).get("boss", "BOSS"))
+	var vig := ColorRect.new()
+	vig.color = Color(1.0, 0.1, 0.15, 0.0); vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE; vig.z_index = 78
+	hud.add_child(vig)
+	var tw := create_tween()
+	for k in 3:
+		tw.tween_property(vig, "color:a", 0.22, 0.18)
+		tw.tween_property(vig, "color:a", 0.0, 0.22)
+	tw.tween_callback(vig.queue_free)
+	var ban := Label.new()
+	ban.text = "⚠ %s ⚠\n%s" % [_t("boss_alert_t"), bname]
+	ban.add_theme_color_override("font_color", Color("#ff4d5e"))
+	ban.add_theme_font_size_override("font_size", 26)
+	ban.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ban.position = Vector2(W * 0.5 - 220, H * 0.34); ban.size = Vector2(440, 90)
+	ban.z_index = 80; ban.modulate.a = 0.0; ban.scale = Vector2(1.3, 1.3); ban.pivot_offset = Vector2(220, 45)
+	hud.add_child(ban)
+	var bt := create_tween()
+	bt.set_parallel(true)
+	bt.tween_property(ban, "modulate:a", 1.0, 0.22)
+	bt.tween_property(ban, "scale", Vector2(1.0, 1.0), 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	bt.set_parallel(false)
+	bt.tween_interval(1.4)
+	bt.tween_property(ban, "modulate:a", 0.0, 0.4)
+	bt.tween_callback(ban.queue_free)
 
 func _popup_center(txt: String, col: Color, life := 1.4) -> void:
 	var l := Label.new()
