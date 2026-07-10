@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.62" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.63" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -691,6 +691,9 @@ const TR := {
 	"nick_play_btn": {"ru": "▶ ИГРАТЬ", "en": "▶ PLAY"},
 	"nick_refresh_btn": {"ru": "🔄 обновить версию", "en": "🔄 update version"},
 	"guest_nick": {"ru": "гость", "en": "guest"},
+	"nick_soft_title": {"ru": "🎖 Позывной, наёмник?", "en": "🎖 Callsign, merc?"},
+	"nick_soft_sub": {"ru": "Первый босс разобран. Имя пойдёт в рейтинг и клан.", "en": "First boss down. Your name goes to the leaderboard and clan."},
+	"nick_later_btn": {"ru": "позже", "en": "later"},
 	# подтверждение полного сброса
 	"reset_title": {"ru": "♻ СБРОСИТЬ ВЕСЬ ПРОГРЕСС?", "en": "♻ RESET ALL PROGRESS?"},
 	"reset_body": {"ru": "Сотрёт уровни, шмот, ядра, усиления, стадию.\nЭто новая игра с нуля.", "en": "Wipes levels, gear, cores, augments, stage.\nA brand-new game from scratch."},
@@ -1692,6 +1695,7 @@ const AD_BOOST := {       # base% + step%/уровень (растёт от чи
 var shop_panel: Control
 var daily_t := 0.0        # таймер ежедневной выдачи алмазов (стаб)
 var seen_intro := false   # показано ли интро-обучение (1й запуск)
+var nick_asked := false   # P0 FTUE: мягкий запрос ника после 1-го босса (один раз; гейта на старте больше нет)
 var dialog_seen := {}     # флаг просмотренных контекстных диалогов (ключ → true)
 # === ОНБОРДИНГ (лёгкий гол-баннер до 1-го престижа) ===
 var onboarded := false        # сделан ли 1-й престиж → онбординг пройден навсегда (баннер исчезает)
@@ -2398,6 +2402,31 @@ func _build_nick_prompt() -> void:
 	upd.pressed.connect(_clear_cache)
 	upd.visible = OS.has_feature("web")   # обновление кэша билда — только web (на Android обновления через стор)
 
+# P0 FTUE: мягкий одноразовый запрос позывного ПОСЛЕ 1-го босса (вместо ник-гейта на старте)
+func _ask_nick_soft() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3300; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.09, 0.14, 0.99); sb.set_corner_radius_all(14); sb.set_content_margin_all(20)
+	sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2)
+	card.add_theme_stylebox_override("panel", sb)
+	card.position = Vector2(W * 0.5 - 190, 380); card.custom_minimum_size = Vector2(380, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	var t := Label.new(); t.text = _t("nick_soft_title"); t.add_theme_font_size_override("font_size", 20); t.add_theme_color_override("font_color", Color("#00f0ff")); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var s := Label.new(); s.text = _t("nick_soft_sub"); s.add_theme_font_size_override("font_size", 13); s.add_theme_color_override("font_color", Color("#8a90a5")); s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(s)
+	var be := Button.new(); be.text = _t("nick_enter_btn"); be.add_theme_font_size_override("font_size", 17); be.custom_minimum_size = Vector2(0, 48)
+	be.pressed.connect(func():
+		panel.queue_free()
+		_prompt_nick(func(): _save(); _popup_center("✅ " + _disp_nick(), Color("#3ad97a"), 1.8)))
+	v.add_child(be)
+	var bl := Button.new(); bl.text = _t("nick_later_btn"); bl.add_theme_font_size_override("font_size", 13); bl.custom_minimum_size = Vector2(0, 38)
+	bl.pressed.connect(panel.queue_free)
+	v.add_child(bl)
+
 func _clear_cache() -> void:   # очистка service worker + кэша → загрузка свежей версии (фикс «вижу старое»)
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("(async()=>{try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs){await r.unregister();}}if(self.caches){const ks=await caches.keys();for(const k of ks){await caches.delete(k);}}}catch(e){}location.reload(true);})();", true)
@@ -2701,13 +2730,21 @@ func _ready() -> void:
 		Engine.time_scale = 32.0    # ×16: шаг = 16/fps, при ~250fps ≈ 0.06с (мельче прежнего 0.13с) → симуляция точная, вдвое быстрее
 		print("TTBOT enabled tactic=%s slot=%s time_scale=32 maxfps=0" % [bot_tactic, save_slot])
 	elif nick == "":
-		nick_panel.visible = true   # первый вход → спросить ник (ввод через нативный браузерный prompt)
+		# 🚀 P0 FTUE (ресёрч: день-1 отвал ~77% у жанра): новичок СРАЗУ в бой, без ник-гейта.
+		# Ник спросим мягко после 1-го босса (_ask_nick_soft); версия/обновление кэша — в Настройках.
+		nick = _t("guest_nick")
+		_save()
+		_send_telemetry("start")
+		_show_intro()
 	elif _offline_gold > 0:
 		_show_offline()
 	if not bot and nick != "" and not seen_intro:   # вернувшийся игрок без интро → показать
 		_show_intro()
-	elif _daily_available() and nick != "":   # новый день → ежедневная награда (elif: не стакать с интро, фикс R4)
+	elif _daily_available() and nick != "" and daily_day > 0:   # новый день → ежедневная награда (elif: не стакать с интро; daily_day>0: НЕ на самом первом входе — P0 FTUE без попапов поверх первого боя, день-1 заберёт по бейджу 🎁)
 		_show_daily()
+	elif not bot and not starter_bought and not starter_offer_seen and maxi(best_stage, stage) >= 3:
+		# разовый старт-оффер зацепившемуся новичку (жил в ник-гейте — гейт снят, переехал сюда; не в 1-ю сессию, не поверх интро/дейлика)
+		starter_offer_seen = true; _save(); _show_starter_offer()
 	if not bot and _x2_active():   # активный x2 пережил перезаход → вернуть скорость (фикс C2)
 		_set_speed(2.0)
 	_track("session_start", {"stage": stage})   # KPI: старт сессии (после загрузки сейва)
@@ -2740,7 +2777,7 @@ func _reset() -> void:
 	diamonds = 100000; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}   # ТЕСТ-ФАЗА: фреш-старт 100k алмазов
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
 	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}; hero_ranks = {}; hero_shards = {}; hg_pity = 0
-	seen_intro = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
+	seen_intro = false; nick_asked = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	tut_step = 0; _tut_t = 0.0   # форсед-туториал: свежий старт → показать с шага 1
 	aim_mode = false; aim_hero = -1; _qte_clear()   # чистка QTE-маркеров/прицела при hard-restart (баг-хант R2)
@@ -3217,7 +3254,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3261,6 +3298,7 @@ func _load() -> void:
 	gacha_pity = int(d.get("gacha_pity", 0)); offline_cap_lvl = clampi(int(d.get("offline_cap_lvl", 0)), 0, OFFLINE_CAP_MAX); ad_boosts = d.get("ad_boosts", {}); clan_boosts = d.get("clan_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
+	nick_asked = bool(d.get("nick_asked", nick != ""))   # у старых сейвов ник уже есть → не переспрашивать
 	# ВАЖНО: JSON грузит числа как float → "5 in [5.0]" = false → тиры рекламировались как незабранные (Диана: реклейм каждый заход). Коэрсим в int.
 	bp_claimed = _arr(d.get("bp_claimed", [])).map(func(x): return int(x))
 	bp_claimed_prem = _arr(d.get("bp_claimed_prem", [])).map(func(x): return int(x))
@@ -3732,6 +3770,10 @@ func _process(delta: float) -> void:
 				_track("stage_reached", {"stage": best_stage})   # KPI: новая лучшая стадия
 				if best_stage == 3 or best_stage == 5:
 					_track("tutorial_step", {"step": "stage_%d" % best_stage})   # ранние вехи онбординга
+			# P0 FTUE: игрок зацепился (побил 1-го босса) → мягко спросить позывной (гейта на старте больше нет)
+			if not bot and not nick_asked and stage >= 2 and _disp_nick() == _t("guest_nick"):
+				nick_asked = true; _save()
+				_ask_nick_soft()
 			_update_power_peak()   # пик-мощь для клан-боссов (prestige-proof)
 			if _frags_open() > frags_notified:
 				frags_notified = _frags_open()
@@ -6501,8 +6543,8 @@ func _show_intro() -> void:
 	var lines_ru := ["...Очнулся? Девять секунд выпали — ты не знаешь откуда.", "ZenoCore тебя списала. Имплант в башке — твой единственный актив.", "Иди воевать. Остальное — потом."]
 	var lines_en := ["...Awake? Nine seconds dropped out — you don't know from where.", "ZenoCore wrote you off. The implant in your head is your only asset.", "Go fight. The rest — later."]
 	var intro_lines := lines_ru if lang == "ru" else lines_en
-	_show_context_dialog("📡 СИГНАЛ" if lang == "ru" else "📡 SIGNAL", "📡", Color("#ff2d95"), intro_lines, "intro_signal",
-		func(): _show_help(_t("wc_help_t"), _t("wc_help_b")))
+	# P0 FTUE: стена текста help ПОСЛЕ интро убрана — бой уже идёт, гайдит форсед-туториал (📊→ульта→лут); help остаётся за «?»
+	_show_context_dialog("📡 СИГНАЛ" if lang == "ru" else "📡 SIGNAL", "📡", Color("#ff2d95"), intro_lines, "intro_signal")
 	_track("tutorial_step", {"step": "intro"})   # KPI: показ вводного онбординга
 	seen_intro = true; _save()
 
