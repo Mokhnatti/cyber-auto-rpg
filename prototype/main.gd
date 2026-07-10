@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.71" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.72" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -145,6 +145,16 @@ var _offline_gold := 0.0
 var _offline_secs := 0
 var show_dmg := true        # цифры урона над врагами (настройка)
 var show_cd := true         # цифры КД ульт (настройка)
+# === 🔊 звук (музыка Ludo: 2 лупа локаций + босс; SFX: выстрелы/крит/лут/UI) ===
+var music_on := true
+var sfx_on := true
+var music_player: AudioStreamPlayer
+var sfx_players: Array = []
+var sfx_streams := {}
+var sfx_last := {}          # анти-спам: один и тот же звук не чаще 90мс
+var cur_track := ""
+var set_music_btn: Button
+var set_sfx_btn: Button
 var set_cd_btn: Button
 var settings_panel: Control
 var set_dmg_btn: Button
@@ -726,6 +736,8 @@ const TR := {
 	"set_lang_btn": {"ru": "🌐 Язык: %s", "en": "🌐 Language: %s"},
 	"set_dmg_btn": {"ru": "Цифры урона над врагами: %s", "en": "Damage numbers above enemies: %s"},
 	"set_cd_btn": {"ru": "Цифры КД ульт: %s", "en": "Ult cooldown numbers: %s"},
+	"set_music_btn": {"ru": "🎵 Музыка: %s", "en": "🎵 Music: %s"},
+	"set_sfx_btn": {"ru": "🔊 Звуки: %s", "en": "🔊 Sounds: %s"},
 	"on": {"ru": "ВКЛ ✅", "en": "ON ✅"},
 	"off": {"ru": "ВЫКЛ ⬜", "en": "OFF ⬜"},
 	"set_records": {"ru": "🏆 РЕКОРДЫ / СТАТИСТИКА", "en": "🏆 RECORDS / STATS"},
@@ -2211,6 +2223,7 @@ func _buy_aug(id: String) -> void:
 		return
 	cores -= c
 	aug_lvl[id] = _al(id) + 1
+	_sfx("upgrade", -8.0)
 	_apply_augments()
 	_recalc_auras()
 	_refresh_reboot()
@@ -2784,6 +2797,7 @@ func _ready() -> void:
 	randomize()
 	_analytics_init()   # session_id + сток аналитики (до загрузки сейва)
 	_setup_font()
+	_audio_init()   # до _build: клик-звук цепляется ко всем кнопкам через node_added
 	_build()
 	_fb_init()   # Firebase: анонимный вход (web), даёт #ID для кланов
 	for a in OS.get_cmdline_user_args():   # парсинг флагов ДО загрузки
@@ -3079,6 +3093,54 @@ func _show_death(was_boss: bool) -> void:
 	var msg := _t("you_died") if was_boss else _t("squad_wiped")
 	_popup_center(msg, Color("#ff5050"), 3.8)   # висит дольше
 
+# === 🔊 АУДИО ===
+const MUSIC_HITECH := ["corp", "core", "neon"]   # холодный хай-тек луп; остальным — уличный синтвейв
+
+func _audio_init() -> void:
+	# до _build(): node_added ловит ВСЕ кнопки (клик-звук), включая создаваемые панелями на лету
+	music_player = AudioStreamPlayer.new()
+	music_player.volume_db = -12.0
+	add_child(music_player)
+	for i in 8:
+		var p := AudioStreamPlayer.new()
+		add_child(p); sfx_players.append(p)
+	for k in ["shot_sniper", "shot_assault", "shot_heavy", "shot_hack", "crit", "die", "loot", "click", "ult", "boss", "upgrade", "gacha"]:
+		var path := "res://audio/sfx_%s.ogg" % k
+		if ResourceLoader.exists(path): sfx_streams[k] = load(path)
+	get_tree().node_added.connect(func(n: Node):
+		if n is BaseButton: n.pressed.connect(func(): _sfx("click", -16.0)))
+
+func _sfx(k: String, vol := -8.0) -> void:
+	if bot or not sfx_on or not sfx_streams.has(k): return
+	var now := Time.get_ticks_msec()
+	if now - int(sfx_last.get(k, -999)) < 90: return
+	sfx_last[k] = now
+	for p in sfx_players:
+		if not p.playing:
+			p.stream = sfx_streams[k]
+			p.volume_db = vol
+			p.pitch_scale = 1.0 if k == "click" else randf_range(0.92, 1.08)
+			p.play()
+			return
+
+func _music_track() -> String:
+	if in_boss: return "boss"
+	return "hitech" if str(_loc()["id"]) in MUSIC_HITECH else "street"
+
+func _music_update() -> void:
+	if bot or music_player == null: return
+	var tr := _music_track() if music_on else ""
+	if tr == cur_track: return
+	cur_track = tr
+	if tr == "":
+		music_player.stop(); return
+	var path := "res://audio/bgm_%s.ogg" % tr
+	if not ResourceLoader.exists(path): return
+	var st = load(path)
+	if st is AudioStreamOggVorbis: st.loop = true
+	music_player.stream = st
+	music_player.play()
+
 func _toggle_settings() -> void:
 	if settings_panel == null:
 		_build_settings()
@@ -3110,6 +3172,10 @@ func _refresh_settings() -> void:
 		set_dmg_btn.text = _t("set_dmg_btn") % (_t("on") if show_dmg else _t("off"))
 	if set_cd_btn:
 		set_cd_btn.text = _t("set_cd_btn") % (_t("on") if show_cd else _t("off"))
+	if set_music_btn:
+		set_music_btn.text = _t("set_music_btn") % (_t("on") if music_on else _t("off"))
+	if set_sfx_btn:
+		set_sfx_btn.text = _t("set_sfx_btn") % (_t("on") if sfx_on else _t("off"))
 	if set_nick_input and nick != "" and nick != "гость" and nick != "guest":
 		set_nick_input.text = nick
 
@@ -3139,6 +3205,12 @@ func _build_settings() -> void:
 	set_cd_btn = Button.new(); set_cd_btn.add_theme_font_size_override("font_size", 16); set_cd_btn.custom_minimum_size = Vector2(0, 52)
 	set_cd_btn.pressed.connect(func(): show_cd = not show_cd; _save(); _refresh_settings())
 	v.add_child(set_cd_btn)
+	set_music_btn = Button.new(); set_music_btn.add_theme_font_size_override("font_size", 16); set_music_btn.custom_minimum_size = Vector2(0, 52)
+	set_music_btn.pressed.connect(func(): music_on = not music_on; _save(); _music_update(); _refresh_settings())
+	v.add_child(set_music_btn)
+	set_sfx_btn = Button.new(); set_sfx_btn.add_theme_font_size_override("font_size", 16); set_sfx_btn.custom_minimum_size = Vector2(0, 52)
+	set_sfx_btn.pressed.connect(func(): sfx_on = not sfx_on; _save(); _refresh_settings())
+	v.add_child(set_sfx_btn)
 	recs_btn = Button.new(); recs_btn.text = _t("set_records"); recs_btn.add_theme_font_size_override("font_size", 16); recs_btn.custom_minimum_size = Vector2(0, 52)
 	recs_btn.pressed.connect(_toggle_stats)
 	v.add_child(recs_btn)
@@ -3344,7 +3416,7 @@ func _save() -> void:
 	for hh in heroes:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
-		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
+		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "music_on": music_on, "sfx_on": sfx_on, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
@@ -3382,6 +3454,7 @@ func _load() -> void:
 	if lang != "ru" and lang != "en": lang = "ru"
 	show_dmg = bool(d.get("show_dmg", true))
 	show_cd = bool(d.get("show_cd", true))
+	music_on = bool(d.get("music_on", true)); sfx_on = bool(d.get("sfx_on", true))
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
@@ -3552,6 +3625,7 @@ func _spawn_wave() -> void:
 	if boss:
 		spawn_types.append("boss")
 		for e in BOSS_ESCORTS[(stage - 1) % BOSS_ESCORTS.size()]: spawn_types.append(e)
+		_sfx("boss", -7.0)
 	else:
 		var count := clampi(2 + int(stage / 5), 2, 5)
 		for j in count: spawn_types.append(pool[(stage * 7 + sub * 3 + j * 2) % pool.size()])
@@ -3722,6 +3796,7 @@ func _endless_end() -> void:
 	_refresh_hud()
 
 func _process(delta: float) -> void:
+	if not bot: _music_update()   # трек = f(локация, босс) — ловит все переходы, дешёвый ранний выход
 	# игрок: x2-ускорение по таймеру рекламы истекло → откат на x1 (ботов не трогаем — у них x16)
 	if not bot and Engine.time_scale >= 2.0 and Engine.time_scale < 3.0 and not _x2_active():
 		_set_speed(1.0)
@@ -4015,7 +4090,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
 	e["hp"] = max(0.0, e["hp"] - d)
 	_stat_add("dmg", d)                     # п.7: статистика урона/критов/рекорд удара
 	hero_dmg_run[hh["data"]["name"]] = float(hero_dmg_run.get(hh["data"]["name"], 0.0)) + d   # урон per-герой → % вклада в статистике (фидбэк Дианы)
-	if is_crit: _stat_add("crits", 1)
+	if is_crit: _stat_add("crits", 1); _sfx("crit", -9.0)
 	if d > rec_maxhit: rec_maxhit = d
 	var col: Color = Color("#ffe14d") if is_crit else hh["data"]["color"]
 	var sz := 38 if is_crit else 26
@@ -4030,6 +4105,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
 		_stat_add("gold", kg)
 		if e.get("boss", false): _stat_add("bosses", 1)
 		else: _stat_add("mobs", 1)
+		_sfx("die", -11.0)
 		# 💥 ВЗРЫВНОЙ: при смерти бьёт ПО ОТРЯДУ (контр для танк/HP-билдов)
 		if e.get("type", "") == "bomber":
 			_popup("💥", Color("#ff7a2d"), e["node"].position + Vector2(0, -40), 34)
@@ -4088,6 +4164,7 @@ func _use_ult(i: int) -> void:
 		return
 	hh["ult_t"] = hh["ult_cd_eff"]
 	hh["atk_anim"] = 0.25
+	_sfx("ult", -7.0)
 	match hh["data"]["ult"]:
 		"barrage":
 			atk_buff_t = 6.0   # ШТУРМ: всем +скорость атаки (без текста — шум)
@@ -4109,6 +4186,7 @@ func _sniper_fire(sn, target) -> void:
 	if sn["ult_t"] > 0.0 or not sn["alive"]: return   # фикс дабл-каста: не стрелять на КД или мёртвым (баг-хант R2)
 	sn["ult_t"] = sn["ult_cd_eff"]
 	sn["atk_anim"] = 0.25
+	_sfx("ult", -7.0)
 	var d: float = sn["dmg"] * 12 * aura_dmg
 	_deal(sn, target, d, true)
 	if show_dmg:
@@ -4388,10 +4466,10 @@ func _fire_shot(hh: Dictionary, tgt: Dictionary) -> void:
 	var to: Vector2 = tgt["node"].position + Vector2(0, -55)
 	var col: Color = hh["data"]["color"]
 	match hh["data"]["atk_type"]:
-		"snipe": _proj_tracer(from, to, Color("#7ff0ff"))                 # рельса — мгновенный яркий луч
-		"aoe":   _proj_drone(from, to, Color("#ff2d95"))                  # хакер — дрон летит и рвётся кольцом
-		"tank":  _proj_bullet(from, to, Color("#8affab"), 0.28, 7.0, 20.0)  # тяж-снаряд, медленнее/толще
-		_:       _proj_bullet(from, to, Color("#ffce6a"), 0.18, 4.0, 15.0)  # штурм — быстрая пуля
+		"snipe": _proj_tracer(from, to, Color("#7ff0ff")); _sfx("shot_sniper", -13.0)   # рельса — мгновенный яркий луч
+		"aoe":   _proj_drone(from, to, Color("#ff2d95")); _sfx("shot_hack", -14.0)      # хакер — дрон летит и рвётся кольцом
+		"tank":  _proj_bullet(from, to, Color("#8affab"), 0.28, 7.0, 20.0); _sfx("shot_heavy", -13.0)  # тяж-снаряд, медленнее/толще
+		_:       _proj_bullet(from, to, Color("#ffce6a"), 0.18, 4.0, 15.0); _sfx("shot_assault", -14.0)  # штурм — быстрая пуля
 	_muzzle_flash(from, col)
 
 func _muzzle_flash(pos: Vector2, col: Color) -> void:
@@ -5388,6 +5466,7 @@ func _gacha_pull(n: int) -> Array:
 	if diamonds < cost: return []
 	diamonds -= cost
 	_stat_add("pulls", n)   # ачивка: гача-пуллы
+	_sfx("gacha", -7.0)
 	var results := []
 	for k in n:
 		var rar := _gacha_rarity()
@@ -5458,6 +5537,7 @@ func _hg_heroes_of(rar: int) -> Array:
 	return out
 
 func _hero_gacha_pull(n: int) -> Array:
+	_sfx("gacha", -7.0)
 	var results := []
 	for i in n:
 		var rar := _hg_rarity()
@@ -5809,6 +5889,7 @@ func _dq_claim(qi: int) -> void:
 	if dq_claimed.size() >= 3:   # 🎟 P3: полный день дейликов = +1 тир-прогресс БП (дейлики двигают батлпасс)
 		bp_boost += 1; _bp_cache_stage = -1
 		_popup_center(_t("bp_boost_pop"), Color("#ffd24a"), 2.4)
+	_sfx("loot", -8.0)
 	_save(); _refresh_hud()
 	_popup_center(_t("dq_done_pop") + _dq_rew_text(q), Color("#3ad97a"), 1.6)
 
@@ -7490,6 +7571,7 @@ func _close_detail() -> void:
 func _drop_implant() -> void:
 	implants_count += 1
 	_stat_add("drops", 1)   # ачивка: собрано дропа
+	_sfx("loot", -10.0)
 	var i := randi() % heroes.size()
 	var slot: String = "weapon" if randf() < 0.35 else "module"
 	_drop_into(heroes[i], i, slot)
