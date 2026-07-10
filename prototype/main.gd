@@ -54,6 +54,15 @@ const PASSIVE_META := {
 	"datamine":    {"icon": "💰", "name": "Дата-майнинг", "name_en": "Data-Mining",  "desc": "Убийства дают доп-золото",                           "desc_en": "Kills grant bonus gold"},
 }
 var squad_pick := {}          # {slot(0-3): hero_id} — кто в слоте (свободный состав). Дефолт = базовые.
+# ⬍ ФОРМАЦИЯ (ресёрч P1: паззл расстановки): formation_pos[слот] = индекс позиции FORMATION
+var formation_pos := [0, 1, 2, 3]
+const POS_BONUS := [
+	{"dmg": 0.12, "hp": 0.0,  "icon": "🎯", "key": "pos_rear"},    # 0 тыл: безопасно, +урон
+	{"dmg": 0.05, "hp": 0.05, "icon": "⚔", "key": "pos_mid"},     # 1 центр: сбалансированно
+	{"dmg": 0.0,  "hp": 0.25, "icon": "🛡", "key": "pos_front"},   # 2 фронт: принимает удары, +HP
+	{"dmg": 0.05, "hp": 0.10, "icon": "🔧", "key": "pos_support"}, # 3 опора: гибрид
+]
+var pos_sel := -1             # выбранная строка в окне позиций (для свапа)
 var heroes_owned := {}        # (устар.) {hero_id: true} — читаем для миграции
 # === ЭТАП-4: ГАЧА ГЕРОЕВ / РАНГИ / ОСКОЛКИ ===
 var hero_ranks := {}          # {hero_id: rank(int≥1)} — rank≥1 = ОТКРЫТ. Ранг ↑ = сильнее (осколки).
@@ -128,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.87" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.88" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -752,6 +761,13 @@ const TR := {
 	"district_pop_t": {"ru": "🎉 НОВЫЙ РАЙОН ОТКРЫТ", "en": "🎉 NEW DISTRICT UNLOCKED"},
 	"district_pop_sub": {"ru": "Новые враги · Новый босс · Сюжетный квест", "en": "New enemies · New boss · Story quest"},
 	"district_pop_go": {"ru": "⚔ В БОЙ", "en": "⚔ FIGHT ON"},
+	"m_positions": {"ru": "⬍ Позиции отряда", "en": "⬍ Squad positions"},
+	"pos_title": {"ru": "⬍ ПОЗИЦИИ ОТРЯДА", "en": "⬍ SQUAD POSITIONS"},
+	"pos_hint": {"ru": "Тапни две строки — бойцы поменяются местами.\nПозиция даёт бонус; стрелки врагов бьют ТЫЛ, фронт ловит удары.", "en": "Tap two rows to swap fighters.\nPosition grants a bonus; enemy archers hit the REAR, the front soaks hits."},
+	"pos_front": {"ru": "ФРОНТ", "en": "FRONT"},
+	"pos_mid": {"ru": "ЦЕНТР", "en": "CENTER"},
+	"pos_support": {"ru": "ОПОРА", "en": "SUPPORT"},
+	"pos_rear": {"ru": "ТЫЛ", "en": "REAR"},
 	"set_promo_btn": {"ru": "🎟 Промо-код", "en": "🎟 Promo code"},
 	"promo_prompt": {"ru": "Введи промо-код", "en": "Enter promo code"},
 	"promo_ok": {"ru": "✅ Код применён! Перезапуск…", "en": "✅ Code applied! Restarting…"},
@@ -1295,6 +1311,8 @@ func _qa_poll() -> void:
 		_spawn_wave(); return
 	if cmd == "district":   # QA: попап «новый район открыт» (скрин-проверка)
 		_district_popup(cur_location); return
+	if cmd == "positions":   # QA: окно расстановки
+		_open_positions(); return
 	if cmd.begins_with("dayofs="):   # QA: машина времени — сдвиг даты в днях (тест дейликов/недель/сезонов БП)
 		qa_day_ofs = int(cmd.substr(7))
 		_dq_refresh(); _ev_refresh(); _bp_check_season(); _refresh_hud()
@@ -2230,6 +2248,12 @@ func _recalc_hero(hh: Dictionary) -> void:
 	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
 	hh["atk_mult"] = (1.0 + _gear_bonus(hh, "atk") / 100.0) * aug_atk * _ad_mult("atk") * _clan_boost_mult("atk")   # ×бусты скорости
 	hh["ult_cd_eff"] = hh["data"]["ult_cd"] * aura_ult * max(0.4, 1.0 - _gear_bonus(hh, "ult") / 100.0) * aug_ultcd
+	# ⬍ бонус позиции формации (тыл +урон / фронт +HP): тактика расстановки, ресёрч P1
+	var _sl: int = int(hh.get("slot", -1))
+	if _sl >= 0 and _sl < formation_pos.size():
+		var pb: Dictionary = POS_BONUS[formation_pos[_sl]]
+		hh["dmg"] = min(hh["dmg"] * (1.0 + float(pb["dmg"])), STAT_CAP)
+		hh["max"] = min(hh["max"] * (1.0 + float(pb["hp"])), STAT_CAP)
 	if hh["hp"] > hh["max"]: hh["hp"] = hh["max"]
 
 func _aug_cost(id: String) -> int:
@@ -2941,7 +2965,7 @@ func _reset() -> void:
 		var hero := _squad_hero(i)            # выбранный герой-вариант в слоте (свободный состав: любой класс в любой слот)
 		var hcls: int = int(hero["cls"])
 		var h = HEROES[hcls]                  # класс-БАЗА боя = КЛАСС ГЕРОЯ (atk_type/цвет/ульта/пушки/спрайт)
-		var fp = FORMATION[i]                 # позиция — по слоту
+		var fp = FORMATION[formation_pos[i]] if i < formation_pos.size() else FORMATION[i]   # ⬍ позиция — по формации игрока
 		# спрайт: если у ГЕРОЯ есть свой набор анимаций sprites/<id>/ — берём его (новые фракции), иначе класс-фолбэк hero<N>
 		var sfolder := "hero%d" % (hcls + 1)
 		var _hid := str(hero.get("id", ""))
@@ -2958,7 +2982,7 @@ func _reset() -> void:
 			"level": 1, "lvl_cost": 30,
 			"gear": g["gear"], "equip": g["equip"],
 			"crit": h["crit"], "atk_mult": 1.0, "ult_cd_eff": h["ult_cd"],
-			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0
+			"t": h["atk"], "ult_t": h["ult_cd"], "alive": true, "shield": 0.0, "atk_anim": 0.0, "slot": i
 		})
 	_recalc_auras()
 	_start_march()
@@ -3517,7 +3541,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "music_on": music_on, "sfx_on": sfx_on, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3559,6 +3583,9 @@ func _load() -> void:
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
 	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); iap_granted = d.get("iap_granted", [])
+	formation_pos = d.get("formation_pos", [0, 1, 2, 3])
+	if formation_pos.size() != 4: formation_pos = [0, 1, 2, 3]
+	formation_pos = formation_pos.map(func(x): return int(x))
 	# 💰 боевая экономика: тест-буст «всегда ≥100k💎» убран (10.07, команда Рамиля). Старые сейвы остаются с накопленным.
 	gacha_pity = int(d.get("gacha_pity", 0)); offline_cap_lvl = clampi(int(d.get("offline_cap_lvl", 0)), 0, OFFLINE_CAP_MAX); ad_boosts = d.get("ad_boosts", {}); clan_boosts = d.get("clan_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
@@ -3694,15 +3721,23 @@ func _start_march() -> void:
 	bg.speed = 220.0
 
 # враги бьют переднюю линию первой: танк(2) → штурм(1)/хакер(3) → снайпер(0)
+func _slots_by_pos(order: Array) -> Array:
+	# слоты в порядке приоритета их ПОЗИЦИЙ (формация игрока меняет, кто «фронт», а кто «тыл»)
+	var res := []
+	for p in order:
+		var si := formation_pos.find(p)
+		if si != -1: res.append(si)
+	return res
+
 func _front_hero() -> Variant:
-	for idx in [2, 1, 3, 0]:
+	for idx in _slots_by_pos([2, 1, 3, 0]):
 		if idx < heroes.size() and heroes[idx]["alive"]:
 			return heroes[idx]
 	return null
 
 # задняя линия (сквиши): снайпер → хакер → штурм → танк
 func _back_hero() -> Variant:
-	for idx in [0, 3, 1, 2]:
+	for idx in _slots_by_pos([0, 3, 1, 2]):
 		if idx < heroes.size() and heroes[idx]["alive"]:
 			return heroes[idx]
 	return null
@@ -6421,6 +6456,7 @@ func _open_more() -> void:
 		more_items.append([_t("m_endless") + ("   🏆%d" % endless_best if endless_best > 0 else ""), Callable(self, "_endless_start")])
 	else:
 		more_items.append([_t("m_endless") + "   🔒%d" % ENDLESS_GATE_STAGE, Callable(self, "_endless_start")])
+	more_items.append([_t("m_positions"), Callable(self, "_open_positions")])
 	more_items.append([_t("m_settings"), Callable(self, "_toggle_settings")])
 	if OS.has_feature("web"):   # «обновить игру» (чистка кэша билда) — только web; на Android обновления через стор
 		more_items.append([_t("update_btn") % VERSION, Callable(self, "_force_update")])
@@ -7903,6 +7939,60 @@ func _flash_screen(col: Color, a: float, dur: float) -> void:
 	var tw := create_tween()
 	tw.tween_property(f, "color:a", 0.0, dur)
 	tw.tween_callback(f.queue_free)
+
+# ⬍ ОКНО ПОЗИЦИЙ (ресёрх P1: тактическая расстановка — мини-паззл; тап двух строк = свап)
+func _open_positions() -> void:
+	pos_sel = -1
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.88); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	var t := _lbl(_t("pos_title"), 20, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); t.position = Vector2(0, 120); t.size = Vector2(W, 30); panel.add_child(t)
+	var sub := _lbl(_t("pos_hint"), 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 152); sub.size = Vector2(W, 40); panel.add_child(sub)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); v.position = Vector2(40, 210); v.size = Vector2(W - 80, 0); panel.add_child(v)
+	var rows := []
+	var refresh := func():
+		for pi in 4:
+			var porder: int = [2, 1, 3, 0][pi]
+			var slot := formation_pos.find(porder)
+			var hh = heroes[slot] if slot < heroes.size() else null
+			var pb: Dictionary = POS_BONUS[porder]
+			var bonus := ""
+			if float(pb["hp"]) > 0.0: bonus += "+%d%%HP " % int(pb["hp"] * 100)
+			if float(pb["dmg"]) > 0.0: bonus += "+%d%%⚔" % int(pb["dmg"] * 100)
+			var hname := (str(hh["data"]["icon"]) + " " + str(hh.get("hname", ""))) if hh else "—"
+			rows[pi].text = "%s %s (%s)   →   %s" % [str(pb["icon"]), _t(str(pb["key"])), bonus.strip_edges(), hname]
+			rows[pi].modulate = Color(1.4, 1.4, 0.7) if pos_sel == pi else Color(1, 1, 1)
+	for pi in 4:
+		var b := Button.new(); b.custom_minimum_size = Vector2(0, 56); b.add_theme_font_size_override("font_size", 14)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var _pi := pi
+		b.pressed.connect(func():
+			if pos_sel == -1:
+				pos_sel = _pi
+			elif pos_sel == _pi:
+				pos_sel = -1
+			else:
+				var pa: int = [2, 1, 3, 0][pos_sel]; var pbx: int = [2, 1, 3, 0][_pi]
+				var sa := formation_pos.find(pa); var sb := formation_pos.find(pbx)
+				formation_pos[sa] = pbx; formation_pos[sb] = pa
+				pos_sel = -1
+				_apply_formation()
+			refresh.call())
+		v.add_child(b); rows.append(b)
+	var bc := Button.new(); bc.text = _t("close_caps"); bc.custom_minimum_size = Vector2(0, 48); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	refresh.call()
+
+func _apply_formation() -> void:
+	for i in heroes.size():
+		var hh = heroes[i]
+		var fp = FORMATION[formation_pos[i]]
+		if is_instance_valid(hh.get("node")):
+			hh["node"].position = Vector2(fp["x"], GROUND_Y + fp["y"])
+			hh["node"].z_index = int(hh["node"].position.y)
+			hh["node"].scale = Vector2(fp["s"], fp["s"])
+		_recalc_hero(hh)
+	_save(); _refresh_hud()
 
 # 🎉 «НОВЫЙ РАЙОН ОТКРЫТ» — milestone-празднование + мягкий чаптер-оффер (ресёрч P5: стена→оффер, без таймер-давления)
 func _district_popup(li: int) -> void:
