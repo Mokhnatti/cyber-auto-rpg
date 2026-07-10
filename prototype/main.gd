@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.86" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.87" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -749,6 +749,9 @@ const TR := {
 	"set_sfx_btn": {"ru": "🔊 Звуки: %s", "en": "🔊 Sounds: %s"},
 	"boss_alert_t": {"ru": "ОБНАРУЖЕН БОСС", "en": "BOSS DETECTED"},
 	"streak_lbl": {"ru": "СЕРИЯ ×%d", "en": "STREAK ×%d"},
+	"district_pop_t": {"ru": "🎉 НОВЫЙ РАЙОН ОТКРЫТ", "en": "🎉 NEW DISTRICT UNLOCKED"},
+	"district_pop_sub": {"ru": "Новые враги · Новый босс · Сюжетный квест", "en": "New enemies · New boss · Story quest"},
+	"district_pop_go": {"ru": "⚔ В БОЙ", "en": "⚔ FIGHT ON"},
 	"set_promo_btn": {"ru": "🎟 Промо-код", "en": "🎟 Promo code"},
 	"promo_prompt": {"ru": "Введи промо-код", "en": "Enter promo code"},
 	"promo_ok": {"ru": "✅ Код применён! Перезапуск…", "en": "✅ Code applied! Restarting…"},
@@ -1290,6 +1293,8 @@ func _qa_poll() -> void:
 			if e["node"]: e["node"].queue_free()
 		enemies.clear()
 		_spawn_wave(); return
+	if cmd == "district":   # QA: попап «новый район открыт» (скрин-проверка)
+		_district_popup(cur_location); return
 	if cmd.begins_with("dayofs="):   # QA: машина времени — сдвиг даты в днях (тест дейликов/недель/сезонов БП)
 		qa_day_ofs = int(cmd.substr(7))
 		_dq_refresh(); _ev_refresh(); _bp_check_season(); _refresh_hud()
@@ -4055,6 +4060,7 @@ func _process(delta: float) -> void:
 			for li in LOCATIONS.size():
 				if best_stage == int(LOCATIONS[li]["unlock"]) and li != cur_location:
 					_go_location(li)
+					_district_popup(li)   # 🎉 milestone-празднование + чаптер-оффер (ресёрч P5)
 					break
 			_update_power_peak()   # пик-мощь для клан-боссов (prestige-proof)
 			if _frags_open() > frags_notified:
@@ -7897,6 +7903,33 @@ func _flash_screen(col: Color, a: float, dur: float) -> void:
 	var tw := create_tween()
 	tw.tween_property(f, "color:a", 0.0, dur)
 	tw.tween_callback(f.queue_free)
+
+# 🎉 «НОВЫЙ РАЙОН ОТКРЫТ» — milestone-празднование + мягкий чаптер-оффер (ресёрч P5: стена→оффер, без таймер-давления)
+func _district_popup(li: int) -> void:
+	if bot: return
+	var loc = LOCATIONS[li]
+	_sfx("win", -7.0)
+	_flash_screen(Color("#00f0ff"), 0.18, 0.5)
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3350; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.82); dim.set_anchors_preset(Control.PRESET_FULL_RECT); panel.add_child(dim)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.05, 0.09, 0.14, 0.99); sb.set_corner_radius_all(14)
+	sb.border_color = Color(str(loc["neon"][0])); sb.set_border_width_all(2); sb.set_content_margin_all(20)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 250); card.custom_minimum_size = Vector2(420, 0)
+	panel.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	v.add_child(_lbl(_t("district_pop_t"), 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(str(loc.get("icon", "")) + " " + _tloc(loc, "name"), 26, Color(str(loc["neon"][0])), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("district_pop_sub"), 13, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	# мягкий оффер: старт-пак пока не куплен, иначе ивент-пак (без таймеров-давилок)
+	if not starter_bought:
+		var ob := Button.new(); ob.text = _t("starter_btn"); ob.custom_minimum_size = Vector2(0, 48); ob.add_theme_font_size_override("font_size", 15)
+		ob.add_theme_color_override("font_color", Color("#9affc0"))
+		ob.pressed.connect(func(): _buy_starter(); panel.queue_free())
+		v.add_child(ob)
+	var go := Button.new(); go.text = _t("district_pop_go"); go.custom_minimum_size = Vector2(0, 52); go.add_theme_font_size_override("font_size", 17)
+	go.pressed.connect(func(): panel.queue_free())
+	v.add_child(go)
 
 # 🚨 драматический алерт босса: красная вспышка-виньетка + баннер с именем (ресёрч P4: телеграф энкаунтера)
 func _boss_alert() -> void:
