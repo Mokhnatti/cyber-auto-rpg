@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.81" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.82" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1758,6 +1758,13 @@ var x2_until := 0.0       # x2-скорость активна до этого t
 # VIP «Кибер-пропуск» — недельная подписка (рекуррентный доход): ×2 золото + бесплатная x2-скорость + алмазы/день. Биллинг=стаб (реальный на платформе).
 var vip_until := 0.0
 const VIP_DAYS := 30       # месячная подписка (4.99$/мес — рыночная норма; недельная была жадной, фидбэк Рамиля)
+
+# === 💳 БИЛЛИНГ (Google Play Billing, плагин v3.2). На web/десктопе/ботах iap=null → стабы как раньше ===
+const IAP_DIAMONDS := {"diamonds_100": 100, "diamonds_550": 550, "diamonds_1200": 1200, "diamonds_6500": 6500}
+const IAP_VIP_ID := "cyber_pass"      # id подписки в Play Console (base plan: "monthly")
+var iap: BillingClient = null
+var iap_ready := false
+var iap_granted := []                 # токены выданных покупок — защита от даблгранта при ресторе
 const VIP_GOLD_MULT := 2.0         # ×2 всё золото пока активен
 const VIP_DAILY_DIAMONDS := 30     # стипенд алмазов при клейме дейлика, пока VIP активен
 # 🎁 СТАРТ-ПАК — разовый оффер новичку (топ-конверсия среди IAP): много ценности за низкий прайс, покупается ОДИН раз
@@ -2818,6 +2825,7 @@ func _ready() -> void:
 	_build_nick_prompt()
 	_reset()
 	_load()   # подхватить сейв (по слоту)
+	_iap_init()   # 💳 реальный биллинг (только Android с плагином; иначе iap=null → стабы)
 	_grant_base_heroes()   # база 4 всегда открыты (новичок стартует с них, остальных — гачей)
 	if _test_comp != "":   # бот-тест состава (свободный состав). Формат: 4 id через запятую, либо пресет.
 		if "," in _test_comp:
@@ -3419,7 +3427,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "music_on": music_on, "sfx_on": sfx_on, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3460,7 +3468,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
-	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false))
+	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); iap_granted = d.get("iap_granted", [])
 	diamonds = max(diamonds, 100000)   # ТЕСТ-ФАЗА: тестерам всегда ≥100k алмазов (крутить гачу/VIP/паки без лимита). ВЕРНУТЬ на 50 перед релизом!
 	gacha_pity = int(d.get("gacha_pity", 0)); offline_cap_lvl = clampi(int(d.get("offline_cap_lvl", 0)), 0, OFFLINE_CAP_MAX); ad_boosts = d.get("ad_boosts", {}); clan_boosts = d.get("clan_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
@@ -5336,8 +5344,74 @@ func _open_ad_boosts() -> void:
 		v.add_child(row)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
+# --- 💳 реальный биллинг ---
+func _iap_init() -> void:
+	if bot or not OS.has_feature("android") or not Engine.has_singleton("GodotGooglePlayBilling"): return
+	iap = BillingClient.new()
+	add_child(iap)
+	iap.connected.connect(func():
+		iap_ready = true
+		iap.query_purchases(BillingClient.ProductType.INAPP)   # рестор незавершённых/невыданных покупок
+		iap.query_purchases(BillingClient.ProductType.SUBS))
+	iap.disconnected.connect(func(): iap_ready = false)
+	iap.connect_error.connect(func(_c, _m): iap_ready = false)
+	iap.on_purchase_updated.connect(_iap_on_purchases)
+	iap.query_purchases_response.connect(_iap_on_purchases)
+	iap.start_connection()
+
+func _iap_on_purchases(resp: Dictionary) -> void:
+	for p in resp.get("purchases", []):
+		if int(p.get("purchase_state", 0)) != BillingClient.PurchaseState.PURCHASED: continue
+		var token := str(p.get("purchase_token", ""))
+		for pid in p.get("product_ids", p.get("products", [])):
+			_iap_grant(str(pid), token, bool(p.get("is_acknowledged", false)))
+
+func _iap_grant(pid: String, token: String, acked: bool) -> void:
+	var fresh: bool = not (token in iap_granted)
+	if fresh:
+		iap_granted.append(token)
+		if iap_granted.size() > 60: iap_granted.pop_front()
+	if IAP_DIAMONDS.has(pid):
+		if fresh:
+			diamonds += int(IAP_DIAMONDS[pid])
+			_track("iap_real", {"item": pid})
+			_popup_center(_t("shop_buy_pop") % int(IAP_DIAMONDS[pid]), Color("#ffd24a"), 1.6)
+		iap.consume_purchase(token)   # расходник: consume → можно купить снова
+	elif pid == "starter_pack":
+		if fresh and not starter_bought:
+			starter_bought = true
+			diamonds += STARTER_DIAMONDS; scrap += STARTER_SCRAP; cores += STARTER_CORES
+			_track("iap_real", {"item": pid})
+			_popup_center(_t("starter_pop") % STARTER_DIAMONDS, Color("#3ad97a"), 2.6)
+		if not acked: iap.acknowledge_purchase(token)
+	elif pid == "event_pack":
+		if fresh:
+			diamonds += 1000
+			_track("iap_real", {"item": pid, "event": _weekly_event()["id"]})
+			_popup_center(_t("event_offer_pop") % 1000, Color("#7adfff"), 2.4)
+		iap.consume_purchase(token)
+	elif pid == IAP_VIP_ID:
+		if fresh and not _vip_active():   # срок ведёт Google; локально даём 30д, рестор при активной не дублирует
+			vip_until = _qa_now() + VIP_DAYS * 86400.0
+			_track("iap_real", {"item": pid})
+			_popup_center(_t("vip_buy_pop") % VIP_DAYS, Color("#ffd24a"), 2.6)
+		if not acked: iap.acknowledge_purchase(token)
+	_save(); _refresh_hud()
+
+func _iap_buy_diamonds(pid: String, amt: int, price: String) -> void:
+	if iap != null and iap_ready:
+		iap.purchase(pid)   # грант придёт в on_purchase_updated
+		return
+	diamonds += amt   # стаб (web/тест)
+	_track("iap_purchase", {"item": pid, "amount": amt, "price": price})
+	_save(); _refresh_hud()
+	_popup_center(_t("shop_buy_pop") % amt, Color("#ffd24a"), 1.6)
+
 func _buy_vip() -> void:
-	# 👑 Кибер-пропуск — недельная подписка (СТАБ биллинга: на платформе реальный recurring). Продление добавляет неделю поверх остатка.
+	# 👑 Кибер-пропуск — месячная подписка. Android: реальный биллинг; иначе стаб.
+	if iap != null and iap_ready:
+		iap.purchase_subscription(IAP_VIP_ID, "monthly")
+		return
 	var base: float = max(vip_until, _qa_now())
 	vip_until = base + VIP_DAYS * 86400.0
 	_track("iap_purchase", {"item": "vip_week", "price": "4.99$"})
@@ -5346,8 +5420,11 @@ func _buy_vip() -> void:
 	_popup_center(_t("vip_buy_pop") % VIP_DAYS, Color("#ffd24a"), 2.6)
 
 func _buy_starter() -> void:
-	# 🎁 Старт-пак — разово (СТАБ биллинга). Топ-конверсионный оффер новичку.
+	# 🎁 Старт-пак — разово. Android: реальный биллинг; иначе стаб.
 	if starter_bought: return
+	if iap != null and iap_ready:
+		iap.purchase("starter_pack")
+		return
 	starter_bought = true
 	diamonds += STARTER_DIAMONDS; scrap += STARTER_SCRAP; cores += STARTER_CORES
 	_track("iap_purchase", {"item": "starter_pack", "price": "2.99$"})
@@ -5378,7 +5455,10 @@ func _show_starter_offer() -> void:
 	v.add_child(later)
 
 func _buy_event_offer() -> void:
-	# 📅 Ивент-пак — лимитированный по времени недельного ивента (FOMO/urgency). СТАБ биллинга.
+	# 📅 Ивент-пак — лимитированный по времени недельного ивента (FOMO/urgency). Android: биллинг; иначе стаб.
+	if iap != null and iap_ready:
+		iap.purchase("event_pack")
+		return
 	diamonds += 1000
 	_track("iap_purchase", {"item": "event_pack", "price": "4.99$", "event": _weekly_event()["id"]})
 	_save(); _refresh_hud()
@@ -5436,7 +5516,7 @@ func _open_shop() -> void:
 		bp.text = "💎 %d — %s%s" % [amt, pack[1], tagtxt]
 		bp.custom_minimum_size = Vector2(0, 44); bp.add_theme_font_size_override("font_size", 15)
 		if tag != "": bp.add_theme_color_override("font_color", tagcol)
-		bp.pressed.connect(func(): diamonds += amt; _track("iap_purchase", {"item": "diamonds_%d" % amt, "amount": amt, "price": pack[1]}); _save(); _refresh_hud(); _popup_center(_t("shop_buy_pop") % amt, Color("#ffd24a"), 1.6); panel.queue_free())
+		bp.pressed.connect(func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]); panel.queue_free())
 		v.add_child(bp)
 	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
 	var bg := Button.new(); bg.text = _t("shop_gacha_btn"); bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
