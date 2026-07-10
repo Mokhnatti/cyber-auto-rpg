@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.73" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.74" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -2072,6 +2072,7 @@ func _target_amp(e: Dictionary) -> float:  # множитель урона по 
 	return m
 var atk_buff_t := 0.0   # временный бафф скорости атаки от ульты штурма
 var aim_mode := false   # снайпер целится (ждём тап по врагу)
+var aim_marks := []     # 🎯-маркеры над врагами в режиме прицела (визуал «выбери цель»)
 var aim_hero = null
 
 func _recalc_auras() -> void:
@@ -2886,7 +2887,7 @@ func _reset() -> void:
 	seen_intro = false; nick_asked = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	tut_step = 0; _tut_t = 0.0   # форсед-туториал: свежий старт → показать с шага 1
-	aim_mode = false; aim_hero = -1; _qte_clear()   # чистка QTE-маркеров/прицела при hard-restart (баг-хант R2)
+	aim_mode = false; aim_hero = -1; _qte_clear(); _aim_marks_clear()   # чистка QTE-маркеров/прицела при hard-restart (баг-хант R2)
 	best_stage = 1
 	new_gear.clear()
 	fav.clear()
@@ -4161,6 +4162,7 @@ func _use_ult(i: int) -> void:
 		# СНАЙПЕР: вход в режим прицела (ульта тратится при выстреле)
 		aim_mode = true
 		aim_hero = hh
+		_aim_marks_show()   # 🎯 над врагами — видно, что игра ждёт тап по цели
 		status_label.text = _t("pick_target")
 		status_label.modulate = hh["data"]["color"]
 		return
@@ -4333,7 +4335,36 @@ func _toggle_auto() -> void:
 	auto_btn.text = "AUTO ✅" if auto_battle else "AUTO ⬜"   # текст вместо иконки; состояние видно
 	auto_btn.modulate = Color(1.4, 1.4, 0.5) if auto_battle else Color(0.7, 0.7, 0.7)
 	if auto_battle and aim_mode:   # включили во время ручного прицела — выходим из него
-		aim_mode = false; aim_hero = null; status_label.text = ""
+		aim_mode = false; aim_hero = null; status_label.text = ""; _aim_marks_clear()
+
+# 🎯-маркеры над живыми врагами пока снайпер целится (раньше был только текст сверху — не замечали)
+func _aim_marks_show() -> void:
+	_aim_marks_clear()
+	for e in enemies:
+		if e["alive"] and is_instance_valid(e.get("node")):
+			# рисованное кольцо-прицел (эмодзи в шрифте игры нет — рисовал □)
+			var m := Node2D.new()
+			m.position = Vector2(0, -62); m.z_index = 60
+			var ring := Line2D.new()
+			var pts := PackedVector2Array()
+			for a in 17: pts.append(Vector2(cos(TAU * a / 16.0), sin(TAU * a / 16.0)) * 30.0)
+			ring.points = pts; ring.width = 4.0; ring.default_color = Color("#ff3030")
+			m.add_child(ring)
+			for c in [Vector2(0, -1), Vector2(0, 1), Vector2(-1, 0), Vector2(1, 0)]:   # засечки креста
+				var tick := Line2D.new()
+				tick.points = PackedVector2Array([c * 22.0, c * 38.0])
+				tick.width = 4.0; tick.default_color = Color("#ff3030")
+				m.add_child(tick)
+			e["node"].add_child(m)
+			var tw := m.create_tween().set_loops()
+			tw.tween_property(m, "modulate:a", 0.3, 0.3)
+			tw.tween_property(m, "modulate:a", 1.0, 0.3)
+			aim_marks.append(m)
+
+func _aim_marks_clear() -> void:
+	for m in aim_marks:
+		if is_instance_valid(m): m.queue_free()
+	aim_marks.clear()
 
 # тап по врагу в режиме прицела снайпера → мощный выстрел в него
 func _input(event: InputEvent) -> void:
@@ -4348,8 +4379,13 @@ func _input(event: InputEvent) -> void:
 		tap_pos = get_canvas_transform().affine_inverse() * event.position
 	if tap_pos != null:
 		var pos: Vector2 = tap_pos
+		# тап по панели ульт → выходим из прицела и ПРОПУСКАЕМ тап к кнопке (повторный тап своей ульты / чужая ульта).
+		# Раньше любой «тап мимо» (радиус 130) ТИХО отменял прицел → «ульта не жмётся» (Настя).
+		if _ults_rect().has_point(pos):
+			aim_mode = false; aim_hero = null; status_label.text = ""; _aim_marks_clear()
+			return
 		var best = null
-		var bd := 130.0
+		var bd := 1e9   # без радиуса: бьём ближайшего к тапу врага — промахнуться нельзя
 		for e in enemies:
 			if e["alive"]:
 				var dd: float = e["node"].position.distance_to(pos)
@@ -4360,6 +4396,7 @@ func _input(event: InputEvent) -> void:
 		aim_mode = false
 		aim_hero = null
 		status_label.text = ""
+		_aim_marks_clear()
 		_refresh_hud()
 		get_viewport().set_input_as_handled()   # тап поглощён прицелом — не кликаем кнопки HUD под ним
 
@@ -4695,7 +4732,8 @@ func _refresh_hud() -> void:
 		flags += "▪" if k <= sub else "▫"
 	flags += "  👹" if in_boss else "  ▷"
 	var etxt: String = ("   ⟨%s⟩" % ", ".join(etypes.keys())) if etypes.size() > 0 else ""
-	stage_label.text = flags + etxt   # типы врагов — на строке флажков (не налезают на кнопки)
+	# 📍 где я: иконка+имя района (фидбэк Насти — «в каком я квартале?»)
+	stage_label.text = str(_loc().get("icon", "")) + " " + _tloc(_loc(), "name") + " · " + flags + etxt
 	# золото + прокачка урона
 	gold_label.text = "💰 %s  +%s%s   ♻ %s   🧬 %s   💎 %s" % [_gsep(gold), _gsep(_passive_rate()), _t("per_sec"), _gsep(scrap), _gsep(cores), _gsep(diamonds)]
 	if inv_open and inv_gold:
