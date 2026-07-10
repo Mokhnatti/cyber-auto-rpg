@@ -1,8 +1,8 @@
 # Стор-листинг Google Play — Cyber Auto-RPG
 
 ## Название (30 симв. макс)
-- **Основное: `Cyber Auto-RPG: Neon Squad`** (26)
-- Запасные: `Cyber Auto-RPG` (14) · `Neon Squad: Cyber Idle RPG` (26)
+- ✅ **УТВЕРЖДЕНО Рамилём (10.07): `Cyber Auto-RPG: Neon Squad`** (26)
+- На устройстве (лаунчер, package/name в export_presets): `Cyber Auto-RPG`
 
 ## Короткое описание (80 симв. макс)
 - RU: `Кибер-отряд против неонового города: авто-бой, гача, престиж. Качайся оффлайн!` (79)
