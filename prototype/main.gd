@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.68" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.69" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -470,6 +470,26 @@ const LOCATIONS := [
 	           "chat": ["...слышишь меня, Вектор? Это не Крыс и не Ким 📡", "Зови меня Сигнал. Помеха на линии. Шум. Тот, кто слушает.", "В Ядре — чип. Он объяснит твои девять секунд. Те, которых ты не помнишь.", "Дойди до Стража Ядра. Вырви чип. Я проведу.", "...я был там. Когда у тебя в голове всё сломалось. Я помню это изнутри."],
 	           "chat_en": ["...can you hear me, Vector? Not Rat, not Kim 📡", "Call me Signal. A glitch on the line. Noise. The one who listens.", "In the Core — a chip. It will explain your nine seconds. The ones you can't remember.", "Reach the Core Guardian. Pull the chip. I'll guide you.", "...I was there. When everything broke inside your head. I remember it from the inside."],
 	           "dialog": "Сигнал: «В Ядре — чип, что объяснит твои девять секунд. Дойди до Стража, вырви его. Я проведу — я был там, внутри.»"}},
+	# 🆕 ЭНДГЕЙМ-РАЙОНЫ (10.07): «side»: true = КОНТРАКТЫ вне главной арки (финал сюжета их не требует).
+	# «eskin» = чей набор спрайтов врагов/босса юзаем, пока свой арт не заказан (Рамиль: «врагов пока не надо»).
+	{"id": "metro",  "name": "Подземка",     "name_en": "Undercity",     "icon": "🚇", "unlock": 32, "side": true, "eskin": "slums",
+	 "pool": ["grunt", "swift", "swarm", "healer", "shield"],
+	 "neon": ["#3aff9e", "#00d9c0", "#9dffce"], "ground": "#3ad97a",
+	 "desc": "Подземка — заброшенное метро. Сюда сползаются те, кого город списал ещё до тебя.",
+	 "desc_en": "The Undercity — an abandoned metro. Those the city wrote off before you crawl down here.",
+	 "quest": {"item": "🎫 Жетон машиниста", "item_en": "🎫 Trainman's Token", "boss": "Машинист", "reward": "weapon", "contact": "🦇 Эхо", "contact_en": "🦇 Echo",
+	           "chat": ["Шаги наверху. Тяжёлые. Ты не отсюда 🦇", "Я Эхо. Глаз нет — но туннели я слышу лучше, чем ты видишь.", "Контракт простой: Машинист гоняет поезд-призрак и держит жетон старой линии. Коллекционер наверху заплатит стволом 🔫", "Психи тут тише, чем в Трущобах. Но злее. Держись света грибов.", "Принеси жетон — и туннели тебя запомнят добрым."],
+	           "chat_en": ["Footsteps above. Heavy ones. You're not from here 🦇", "I'm Echo. No eyes — but I hear these tunnels better than you see.", "Simple contract: the Trainman runs a ghost train and keeps an old line token. A collector topside pays a gun for it 🔫", "The psychos are quieter down here than in the Slums. But meaner. Stay near the mushroom light.", "Bring the token — and the tunnels will remember you kindly."],
+	           "dialog": "Эхо: «Машинист держит жетон старой линии. Принеси — коллекционер заплатит стволом. И держись света грибов.»"}},
+	{"id": "neon",   "name": "Нео-Квартал",  "name_en": "Neon Ward",     "icon": "⛩", "unlock": 40, "side": true, "eskin": "docks",
+	 "pool": ["grunt", "swift", "armor", "archer", "bomber", "shield"],
+	 "neon": ["#ff2d6f", "#ff5560", "#ffd0e0"], "ground": "#ff5560",
+	 "desc": "Нео-Квартал — неон, сакура-голограммы и якудза, у которых всё схвачено.",
+	 "desc_en": "The Neon Ward — neon, holo-sakura and yakuza who own everything here.",
+	 "quest": {"item": "🌸 Печать оябуна", "item_en": "🌸 Oyabun's Seal", "boss": "Оябун", "reward": "weapon", "contact": "🌸 Госпожа Юки", "contact_en": "🌸 Lady Yuki",
+	           "chat": ["Курьер без хозяина. Редкий зверь в моём квартале 🌸", "Юки. Я решаю, кто здесь торгует, а кто тонет в канале.", "Оябун зарвался — носит печать, которой не достоин. Забери её. Оружие на выбор — моя цена.", "Синдикат в Доках — мои младшие братья. Скажешь, что от Юки — стрелять начнут не сразу.", "Принеси печать. И, Вектор... не влюбляйся в неон. Он не отвечает взаимностью."],
+	           "chat_en": ["A courier with no master. A rare beast in my ward 🌸", "Yuki. I decide who trades here and who sinks in the canal.", "The Oyabun overreached — he carries a seal he doesn't deserve. Take it. A weapon of your choice is my price.", "The Dock syndicate are my little brothers. Say Yuki sent you — they won't shoot right away.", "Bring the seal. And, Vector... don't fall in love with the neon. It doesn't love you back."],
+	           "dialog": "Юки: «Оябун носит печать, которой не достоин. Забери её — оружие на выбор моя цена.»"}},
 ]
 var cur_location := 0       # индекс активной локации
 var quest_done := []        # id локаций с закрытым сюжетным квестом
@@ -1651,6 +1671,7 @@ const ENDINGS := {
 var endgame_mode := ""
 func _all_quests_done() -> bool:
 	for loc in LOCATIONS:
+		if loc.get("side", false): continue   # контракты эндгейм-районов НЕ гейтят финал главной арки
 		if not (str(loc["id"]) in quest_done): return false
 	return true
 func _frag_unlocked(i: int) -> bool: return max(best_stage, stage) >= int(FRAGMENTS[i]["unlock"])
@@ -3535,7 +3556,7 @@ func _spawn_wave() -> void:
 		var count := clampi(2 + int(stage / 5), 2, 5)
 		for j in count: spawn_types.append(pool[(stage * 7 + sub * 3 + j * 2) % pool.size()])
 	# чиби-враги под локацию (статика): sprites/enemy_<loc>/, фолбэк на старый "enemy"
-	var efolder := "enemy_" + str(_loc()["id"])
+	var efolder := "enemy_" + str(_loc().get("eskin", _loc()["id"]))   # eskin: эндгейм-районы носят чужой скин, пока свой арт не заказан
 	if not ResourceLoader.exists("res://sprites/%s/idle_0.png" % efolder): efolder = "enemy"
 	for j in spawn_types.size():
 		var etype: String = spawn_types[j]
@@ -3546,7 +3567,7 @@ func _spawn_wave() -> void:
 		# УНИКАЛЬНЫЙ БОСС-АРТ: sprites/boss_<loc>/ если есть (свой спрайт+анимация), иначе увеличенный рядовой
 		var bfolder := efolder
 		if iboss:
-			var cand := "boss_" + str(_loc()["id"])
+			var cand := "boss_" + str(_loc().get("eskin", _loc()["id"]))
 			if ResourceLoader.exists("res://sprites/%s/idle_0.png" % cand): bfolder = cand
 		else:
 			# 🎨 вариант по типу: лёгкие → <loc>b, тяжёлые → <loc>c (если арт есть)
@@ -3610,7 +3631,7 @@ func _spawn_endless_wave() -> void:
 	var atk_mod := 0.7 if mod == 3 else 1.0         # ШТОРМ (быстрее бьют = меньше интервал)
 	var spawn_types := []
 	for j in count: spawn_types.append(pool[(endless_floor * 7 + j * 2) % pool.size()])
-	var efolder := "enemy_" + str(_loc()["id"])
+	var efolder := "enemy_" + str(_loc().get("eskin", _loc()["id"]))   # eskin: эндгейм-районы носят чужой скин, пока свой арт не заказан
 	if not ResourceLoader.exists("res://sprites/%s/idle_0.png" % efolder): efolder = "enemy"
 	for j in spawn_types.size():
 		var etype: String = spawn_types[j]
@@ -3848,6 +3869,11 @@ func _process(delta: float) -> void:
 			if not bot and not nick_asked and stage >= 2 and _disp_nick() == _t("guest_nick"):
 				nick_asked = true; _save()
 				_ask_nick_soft()
+			# 🗺 АВТО-СМЕНА ЛОКАЦИИ: дошёл до порога нового района → мир меняется сам (карта остаётся для ручного возврата)
+			for li in LOCATIONS.size():
+				if best_stage == int(LOCATIONS[li]["unlock"]) and li != cur_location:
+					_go_location(li)
+					break
 			_update_power_peak()   # пик-мощь для клан-боссов (prestige-proof)
 			if _frags_open() > frags_notified:
 				frags_notified = _frags_open()
