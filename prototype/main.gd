@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.74" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.75" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -3639,7 +3639,7 @@ func _spawn_wave() -> void:
 		var iboss: bool = etype == "boss"
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
 		var glow := Color("#ff2d95") if iboss else Color(et["col"])
-		var es: float = 1.7 if iboss else (1.15 - j * 0.07) * et["s"]   # враги чуть меньше (были крупнее героев — фидбэк Рамиля)
+		var es: float = 1.7 if iboss else 1.05   # ЕДИНЫЙ размер рядовых, крупнее только босс (Рамиль: разнобой = косяк)
 		# УНИКАЛЬНЫЙ БОСС-АРТ: sprites/boss_<loc>/ если есть (свой спрайт+анимация), иначе увеличенный рядовой
 		var bfolder := efolder
 		if iboss:
@@ -3712,7 +3712,7 @@ func _spawn_endless_wave() -> void:
 	for j in spawn_types.size():
 		var etype: String = spawn_types[j]
 		var et = ENEMY_TYPES.get(etype, ENEMY_TYPES["grunt"])
-		var es: float = (1.15 - j * 0.07) * et["s"]   # враги чуть меньше (endless, как основная волна)
+		var es := 1.05   # единый размер (endless, как основная волна)
 		# 🎨 вариант по типу (как основная волна): лёгкие → <loc>b, тяжёлые → <loc>c
 		var vfold := efolder
 		var suf: String = str(ENEMY_VARIANT.get(etype, ""))
@@ -4435,6 +4435,8 @@ func _anim_doll(o: Dictionary, t: float, marching: bool, delta: float) -> void:
 			want = "idle"
 		if spr.animation != want:
 			spr.play(want)
+		elif want == "hit" and not spr.is_playing():
+			spr.play("hit")   # рестарт непетлевой атаки: быстрые атакеры (штурм 0.7с < 0.9с atk_anim) зависали на последнем кадре
 		spr.speed_scale = 1.0
 		spr.position.x = 0.0   # БЕЗ выпада — Рамиль: атака не должна смещаться (старый лунж × atk_anim 0.9 давал слайд/ползёт)
 	# hp-бар над головой — только если ранен (и не босс: у него полоса сверху)
