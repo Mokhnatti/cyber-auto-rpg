@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.85" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.86" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -189,6 +189,12 @@ var hack_t := 0.0
 
 var bg                      # parallax Node2D
 var world: Node2D           # контейнер болванчиков
+# ⚡ VFX «спектакль мощи» (ресёрч P2): килл-стрик + тряска экрана
+var kill_streak := 0
+var kill_streak_t := 0.0
+var streak_lbl: Label = null
+var shake_t := 0.0
+var shake_pow := 0.0
 var hud: Control
 var wave_label: Label
 var status_label: Label
@@ -742,6 +748,7 @@ const TR := {
 	"set_music_btn": {"ru": "🎵 Музыка: %s", "en": "🎵 Music: %s"},
 	"set_sfx_btn": {"ru": "🔊 Звуки: %s", "en": "🔊 Sounds: %s"},
 	"boss_alert_t": {"ru": "ОБНАРУЖЕН БОСС", "en": "BOSS DETECTED"},
+	"streak_lbl": {"ru": "СЕРИЯ ×%d", "en": "STREAK ×%d"},
 	"set_promo_btn": {"ru": "🎟 Промо-код", "en": "🎟 Promo code"},
 	"promo_prompt": {"ru": "Введи промо-код", "en": "Enter promo code"},
 	"promo_ok": {"ru": "✅ Код применён! Перезапуск…", "en": "✅ Code applied! Restarting…"},
@@ -3886,6 +3893,16 @@ func _endless_end() -> void:
 
 func _process(delta: float) -> void:
 	if not bot: _music_update()   # трек = f(локация, босс) — ловит все переходы, дешёвый ранний выход
+	if not bot:
+		if kill_streak_t > 0.0:
+			kill_streak_t -= delta
+			if kill_streak_t <= 0.0:
+				kill_streak = 0
+				if streak_lbl and is_instance_valid(streak_lbl): streak_lbl.visible = false
+		if shake_t > 0.0:
+			shake_t -= delta
+			if world: world.position = Vector2(randf_range(-shake_pow, shake_pow), randf_range(-shake_pow, shake_pow)) if shake_t > 0.0 else Vector2.ZERO
+			if shake_t <= 0.0: shake_pow = 0.0; world.position = Vector2.ZERO
 	# игрок: x2-ускорение по таймеру рекламы истекло → откат на x1 (ботов не трогаем — у них x16)
 	if not bot and Engine.time_scale >= 2.0 and Engine.time_scale < 3.0 and not _x2_active():
 		_set_speed(1.0)
@@ -4180,7 +4197,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
 	e["hp"] = max(0.0, e["hp"] - d)
 	_stat_add("dmg", d)                     # п.7: статистика урона/критов/рекорд удара
 	hero_dmg_run[hh["data"]["name"]] = float(hero_dmg_run.get(hh["data"]["name"], 0.0)) + d   # урон per-герой → % вклада в статистике (фидбэк Дианы)
-	if is_crit: _stat_add("crits", 1); _sfx("crit", -9.0)
+	if is_crit: _stat_add("crits", 1); _sfx("crit", -9.0); _shake(2.2, 0.16)
 	if d > rec_maxhit: rec_maxhit = d
 	var col: Color = Color("#ffe14d") if is_crit else hh["data"]["color"]
 	var sz := 38 if is_crit else 26
@@ -4193,9 +4210,12 @@ func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
 		var kg: float = (50.0 if e.get("boss", false) else 5.0) * pow(GOLD_PER_STAGE, stage - 1) * aug_gold * _ad_mult("gold") * _clan_boost_mult("gold") * _event_gold_mult() * _vip_gold_mult() * (1.5 if pas == "datamine" else 1.0)   # ×бусты ×ивент ×VIP ×💰дата-майнинг
 		gold += kg
 		_stat_add("gold", kg)
-		if e.get("boss", false): _stat_add("bosses", 1)
+		if e.get("boss", false):
+			_stat_add("bosses", 1)
+			_shake(7.0, 0.5); _flash_screen(Color("#ffffff"), 0.22, 0.5)   # 💥 босс упал — удар по экрану
 		else: _stat_add("mobs", 1)
 		_sfx("die", -11.0)
+		_kill_streak_add()
 		# 💥 ВЗРЫВНОЙ: при смерти бьёт ПО ОТРЯДУ (контр для танк/HP-билдов)
 		if e.get("type", "") == "bomber":
 			_popup("💥", Color("#ff7a2d"), e["node"].position + Vector2(0, -40), 34)
@@ -4256,6 +4276,7 @@ func _use_ult(i: int) -> void:
 	hh["ult_t"] = hh["ult_cd_eff"]
 	hh["atk_anim"] = 0.25
 	_sfx("ult", -7.0)
+	_flash_screen(hh["data"]["color"], 0.16, 0.35); _shake(3.5, 0.25)
 	match hh["data"]["ult"]:
 		"barrage":
 			atk_buff_t = 6.0   # ШТУРМ: всем +скорость атаки (без текста — шум)
@@ -4278,6 +4299,7 @@ func _sniper_fire(sn, target) -> void:
 	sn["ult_t"] = sn["ult_cd_eff"]
 	sn["atk_anim"] = 0.25
 	_sfx("ult", -7.0)
+	_flash_screen(Color("#00f0ff"), 0.16, 0.35); _shake(3.5, 0.25)
 	var d: float = sn["dmg"] * 12 * aura_dmg
 	_deal(sn, target, d, true)
 	if show_dmg:
@@ -7839,6 +7861,42 @@ func _grant_skipped_loot(upto_stage: int) -> void:
 		_recalc_hero(hh)
 	if kept > 0 or scr > 0:
 		_popup_center(_t("skipped_loot") % [upto_stage - 1, kept, scr], Color("#ffd24a"), 2.8)
+
+# ⚡ VFX-хелперы «спектакля мощи» (ресёрч P2: Survivor.io/AFK Journey — экранный рост мощи)
+func _shake(power: float, dur: float) -> void:
+	if bot: return
+	shake_pow = maxf(shake_pow, power)
+	shake_t = maxf(shake_t, dur)
+
+func _kill_streak_add() -> void:
+	if bot: return
+	kill_streak += 1
+	kill_streak_t = 2.2
+	if kill_streak < 3: return
+	if streak_lbl == null or not is_instance_valid(streak_lbl):
+		streak_lbl = Label.new()
+		streak_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		streak_lbl.position = Vector2(W * 0.5 - 150, 132); streak_lbl.size = Vector2(300, 34)
+		streak_lbl.z_index = 76
+		hud.add_child(streak_lbl)
+	var col := Color("#7adfff") if kill_streak < 6 else (Color("#ffd24a") if kill_streak < 12 else Color("#ff2d95"))
+	streak_lbl.text = _t("streak_lbl") % kill_streak
+	streak_lbl.add_theme_color_override("font_color", col)
+	streak_lbl.add_theme_font_size_override("font_size", mini(17 + kill_streak, 30))
+	streak_lbl.visible = true
+	streak_lbl.scale = Vector2(1.25, 1.25); streak_lbl.pivot_offset = Vector2(150, 17)
+	var tw := create_tween()
+	tw.tween_property(streak_lbl, "scale", Vector2(1.0, 1.0), 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func _flash_screen(col: Color, a: float, dur: float) -> void:
+	if bot: return
+	var f := ColorRect.new()
+	f.color = Color(col.r, col.g, col.b, a); f.set_anchors_preset(Control.PRESET_FULL_RECT)
+	f.mouse_filter = Control.MOUSE_FILTER_IGNORE; f.z_index = 77
+	hud.add_child(f)
+	var tw := create_tween()
+	tw.tween_property(f, "color:a", 0.0, dur)
+	tw.tween_callback(f.queue_free)
 
 # 🚨 драматический алерт босса: красная вспышка-виньетка + баннер с именем (ресёрч P4: телеграф энкаунтера)
 func _boss_alert() -> void:
