@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.72" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.73" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -2270,6 +2270,7 @@ func _reboot() -> void:
 	# ПЕРЕЗАГРУЗКА (лор «обнуление кибернетики»): +ЯДРА за забег; сброс уровней/золота/стадии;
 	# шмот/лом/ядра/аугменты — ОСТАЮТСЯ. Старт выше по Memory-Bonus.
 	var gain := _cores_gain()
+	_sfx("prestige", -6.0)
 	cores += gain
 	cores_total += float(gain)      # накопитель для перма-множителя (бесконечная прогрессия)
 	_stat_add("cores", gain)        # п.7
@@ -3104,7 +3105,7 @@ func _audio_init() -> void:
 	for i in 8:
 		var p := AudioStreamPlayer.new()
 		add_child(p); sfx_players.append(p)
-	for k in ["shot_sniper", "shot_assault", "shot_heavy", "shot_hack", "crit", "die", "loot", "click", "ult", "boss", "upgrade", "gacha"]:
+	for k in ["shot_sniper", "shot_assault", "shot_heavy", "shot_hack", "crit", "die", "loot", "click", "ult", "boss", "upgrade", "gacha", "win", "lose", "prestige"]:
 		var path := "res://audio/sfx_%s.ogg" % k
 		if ResourceLoader.exists(path): sfx_streams[k] = load(path)
 	get_tree().node_added.connect(func(n: Node):
@@ -3916,6 +3917,7 @@ func _process(delta: float) -> void:
 		if in_boss:
 			# 🏆 БОСС ПРОЙДЕН → шмот (только тут!) + следующая стадия (свежий заход → авто-босс)
 			print("TTEVENT bosswin stage=%d maxlvl=%d gold=%d" % [stage, _max_hero_level(), int(gold)])
+			_sfx("win", -7.0)
 			_qte_clear()
 			_drop_implant()
 			if stage >= ERA_END_STAGE:
@@ -4363,6 +4365,7 @@ func _input(event: InputEvent) -> void:
 
 func _die() -> void:
 	phase = "dead"
+	_sfx("lose", -8.0)
 	status_label.text = _t("squad_down_wave") % wave
 	status_label.modulate = Color("#ff4d4d")
 
