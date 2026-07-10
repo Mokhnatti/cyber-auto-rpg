@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.82" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.83" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -155,6 +155,8 @@ var sfx_last := {}          # анти-спам: один и тот же зву�
 var cur_track := ""
 var set_music_btn: Button
 var set_sfx_btn: Button
+var set_del_btn: Button
+var del_confirm := false
 var set_cd_btn: Button
 var settings_panel: Control
 var set_dmg_btn: Button
@@ -738,6 +740,8 @@ const TR := {
 	"set_cd_btn": {"ru": "Цифры КД ульт: %s", "en": "Ult cooldown numbers: %s"},
 	"set_music_btn": {"ru": "🎵 Музыка: %s", "en": "🎵 Music: %s"},
 	"set_sfx_btn": {"ru": "🔊 Звуки: %s", "en": "🔊 Sounds: %s"},
+	"set_del_btn": {"ru": "🗑 Удалить аккаунт и все данные", "en": "🗑 Delete account & all data"},
+	"set_del_confirm": {"ru": "⚠️ ТОЧНО? Прогресс исчезнет НАВСЕГДА — тапни ещё раз", "en": "⚠️ SURE? Progress will be gone FOREVER — tap again"},
 	"on": {"ru": "ВКЛ ✅", "en": "ON ✅"},
 	"off": {"ru": "ВЫКЛ ⬜", "en": "OFF ⬜"},
 	"set_records": {"ru": "🏆 РЕКОРДЫ / СТАТИСТИКА", "en": "🏆 RECORDS / STATS"},
@@ -3235,9 +3239,36 @@ func _build_settings() -> void:
 		_prompt_nick(func():
 			_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center(_t("set_nick_saved") % nick, Color("#00f0ff"))))
 	v.add_child(save_nick_btn)
+	# 🗑 удаление аккаунта/данных (требование Google Play: in-app deletion). Двойное подтверждение.
+	set_del_btn = Button.new(); set_del_btn.text = _t("set_del_btn"); set_del_btn.add_theme_font_size_override("font_size", 13); set_del_btn.custom_minimum_size = Vector2(0, 42)
+	set_del_btn.add_theme_color_override("font_color", Color("#ff6a6a"))
+	set_del_btn.pressed.connect(func():
+		if not del_confirm:
+			del_confirm = true
+			set_del_btn.text = _t("set_del_confirm")
+		else:
+			_delete_account())
+	v.add_child(set_del_btn)
 	settings_close = Button.new(); settings_close.text = _t("close_caps"); settings_close.add_theme_font_size_override("font_size", 16); settings_close.custom_minimum_size = Vector2(0, 50)
 	settings_close.pressed.connect(func(): settings_panel.visible = false)
 	v.add_child(settings_close)
+
+# 🗑 GDPR/Play: полное удаление аккаунта и данных — сервер (клан, профиль) + локальный сейв
+func _delete_account() -> void:
+	set_del_btn.disabled = true
+	if player_clan != "": _clan_leave()
+	if fb_uid != "": _fb_rest(HTTPClient.METHOD_DELETE, "/players/%s" % fb_uid, "")
+	_track("account_delete", {})
+	await get_tree().create_timer(1.5).timeout   # дать REST-запросам уйти
+	var dir := DirAccess.open("user://")
+	if dir:
+		dir.list_dir_begin()
+		var f := dir.get_next()
+		while f != "":
+			if not dir.current_is_dir(): dir.remove(f)
+			f = dir.get_next()
+	if OS.has_feature("web"): _clear_cache()   # веб: чистим кэш и перезагружаемся
+	else: get_tree().quit()                    # натив: выходим — при входе игра как новая
 
 # === ОКНО РЕКОРДЫ/СТАТИСТИКА (п.7) ===
 func _fmt_time(sec) -> String:
