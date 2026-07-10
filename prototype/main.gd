@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.67" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.68" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -663,7 +663,10 @@ const TR := {
 	"t_upgrade": {"ru": "📊 ПРОКАЧКА ОТРЯДА", "en": "📊 SQUAD UPGRADE"},
 	"goal_upgrade":  {"ru": "🎯 Прокачивай бойцов (📊 внизу) за золото", "en": "🎯 Upgrade fighters (📊 below) for gold"},
 	"goal_gear":     {"ru": "🎯 Надевай выпавший лут (🦾 Экипировка)", "en": "🎯 Equip dropped loot (🦾 Gear)"},
-	"goal_prestige": {"ru": "🎯 Дойди до стадии 26 → ♻ ПЕРЕЗАГРУЗКА → ЯДРА (вечная сила)", "en": "🎯 Reach stage 26 → ♻ REBOOT → CORES (forever power)"},
+	"goal_prestige": {"ru": "🎯 Стадия 26 → ♻ ПЕРЕЗАГРУЗКА → 🎁 сундук: НОВЫЙ БОЕЦ + 300💎", "en": "🎯 Stage 26 → ♻ REBOOT → 🎁 chest: NEW FIGHTER + 300💎"},
+	"pchest_title": {"ru": "СУНДУК ПЕРВОЙ ПЕРЕЗАГРУЗКИ", "en": "FIRST REBOOT CHEST"},
+	"pchest_body": {"ru": "Новый боец в отряде: %s! +300💎. Смени бойца в 🦾 Экипировке.", "en": "New fighter joined: %s! +300💎. Swap fighters in 🦾 Gear."},
+	"pchest_preview": {"ru": "🎁 За ПЕРВУЮ перезагрузку: гарантированно НОВЫЙ БОЕЦ + 300💎!", "en": "🎁 FIRST reboot bonus: guaranteed NEW FIGHTER + 300💎!"},
 	# forced-first-action туториал (маска с подсветкой, 1-й запуск)
 	"tut_skip": {"ru": "Пропустить ›", "en": "Skip ›"},
 	"tut_s1": {"ru": "👆 Нажми 📊 — прокачай бойца", "en": "👆 Tap 📊 — upgrade a fighter"},
@@ -2263,6 +2266,19 @@ func _reboot() -> void:
 	print("TTEVENT reboot gain=%d from_stage=%d -> start=%d cores=%d" % [gain, best_stage, stage, cores])
 	_track("prestige", {"best_stage": best_stage, "cores_gained": gain})   # KPI: престиж/перезагрузка
 	_popup_center(_t("reboot_done") % gain, Color("#b46bff"))
+	# 🎁 СУНДУК ПЕРВОГО ПРЕСТИЖА (идея Рамиля + ресёрч P5: >70% отвал до 1-го престижа → дать «О, НОВЫЙ БОЕЦ!»):
+	# гарантированно НОВЫЙ герой (редкость 2+, не дубль) + 300💎. Превью-стимул висит на экране перезагрузки до гейта.
+	if rec_prestiges == 1:
+		var cand := []
+		for h in HERO_ROSTER:
+			if int(hero_ranks.get(str(h["id"]), 0)) < 1 and int(h["rarity"]) >= 2: cand.append(h)
+		if not cand.is_empty():
+			var nh: Dictionary = cand[randi() % cand.size()]
+			hero_ranks[str(nh["id"])] = 1
+			diamonds += 300
+			_track("prestige_chest", {"hero": str(nh["id"])})   # KPI: сундук 1-го престижа
+			_show_context_dialog("🎁 " + _t("pchest_title"), "🎁", Color("#ffd24a"),
+				[_t("pchest_body") % _tloc(nh, "name")], "")
 	_save()
 	_start_march()
 	_refresh_hud()
@@ -2586,6 +2602,9 @@ func _refresh_reboot() -> void:
 	# награда-строка ТОЛЬКО когда престиж доступен (показываем сколько ядер). Заблокировано — не дублируем rb_short/gate (фидбэк Дианы: «ядра→усиления два раза»)
 	if unlocked:
 		var wg := _lbl(_t("rb_reward_perma") % _cores_gain(), 14, Color("#ffd24a")); wg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; wg.custom_minimum_size = Vector2(492, 0); wv.add_child(wg)
+	# 🎁 превью сундука 1-го престижа (P5-стимул: игрок видит приз ДО гейта и «идёт ебошить до сундука»)
+	if rec_prestiges == 0:
+		var pch := _lbl(_t("pchest_preview"), 14, Color("#ffd24a")); pch.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; pch.custom_minimum_size = Vector2(492, 0); wv.add_child(pch)
 	reboot_list.add_child(wbox)
 	# === 2-Й СЛОЙ: кнопка Сингулярности — ПОЯВЛЯЕТСЯ только со стадии 40 (новичку не грузим) ===
 	if _singularity_ready() or meta_unlocked:
