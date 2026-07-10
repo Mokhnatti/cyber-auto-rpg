@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.64" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.65" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -901,7 +901,8 @@ const TR := {
 	"dr_close":     {"ru": "ЗАКРЫТЬ", "en": "CLOSE"},
 	# батлпас
 	"bp_title":     {"ru": "🎟 БАТЛПАС — награды за стадии", "en": "🎟 BATTLE PASS — stage rewards"},
-	"bp_sub":       {"ru": "Текущая лучшая стадия: %d   ·   до след. тира: %d стадий", "en": "Best stage: %d   ·   next tier in: %d stages"},
+	"bp_sub":       {"ru": "Стадия %d + 🎟%d за дейлики   ·   до след. тира: %d", "en": "Stage %d + 🎟%d from dailies   ·   next tier in: %d"},
+	"bp_boost_pop": {"ru": "🎟 Все дейлики дня! +1 тир-прогресс Батлпасса", "en": "🎟 All dailies done! +1 Battle Pass tier progress"},
 	"bp_season":    {"ru": "🗓 Сезон: осталось %s   ·   премиум обновится", "en": "🗓 Season: %s left   ·   premium resets"},
 	"bp_new_season":{"ru": "🎟 НОВЫЙ СЕЗОН БАТЛПАССА! Премиум-трек обновлён — оформи заново.", "en": "🎟 NEW BATTLE PASS SEASON! Premium track reset — buy again."},
 	"bp_buy_btn":   {"ru": "💎 Премиум-батлпас (жирнее награды) — %d 💎", "en": "💎 Premium pass (better rewards) — %d 💎"},
@@ -1775,6 +1776,7 @@ const BP_STEP := 5
 var bp_claimed := []      # забранные бесплатные тиры (стадии-вехи) — one-time, НЕ сбрасываются посезонно
 var bp_claimed_prem := [] # забранные премиум-тиры — сбрасываются каждый сезон (перепродажа премиума)
 var bp_premium := false   # куплен ли премиум-трек (сбрасывается каждый сезон)
+var bp_boost := 0         # 🎟 P3: тир-прогресс БП от ДЕЙЛИКОВ (+1 «стадия» за полный день из 3 квестов) — дейлики двигают батлпасс (ретеншн-связка)
 var bp_season := -1       # индекс текущего сезона БП (-1 = ещё не инициализирован; сезон = BP_SEASON_DAYS дней). Классическая месячная модель: премиум-трек обновляется/перепродаётся каждый сезон
 const BP_SEASON_DAYS := 30
 const BP_PREMIUM_COST := 500   # алмазов за премиум-батлпас
@@ -2799,7 +2801,7 @@ func _reset() -> void:
 	cores_peak = 0.0
 	diamonds = 100000; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}   # ТЕСТ-ФАЗА: фреш-старт 100k алмазов
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
-	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}; hero_ranks = {}; hero_shards = {}; hg_pity = 0
+	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; bp_boost = 0; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}; hero_ranks = {}; hero_shards = {}; hg_pity = 0
 	seen_intro = false; nick_asked = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
 	onboarded = false; onboard_hidden = false; onboard_upg_done = false; _goal_idx = -1
 	tut_step = 0; _tut_t = 0.0   # форсед-туториал: свежий старт → показать с шага 1
@@ -3277,7 +3279,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3324,6 +3326,7 @@ func _load() -> void:
 	seen_intro = bool(d.get("seen_intro", false))
 	nick_asked = bool(d.get("nick_asked", nick != ""))   # у старых сейвов ник уже есть → не переспрашивать
 	# ВАЖНО: JSON грузит числа как float → "5 in [5.0]" = false → тиры рекламировались как незабранные (Диана: реклейм каждый заход). Коэрсим в int.
+	bp_boost = int(d.get("bp_boost", 0))
 	bp_claimed = _arr(d.get("bp_claimed", [])).map(func(x): return int(x))
 	bp_claimed_prem = _arr(d.get("bp_claimed_prem", [])).map(func(x): return int(x))
 	bp_premium = bool(d.get("bp_premium", false))
@@ -4476,8 +4479,8 @@ func _refresh_hud() -> void:
 		else:
 			impl_btn.modulate = Color(1, 1, 1)
 	if more_btn:   # бейдж «Ещё» = сумма незабранных (батлпас + ачивки)
-		if best_stage != _bp_cache_stage:   # перф: O(n²) счёт только при смене стадии (баг-хант R4)
-			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
+		if _bp_prog() != _bp_cache_stage:   # перф: O(n²) счёт только при смене прогресса (стадия или 🎟 дейлик-буст)
+			_bp_cache_stage = _bp_prog(); _bp_badge_cache = _bp_unclaimed_count()
 		var total := _bp_badge_cache + _ach_claimable() + _dq_ready_count()
 		more_btn.text = "☰" + ("●%d" % total if total > 0 else "")
 		more_btn.modulate = Color(1.6, 1.4, 0.3) if total > 0 else Color(1, 1, 1)
@@ -4486,8 +4489,8 @@ func _refresh_hud() -> void:
 		dq_btn.text = "📋" + (" ●%d" % dn if dn > 0 else "")
 		dq_btn.modulate = Color(1.6, 1.4, 0.3) if dn > 0 else Color(1, 1, 1)
 	if bp_btn:
-		if best_stage != _bp_cache_stage:
-			_bp_cache_stage = best_stage; _bp_badge_cache = _bp_unclaimed_count()
+		if _bp_prog() != _bp_cache_stage:
+			_bp_cache_stage = _bp_prog(); _bp_badge_cache = _bp_unclaimed_count()
 		bp_btn.text = "🎟" + (" ●%d" % _bp_badge_cache if _bp_badge_cache > 0 else "")
 		bp_btn.modulate = Color(1.6, 1.4, 0.3) if _bp_badge_cache > 0 else Color(1, 1, 1)
 	if login_btn:
@@ -5527,8 +5530,10 @@ func _bp_apply(r: Dictionary) -> void:
 	cores += max(0, int(r.get("cores", 0))); diamonds += max(0, int(r.get("diamonds", 0)))
 	gold += max(0.0, float(r.get("gold", 0))); scrap += max(0, int(r.get("scrap", 0)))
 
+func _bp_prog() -> int: return best_stage + bp_boost   # прогресс БП = стадии + 🎟 дейлик-буст
+
 func _bp_claim(m: int, prem: bool) -> void:
-	if best_stage < m: return
+	if _bp_prog() < m: return
 	if prem:
 		if not bp_premium or m in bp_claimed_prem: return
 		_bp_apply(_bp_prem_reward(m)); bp_claimed_prem.append(m)
@@ -5548,7 +5553,7 @@ func _bp_reward_text(r: Dictionary) -> String:
 func _bp_unclaimed_count() -> int:
 	var n := 0
 	var m := BP_STEP
-	while m <= best_stage:
+	while m <= _bp_prog():
 		if not (m in bp_claimed): n += 1
 		if bp_premium and not (m in bp_claimed_prem): n += 1
 		m += BP_STEP
@@ -5556,7 +5561,7 @@ func _bp_unclaimed_count() -> int:
 
 func _bp_claim_all() -> void:
 	var m := BP_STEP
-	while m <= best_stage:
+	while m <= _bp_prog():
 		if not (m in bp_claimed): _bp_claim(m, false)
 		if bp_premium and not (m in bp_claimed_prem): _bp_claim(m, true)
 		m += BP_STEP
@@ -5729,6 +5734,9 @@ func _dq_claim(qi: int) -> void:
 	var r = q["rew"]
 	if r.has("diamonds"): diamonds += int(r["diamonds"])
 	if r.has("scrap"): scrap += int(r["scrap"])
+	if dq_claimed.size() >= 3:   # 🎟 P3: полный день дейликов = +1 тир-прогресс БП (дейлики двигают батлпасс)
+		bp_boost += 1; _bp_cache_stage = -1
+		_popup_center(_t("bp_boost_pop"), Color("#ffd24a"), 2.4)
 	_save(); _refresh_hud()
 	_popup_center(_t("dq_done_pop") + _dq_rew_text(q), Color("#3ad97a"), 1.6)
 
@@ -6089,8 +6097,8 @@ func _open_battlepass() -> void:
 	panel.add_child(dim)
 	var title := _lbl(_t("bp_title"), 20, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); title.position = Vector2(0, 26); title.size = Vector2(W, 28); panel.add_child(title)
 	var seas := _lbl(_t("bp_season") % _fmt_dur(_bp_season_secs_left()), 11, Color("#c9b06a"), HORIZONTAL_ALIGNMENT_CENTER); seas.position = Vector2(0, 50); seas.size = Vector2(W, 16); panel.add_child(seas)
-	var nextm: int = (int(best_stage / BP_STEP) + 1) * BP_STEP
-	var sub := _lbl(_t("bp_sub") % [best_stage, nextm - best_stage], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 68); sub.size = Vector2(W, 20); panel.add_child(sub)
+	var nextm: int = (int(_bp_prog() / BP_STEP) + 1) * BP_STEP
+	var sub := _lbl(_t("bp_sub") % [best_stage, bp_boost, nextm - _bp_prog()], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); sub.position = Vector2(0, 68); sub.size = Vector2(W, 20); panel.add_child(sub)
 	if not bp_premium:
 		var pb := Button.new(); pb.text = _t("bp_buy_btn") % BP_PREMIUM_COST; pb.add_theme_font_size_override("font_size", 14); pb.add_theme_color_override("font_color", Color("#ffd24a"))
 		pb.position = Vector2(W * 0.5 - 200, 88); pb.size = Vector2(400, 38); pb.disabled = diamonds < BP_PREMIUM_COST
@@ -6100,10 +6108,11 @@ func _open_battlepass() -> void:
 	var fh := _lbl(_t("bp_free_hdr"), 12, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); fh.position = Vector2(W * 0.5 - 176, 128); fh.size = Vector2(190, 18); panel.add_child(fh)
 	var ph := _lbl(_t("bp_prem_hdr") + (" ✓" if bp_premium else " " + _t("bp_prem_cost")), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); ph.position = Vector2(W * 0.5 + 22, 128); ph.size = Vector2(190, 18); panel.add_child(ph)
 	var scroll := ScrollContainer.new(); scroll.position = Vector2(W * 0.5 - 220, 150); scroll.custom_minimum_size = Vector2(440, 544); scroll.size = Vector2(440, 544); panel.add_child(scroll)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED   # без бокового скролла (премиум-колонка вылазила за край)
 	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.custom_minimum_size = Vector2(440, 0); scroll.add_child(list)
 	# показать тиры от 5 до best_stage+25 (несколько вперёд как тизер)
 	var m := BP_STEP
-	var top: int = (int(best_stage / BP_STEP) + 5) * BP_STEP
+	var top: int = (int(_bp_prog() / BP_STEP) + 5) * BP_STEP
 	while m <= top:
 		list.add_child(_bp_tier_row(m, panel))
 		m += BP_STEP
@@ -6118,7 +6127,7 @@ func _open_battlepass() -> void:
 		var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
 func _bp_tier_row(m: int, panel: Control) -> Control:
-	var reached: bool = best_stage >= m
+	var reached: bool = _bp_prog() >= m
 	var box := PanelContainer.new()
 	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.10, 0.11, 0.17, 0.95) if reached else Color(0.06, 0.06, 0.09, 0.9); sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
 	sb.border_color = Color("#ffd24a") if reached else Color("#2a2f45"); sb.set_border_width_all(1)
@@ -6127,7 +6136,7 @@ func _bp_tier_row(m: int, panel: Control) -> Control:
 	row.add_child(_lbl(_t("bp_stage_n") % m, 14, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT))
 	# бесплатная награда
 	var fclaimed: bool = m in bp_claimed
-	var fb := Button.new(); fb.custom_minimum_size = Vector2(190, 40); fb.add_theme_font_size_override("font_size", 12)
+	var fb := Button.new(); fb.custom_minimum_size = Vector2(166, 40); fb.add_theme_font_size_override("font_size", 12)
 	fb.add_theme_color_override("font_color", Color("#6a6f85") if fclaimed else Color("#7ee08a"))   # забранное — серым
 	fb.text = ("✓ " if fclaimed else "🆓 ") + _bp_reward_text(_bp_free_reward(m))
 	fb.disabled = fclaimed or not reached
@@ -6136,7 +6145,7 @@ func _bp_tier_row(m: int, panel: Control) -> Control:
 	row.add_child(fb)
 	# премиум награда
 	var pclaimed: bool = m in bp_claimed_prem
-	var pbn := Button.new(); pbn.custom_minimum_size = Vector2(190, 40); pbn.add_theme_font_size_override("font_size", 12); pbn.add_theme_color_override("font_color", Color("#6a6f85") if pclaimed else Color("#ffd24a"))   # забранное — серым
+	var pbn := Button.new(); pbn.custom_minimum_size = Vector2(166, 40); pbn.add_theme_font_size_override("font_size", 12); pbn.add_theme_color_override("font_color", Color("#6a6f85") if pclaimed else Color("#ffd24a"))   # забранное — серым
 	pbn.text = ("✓ " if pclaimed else "💎 ") + _bp_reward_text(_bp_prem_reward(m))
 	pbn.disabled = pclaimed or not reached or not bp_premium
 	pbn.pressed.connect(func(): _bp_claim(mm, true); panel.queue_free(); _open_battlepass())
