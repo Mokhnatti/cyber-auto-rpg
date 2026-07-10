@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.83" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.84" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -156,6 +156,7 @@ var cur_track := ""
 var set_music_btn: Button
 var set_sfx_btn: Button
 var set_del_btn: Button
+var set_promo_btn: Button
 var del_confirm := false
 var set_cd_btn: Button
 var settings_panel: Control
@@ -740,6 +741,10 @@ const TR := {
 	"set_cd_btn": {"ru": "Цифры КД ульт: %s", "en": "Ult cooldown numbers: %s"},
 	"set_music_btn": {"ru": "🎵 Музыка: %s", "en": "🎵 Music: %s"},
 	"set_sfx_btn": {"ru": "🔊 Звуки: %s", "en": "🔊 Sounds: %s"},
+	"set_promo_btn": {"ru": "🎟 Промо-код", "en": "🎟 Promo code"},
+	"promo_prompt": {"ru": "Введи промо-код", "en": "Enter promo code"},
+	"promo_ok": {"ru": "✅ Код применён! Перезапуск…", "en": "✅ Code applied! Restarting…"},
+	"promo_bad": {"ru": "❌ Неверный код", "en": "❌ Invalid code"},
 	"set_del_btn": {"ru": "🗑 Удалить аккаунт и все данные", "en": "🗑 Delete account & all data"},
 	"set_del_confirm": {"ru": "⚠️ ТОЧНО? Прогресс исчезнет НАВСЕГДА — тапни ещё раз", "en": "⚠️ SURE? Progress will be gone FOREVER — tap again"},
 	"on": {"ru": "ВКЛ ✅", "en": "ON ✅"},
@@ -2893,7 +2898,7 @@ func _reset() -> void:
 	scrap = 0
 	cores = 0
 	cores_peak = 0.0
-	diamonds = 100000; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}   # ТЕСТ-ФАЗА: фреш-старт 100k алмазов
+	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}   # 💰 боевая экономика (тест-буст 100k закрыт 10.07 по команде Рамиля)
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
 	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; bp_boost = 0; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}; hero_ranks = {}; hero_shards = {}; hg_pity = 0
 	seen_intro = false; nick_asked = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
@@ -3239,6 +3244,10 @@ func _build_settings() -> void:
 		_prompt_nick(func():
 			_save(); _send_telemetry("nickset"); _refresh_settings(); _popup_center(_t("set_nick_saved") % nick, Color("#00f0ff"))))
 	v.add_child(save_nick_btn)
+	# 🎟 промо-код (тест-учётки мид/лейтгейма для закрытого теста; коды знает только тестер-группа)
+	set_promo_btn = Button.new(); set_promo_btn.text = _t("set_promo_btn"); set_promo_btn.add_theme_font_size_override("font_size", 15); set_promo_btn.custom_minimum_size = Vector2(0, 46)
+	set_promo_btn.pressed.connect(_open_promo)
+	v.add_child(set_promo_btn)
 	# 🗑 удаление аккаунта/данных (требование Google Play: in-app deletion). Двойное подтверждение.
 	set_del_btn = Button.new(); set_del_btn.text = _t("set_del_btn"); set_del_btn.add_theme_font_size_override("font_size", 13); set_del_btn.custom_minimum_size = Vector2(0, 42)
 	set_del_btn.add_theme_color_override("font_color", Color("#ff6a6a"))
@@ -3252,6 +3261,43 @@ func _build_settings() -> void:
 	settings_close = Button.new(); settings_close.text = _t("close_caps"); settings_close.add_theme_font_size_override("font_size", 16); settings_close.custom_minimum_size = Vector2(0, 50)
 	settings_close.pressed.connect(func(): settings_panel.visible = false)
 	v.add_child(settings_close)
+
+# 🎟 промо-коды: тест-учётки для закрытого теста (ресурсы+прогресс, честный лейтгейм после престижа)
+func _open_promo() -> void:
+	if OS.has_feature("web"):
+		var r = JavaScriptBridge.eval("window.prompt(%s, '')" % JSON.stringify(_t("promo_prompt")), true)
+		if r != null: _apply_promo(str(r))
+		return
+	var dlg := Control.new(); dlg.set_anchors_preset(Control.PRESET_FULL_RECT); dlg.z_index = 4000; hud.add_child(dlg)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT); dlg.add_child(dim)
+	var card := PanelContainer.new(); card.position = Vector2(W * 0.5 - 170, 330); card.custom_minimum_size = Vector2(340, 0); dlg.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl(_t("promo_prompt"), 16, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	var inp := LineEdit.new(); inp.custom_minimum_size = Vector2(0, 46); inp.add_theme_font_size_override("font_size", 18); v.add_child(inp)
+	var ok := Button.new(); ok.text = _t("ok_btn"); ok.custom_minimum_size = Vector2(0, 46); v.add_child(ok)
+	var cancel := Button.new(); cancel.text = _t("close_x"); cancel.custom_minimum_size = Vector2(0, 40); v.add_child(cancel)
+	ok.pressed.connect(func(): var s := inp.text; dlg.queue_free(); _apply_promo(s))
+	inp.text_submitted.connect(func(s): dlg.queue_free(); _apply_promo(s))
+	cancel.pressed.connect(func(): dlg.queue_free())
+	inp.grab_focus()
+
+func _apply_promo(code: String) -> void:
+	match code.to_upper().strip_edges():
+		"MIDRUN":   # мид-гейм: открыты доки/БП-прогресс, ресурсы на прокачку
+			best_stage = maxi(best_stage, 20); stage = 15; sub = 1; in_boss = false; boss_retry = false
+			cores += 150; diamonds += 800; scrap += 15000; rec_prestiges = maxi(rec_prestiges, 1)
+		"DEEPCORE": # лейт-гейм: честный пост-престиж заход к сингулярности (ядра на усиления есть)
+			best_stage = maxi(best_stage, 38); stage = 25; sub = 1; in_boss = false; boss_retry = false
+			cores += 1500; diamonds += 3000; scrap += 60000; rec_prestiges = maxi(rec_prestiges, 5)
+		_:
+			_popup_center(_t("promo_bad"), Color("#ff4d4d"), 1.6)
+			return
+	_track("promo", {"code": code.to_upper().strip_edges()})
+	_save()
+	_popup_center(_t("promo_ok"), Color("#3ad97a"), 2.0)
+	await get_tree().create_timer(1.4).timeout
+	if OS.has_feature("web"): _clear_cache()
+	else: get_tree().reload_current_scene()
 
 # 🗑 GDPR/Play: полное удаление аккаунта и данных — сервер (клан, профиль) + локальный сейв
 func _delete_account() -> void:
@@ -3500,7 +3546,7 @@ func _load() -> void:
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
 	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); iap_granted = d.get("iap_granted", [])
-	diamonds = max(diamonds, 100000)   # ТЕСТ-ФАЗА: тестерам всегда ≥100k алмазов (крутить гачу/VIP/паки без лимита). ВЕРНУТЬ на 50 перед релизом!
+	# 💰 боевая экономика: тест-буст «всегда ≥100k💎» убран (10.07, команда Рамиля). Старые сейвы остаются с накопленным.
 	gacha_pity = int(d.get("gacha_pity", 0)); offline_cap_lvl = clampi(int(d.get("offline_cap_lvl", 0)), 0, OFFLINE_CAP_MAX); ad_boosts = d.get("ad_boosts", {}); clan_boosts = d.get("clan_boosts", {})
 	quanta = int(d.get("quanta", 0)); meta_lvl = d.get("meta_lvl", {}); singularity_count = int(d.get("singularity_count", 0)); meta_unlocked = bool(d.get("meta_unlocked", false))
 	seen_intro = bool(d.get("seen_intro", false))
