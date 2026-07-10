@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.65" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.66" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -575,12 +575,17 @@ func _loc_fac(fac: String) -> String:
 	for b in CLAN_BOSSES:
 		if str(b.get("fac", "")) == fac: return str(b.get("fac_en", fac))
 	return fac
-func _week_num() -> int: return int(Time.get_unix_time_from_system() / 604800.0)
+func _week_num() -> int: return int(_qa_now() / 604800.0)
 func _weekly_boss() -> Dictionary: return CLAN_BOSSES[_week_num() % CLAN_BOSSES.size()]
 
 # ===== НЕДЕЛЬНЫЙ ИВЕНТ (LiveOps-лайт) — ретеншн-каданс (недельный пульс из RETENTION-ресёрча) =====
 # Клиентский, БЕЗ сервера: ротация по _week_num() % size. Только УМЕРЕННЫЕ ВРЕМЕННЫЕ множители
 # ПОВЕРХ ядра-экономики (базовые формулы/баланс не трогаем). Каждую игр-неделю — один ивент.
+# ⏰ QA-МАШИНА ВРЕМЕНИ: сдвиг «сейчас» в днях (window._qa='dayofs=N' / бот --dayofs=N). НЕ сейвится (runtime).
+# ВСЕ обращения к unix-времени идут через _qa_now() → дейлики/стрик/ивент-недели/сезоны БП/оффлайн/баффы сдвигаются консистентно.
+var qa_day_ofs := 0
+func _qa_now() -> float: return Time.get_unix_time_from_system() + float(qa_day_ofs) * 86400.0
+
 const WEEKLY_EVENTS := [
 	{"id": "gold",     "icon": "🪙"},   # ×2 золото (с врагов + пассив)
 	{"id": "gacha",    "icon": "💎"},   # -20% цена гача-пуллов
@@ -630,7 +635,7 @@ func _event_gold_mult() -> float: return 2.0 if _event_is("gold") else 1.0
 func _event_gacha_cost(base: int) -> int: return int(round(base * 0.8)) if _event_is("gacha") else base
 func _event_prestige_mult() -> float: return 1.25 if _event_is("prestige") else 1.0
 func _event_secs_left() -> int:   # секунд до конца игровой недели (для попапа «осталось»)
-	return int(ceil(float(_week_num() + 1) * 604800.0 - Time.get_unix_time_from_system()))
+	return int(ceil(float(_week_num() + 1) * 604800.0 - _qa_now()))
 func _fmt_dur(sec: int) -> String:   # длительность с днями (неделя = до 7д)
 	var d := sec / 86400
 	if d > 0: return "%d%s %d%s" % [d, _t("day_short"), (sec % 86400) / 3600, _t("hr_short")]
@@ -1233,6 +1238,17 @@ func _qa_poll() -> void:
 			if e["node"]: e["node"].queue_free()
 		enemies.clear()
 		_spawn_wave(); return
+	if cmd.begins_with("dayofs="):   # QA: машина времени — сдвиг даты в днях (тест дейликов/недель/сезонов БП)
+		qa_day_ofs = int(cmd.substr(7))
+		_dq_refresh(); _ev_refresh(); _bp_check_season(); _refresh_hud()
+		print("QA dayofs=%d today=%d week=%d season=%d" % [qa_day_ofs, _today_num(), _week_num(), _bp_season_idx()])
+		return
+	if cmd == "dqforce":   # QA: форс-прогресс всех дейликов дня (тест забора + 🎟 БП-буста)
+		_dq_refresh()
+		for qi in dq_idx:
+			var st := str(DAILY_QUESTS[qi]["stat"])
+			dq_base[st] = _dq_stat(st) - float(DAILY_QUESTS[qi]["target"])
+		_refresh_hud(); return
 	if cmd.begins_with("stage="):   # QA: форс-стадия (скрин-проверка видов врагов — на ст.1 только грунт)
 		stage = maxi(1, int(cmd.substr(6))); best_stage = maxi(best_stage, stage); sub = 1
 		for e in enemies:
@@ -1284,7 +1300,7 @@ func _fb_rest(method: int, path: String, body: String, cb: Callable = Callable()
 
 func _fb_write_profile() -> void:
 	if fb_uid == "": return
-	var prof := {"id": fb_id, "nick": (nick if nick != "" else "Вектор"), "power": min(power_peak, 9.0e18), "best": best_stage, "clan": player_clan, "t": Time.get_unix_time_from_system()}
+	var prof := {"id": fb_id, "nick": (nick if nick != "" else "Вектор"), "power": min(power_peak, 9.0e18), "best": best_stage, "clan": player_clan, "t": _qa_now()}
 	_fb_rest(HTTPClient.METHOD_PUT, "/players/%s" % fb_uid, JSON.stringify(prof))
 
 func _clan_name() -> String: return (nick if nick != "" else "Вектор")
@@ -1298,7 +1314,7 @@ func _clan_create() -> void:
 	if not fb_ready:
 		_popup_center(_t("cl_no_server"), Color("#ff5050"), 2.0); return
 	var code := "%06d" % (randi() % 1000000)
-	var clan := {"name": _t("clan_name_prefix") + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": min(power_peak, 9.0e18)}}, "created": int(Time.get_unix_time_from_system())}
+	var clan := {"name": _t("clan_name_prefix") + _clan_name(), "leader": fb_uid, "members": {fb_uid: {"nick": _clan_name(), "power": min(power_peak, 9.0e18)}}, "created": int(_qa_now())}
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s" % code, JSON.stringify(clan), func(c, _d):
 		if c >= 200 and c < 300:
 			player_clan = code; _fb_write_profile(); _save()
@@ -1400,7 +1416,7 @@ func _clan_boss_spawn() -> void:
 	if player_clan == "" or not fb_ready: return
 	var wb := _weekly_boss()
 	var hpmax: int = int(min(max(100000.0, power_peak * 1000.0), 9.0e18))  # ~1000 hits to kill: 20min solo / 4min clan-of-5 (bot ppwr peak ~940M → ~940B boss HP); кламп к int64-safe перед int()
-	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(Time.get_unix_time_from_system()), "name": wb["name"], "fac": wb["fac"], "week": _week_num()}), func(c, _d):
+	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(_qa_now()), "name": wb["name"], "fac": wb["fac"], "week": _week_num()}), func(c, _d):
 		if c >= 200 and c < 300:
 			boss_my_dmg = 0
 			_popup_center(_t("cl_boss_summoned") % wb["name"], Color("#ff2d95"), 2.8))
@@ -1480,7 +1496,7 @@ func _open_clan_boss() -> void:
 func _clan_chat_send(txt: String) -> void:
 	var t := txt.strip_edges()
 	if player_clan == "" or not fb_ready or t == "": return
-	_fb_rest(HTTPClient.METHOD_POST, "/clans/%s/chat" % player_clan, JSON.stringify({"nick": _clan_name(), "text": t.substr(0, 200), "t": int(Time.get_unix_time_from_system())}))
+	_fb_rest(HTTPClient.METHOD_POST, "/clans/%s/chat" % player_clan, JSON.stringify({"nick": _clan_name(), "text": t.substr(0, 200), "t": int(_qa_now())}))
 
 func _open_clan_chat() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
@@ -1542,7 +1558,7 @@ func _open_clan_shop() -> void:
 		var bname: String = item["name_" + lang]
 		var row := Button.new(); row.custom_minimum_size = Vector2(0, 60); row.add_theme_font_size_override("font_size", 14)
 		if _clan_boost_active(bk):
-			var mins := int((float(clan_boosts[bk]["until"]) - Time.get_unix_time_from_system()) / 60.0)
+			var mins := int((float(clan_boosts[bk]["until"]) - _qa_now()) / 60.0)
 			row.text = "%s +%d%%\n%s" % [bname, pct, _t("cls_active") % mins]
 			row.add_theme_color_override("font_color", Color("#3ad97a"))
 		else:
@@ -1551,7 +1567,7 @@ func _open_clan_shop() -> void:
 			if clan_tokens < cost:
 				_popup_center(_t("cls_no_tokens"), Color("#ff4444"), 1.5); return
 			clan_tokens -= cost
-			clan_boosts[bk] = {"until": Time.get_unix_time_from_system() + 1800.0}
+			clan_boosts[bk] = {"until": _qa_now() + 1800.0}
 			for hh in heroes: _recalc_hero(hh)
 			_save(); _refresh_hud()
 			_popup_center(_t("cls_bought"), Color("#ffd24a"), 1.5)
@@ -2006,7 +2022,7 @@ func _tank_alive() -> bool:   # 🦾 «Живой купол» активен п
 		if hh["alive"] and hh["data"]["atk_type"] == "tank": return true
 	return false
 func _target_amp(e: Dictionary) -> float:  # множитель урона по цели от дебафов (шред брони + метка)
-	var m := 1.0; var t := Time.get_unix_time_from_system()
+	var m := 1.0; var t := _qa_now()
 	if float(e.get("shred_t", 0.0)) > t: m += P_SHRED_PCT * int(e.get("shred_n", 0))
 	if e == marked_enemy and marked_until > t: m += P_MARK_PCT
 	return m
@@ -2351,7 +2367,7 @@ func _send_telemetry(ev: String) -> void:
 # Подключение ByteBrew будет ровно в одном месте — _analytics_sink(). Пока заглушка-сток: print + ntfy-батч.
 func _analytics_init() -> void:
 	# session_id: время старта + случайный суффикс → уникален на каждый запуск приложения
-	_session_start_t = Time.get_unix_time_from_system()
+	_session_start_t = _qa_now()
 	session_id = "%d-%04d" % [int(_session_start_t), randi() % 10000]
 	_analytics_http = HTTPRequest.new()
 	add_child(_analytics_http)
@@ -2362,7 +2378,7 @@ func _track(event: String, params: Dictionary = {}) -> void:
 	var all_params := {
 		"session_id": session_id,
 		"platform": OS.get_name(),
-		"ts": int(Time.get_unix_time_from_system()),
+		"ts": int(_qa_now()),
 		"app_version": VERSION,
 		"best_stage": best_stage,
 	}
@@ -2390,7 +2406,7 @@ func _analytics_flush() -> void:
 # session_end + сброс батча при выходе/паузе (web/Android закрытие окна)
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
-		_track("session_end", {"duration": int(Time.get_unix_time_from_system() - _session_start_t)})
+		_track("session_end", {"duration": int(_qa_now() - _session_start_t)})
 		_analytics_flush()
 
 func _build_nick_prompt() -> void:
@@ -2731,6 +2747,8 @@ func _ready() -> void:
 			save_slot = "_" + a.split("=")[1]
 		elif a.begins_with("--comp="):
 			_test_comp = a.split("=")[1]   # бот-тест состава (свободный состав уже включён)
+		elif a.begins_with("--dayofs="):
+			qa_day_ofs = int(a.split("=")[1])   # QA: сдвиг даты в днях (тест дейликов/недель/сезонов БП/оффлайна)
 	http = HTTPRequest.new()
 	add_child(http)
 	_build_nick_prompt()
@@ -3278,7 +3296,7 @@ func _save() -> void:
 	for hh in heroes:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
-		"v": 1, "ts": int(Time.get_unix_time_from_system()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
+		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
 		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
@@ -3416,7 +3434,7 @@ func _load() -> void:
 	if not bot:
 		var last_ts := int(d.get("ts", 0))
 		if last_ts > 0:
-			var away: int = int(Time.get_unix_time_from_system()) - last_ts
+			var away: int = int(_qa_now()) - last_ts
 			if away > 60:
 				var capped: int = min(away, OFFLINE_CAP_BASE + offline_cap_lvl * OFFLINE_CAP_STEP)   # кап 12ч + 2ч/ур реактора
 				var rate := _passive_rate()   # пассив (растёт со стадией) — тот же расчёт что и онлайн
@@ -3712,8 +3730,8 @@ func _process(delta: float) -> void:
 		if not hh["alive"]: continue
 		hh["ult_t"] = max(0.0, hh["ult_t"] - delta)
 		# 🔷 «Экзо-щит»: носитель barrier на низком HP раз в 8с вешает себе барьер
-		if hh.get("passive", "") == "barrier" and hh["hp"] < 0.4 * float(hh["max"]) and hh["hp"] > 0.0 and Time.get_unix_time_from_system() >= float(hh.get("barrier_cd", 0.0)):
-			hh["shield"] = max(hh["shield"], 3.0); hh["hp"] = min(float(hh["max"]), hh["hp"] + 0.15 * float(hh["max"])); hh["barrier_cd"] = Time.get_unix_time_from_system() + 8.0
+		if hh.get("passive", "") == "barrier" and hh["hp"] < 0.4 * float(hh["max"]) and hh["hp"] > 0.0 and _qa_now() >= float(hh.get("barrier_cd", 0.0)):
+			hh["shield"] = max(hh["shield"], 3.0); hh["hp"] = min(float(hh["max"]), hh["hp"] + 0.15 * float(hh["max"])); hh["barrier_cd"] = _qa_now() + 8.0
 		hh["t"] -= delta
 		if hh["t"] <= 0.0:
 			var spd: float = aura_atk * hh["atk_mult"] * (1.4 if atk_buff_t > 0.0 else 1.0) * (1.0 + 0.03 * int(hh.get("oc_n", 0))) * (1.15 if squad_spd_t > 0.0 else 1.0)   # ×⏩оверклок ×📣очередь
@@ -3740,7 +3758,7 @@ func _process(delta: float) -> void:
 	dot_acc += delta
 	if dot_acc >= 0.5:
 		dot_acc = 0.0
-		var tnow := Time.get_unix_time_from_system()
+		var tnow := _qa_now()
 		for e in enemies:
 			if e["alive"] and int(e.get("dot_n", 0)) > 0 and float(e.get("dot_t", 0.0)) > tnow:
 				var dd: float = float(e.get("dot_dmg", 0.0)) * int(e["dot_n"])
@@ -3892,7 +3910,7 @@ func _hero_hit(hh: Dictionary) -> void:
 	# СИНХРА урон↔кадр-выстрела (Рамиль): анимация уже стартовала, урон наносим в момент вспышки (~0.4с в анимацию)
 	await get_tree().create_timer(0.4).timeout
 	if not hh.get("alive", false): return   # герой умер до выстрела — урон не проходит
-	var now := Time.get_unix_time_from_system()
+	var now := _qa_now()
 	if atype == "aoe":
 		if pas == "mark":   # 💻 «Эксплойт» метит приоритетную цель
 			var mk = _priority_target(enemies)
@@ -4218,7 +4236,7 @@ func _die() -> void:
 
 # --- АНИМАЦИЯ БОЛВАНЧИКОВ ---
 func _animate(delta: float) -> void:
-	var t := Time.get_unix_time_from_system()
+	var t := _qa_now()
 	for hh in heroes:
 		_anim_doll(hh, t, phase == "march", delta)
 	for e in enemies:
@@ -5007,10 +5025,10 @@ func _tut_finish() -> void:   # скип/завершение — больше �
 
 # x2 активна (выдана за рекламу, таймер) / x3 куплена навсегда
 func _x2_active() -> bool:
-	return x2_until > Time.get_unix_time_from_system() or _vip_active()   # VIP даёт бесплатную x2-скорость
+	return x2_until > _qa_now() or _vip_active()   # VIP даёт бесплатную x2-скорость
 
 func _vip_active() -> bool:
-	return vip_until > Time.get_unix_time_from_system()
+	return vip_until > _qa_now()
 
 func _vip_gold_mult() -> float:
 	return VIP_GOLD_MULT if _vip_active() else 1.0
@@ -5039,7 +5057,7 @@ func _open_speed_menu() -> void:
 	var b1 := Button.new(); b1.text = _t("spd_x1"); b1.custom_minimum_size = Vector2(0, 46); b1.add_theme_font_size_override("font_size", 15)
 	b1.pressed.connect(func(): _set_speed(1.0); panel.queue_free()); v.add_child(b1)
 	var b2 := Button.new(); b2.custom_minimum_size = Vector2(0, 46); b2.add_theme_font_size_override("font_size", 15)
-	if _x2_active(): b2.text = _t("spd_x2_active") % int((x2_until - Time.get_unix_time_from_system()) / 60.0); b2.pressed.connect(func(): _set_speed(2.0); panel.queue_free())
+	if _x2_active(): b2.text = _t("spd_x2_active") % int((x2_until - _qa_now()) / 60.0); b2.pressed.connect(func(): _set_speed(2.0); panel.queue_free())
 	else: b2.text = _t("spd_x2_ad"); b2.pressed.connect(func(): _watch_ad_x2(); panel.queue_free())
 	v.add_child(b2)
 	var b3 := Button.new(); b3.custom_minimum_size = Vector2(0, 46); b3.add_theme_font_size_override("font_size", 15)
@@ -5070,7 +5088,7 @@ func _open_diamonds_hub() -> void:
 func _watch_ad_x2() -> void:
 	# СТАБ рекламы (на платформе — реальный rewarded-ad SDK). Сейчас выдаём сразу.
 	_track("ad_impression", {"placement": "speed_x2"})   # KPI: просмотр rewarded-рекламы
-	x2_until = Time.get_unix_time_from_system() + 1800.0   # x2 на 30 мин
+	x2_until = _qa_now() + 1800.0   # x2 на 30 мин
 	_set_speed(2.0); _save()
 	_popup_center(_t("spd_pop_x2"), Color("#3ad97a"), 2.0)
 
@@ -5083,7 +5101,7 @@ func _buy_x3() -> void:
 # === РЕКЛАМА-БУСТЫ (Диана) ===
 func _ad_active(b: String) -> bool:
 	var d = ad_boosts.get(b, {})
-	return float(d.get("until", 0.0)) > Time.get_unix_time_from_system()
+	return float(d.get("until", 0.0)) > _qa_now()
 
 func _ad_lvl(b: String) -> int:
 	return int(ad_boosts.get(b, {}).get("lvl", 0))
@@ -5096,7 +5114,7 @@ func _ad_mult(b: String) -> float:
 	return 1.0 + pct / 100.0
 
 func _clan_boost_active(b: String) -> bool:
-	return float(clan_boosts.get(b, {}).get("until", 0.0)) > Time.get_unix_time_from_system()
+	return float(clan_boosts.get(b, {}).get("until", 0.0)) > _qa_now()
 
 func _clan_boost_mult(b: String) -> float:
 	if not _clan_boost_active(b): return 1.0
@@ -5107,7 +5125,7 @@ func _watch_ad_boost(b: String) -> void:
 	# СТАБ рекламы. Каждый просмотр: продлевает на 30 мин И поднимает уровень (выше %) — петля Дианы.
 	_track("ad_impression", {"placement": "boost_%s" % b})   # KPI: просмотр rewarded-рекламы (буст Дианы)
 	var d = ad_boosts.get(b, {"until": 0.0, "lvl": 0})
-	d["until"] = Time.get_unix_time_from_system() + AD_DUR
+	d["until"] = _qa_now() + AD_DUR
 	d["lvl"] = min(int(d["lvl"]) + 1, 30)
 	ad_boosts[b] = d
 	_stat_add("ads", 1)   # ачивка: просмотры реклама-бустов
@@ -5135,7 +5153,7 @@ func _open_ad_boosts() -> void:
 		var nextpct: int = int(AD_BOOST[b]["base"] + AD_BOOST[b]["step"] * lvl)   # после след. просмотра
 		var row := Button.new(); row.custom_minimum_size = Vector2(0, 56); row.add_theme_font_size_override("font_size", 14)
 		if _ad_active(b):
-			var mins := int((float(ad_boosts[b]["until"]) - Time.get_unix_time_from_system()) / 60.0)
+			var mins := int((float(ad_boosts[b]["until"]) - _qa_now()) / 60.0)
 			row.text = _t("ad_row_active") % [_tloc(AD_BOOST[b], "name"), pct, mins, lvl, nextpct]
 		else:
 			row.text = _t("ad_row_idle") % [_tloc(AD_BOOST[b], "name"), nextpct, lvl + 1]
@@ -5145,7 +5163,7 @@ func _open_ad_boosts() -> void:
 
 func _buy_vip() -> void:
 	# 👑 Кибер-пропуск — недельная подписка (СТАБ биллинга: на платформе реальный recurring). Продление добавляет неделю поверх остатка.
-	var base: float = max(vip_until, Time.get_unix_time_from_system())
+	var base: float = max(vip_until, _qa_now())
 	vip_until = base + VIP_DAYS * 86400.0
 	_track("iap_purchase", {"item": "vip_week", "price": "4.99$"})
 	_set_speed(2.0)   # сразу включаем бесплатную x2-скорость
@@ -5214,7 +5232,7 @@ func _open_shop() -> void:
 	# 👑 VIP «Кибер-пропуск» — рекуррентная подписка сверху воронки (лучший LTV-рычаг)
 	var vipb := Button.new()
 	if _vip_active():
-		var left := vip_until - Time.get_unix_time_from_system()
+		var left := vip_until - _qa_now()
 		vipb.text = _t("vip_shop_active") % [int(left / 86400.0), int(fmod(left, 86400.0) / 3600.0)]
 	else:
 		vipb.text = _t("vip_shop_btn")
@@ -5497,10 +5515,10 @@ func _gacha_result_text(results: Array) -> String:
 
 # === БАТЛПАС: награды по пройденным стадиям ===
 func _bp_season_idx() -> int:
-	return int(Time.get_unix_time_from_system() / (float(BP_SEASON_DAYS) * 86400.0))
+	return int(_qa_now() / (float(BP_SEASON_DAYS) * 86400.0))
 
 func _bp_season_secs_left() -> int:
-	return int(ceil(float(_bp_season_idx() + 1) * float(BP_SEASON_DAYS) * 86400.0 - Time.get_unix_time_from_system()))
+	return int(ceil(float(_bp_season_idx() + 1) * float(BP_SEASON_DAYS) * 86400.0 - _qa_now()))
 
 func _bp_check_season() -> void:
 	# новый сезон → премиум-трек обновляется (перепродажа = рекуррентный доход). Free-трек НЕ трогаем (one-time, чтоб не «отнять» у тестеров).
@@ -6271,7 +6289,7 @@ func _ach_row(a: Dictionary, panel: Control) -> Control:
 
 # === ДЕЙЛИКИ ===
 func _today_num() -> int:
-	return int(Time.get_unix_time_from_system() / 86400.0)
+	return int(_qa_now() / 86400.0)
 
 func _daily_available() -> bool:
 	return not bot and _today_num() > daily_day
