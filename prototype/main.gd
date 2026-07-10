@@ -128,7 +128,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.63" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.64" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -602,6 +602,28 @@ const EVENT_LOC := {
 	             "desc": "Престиж (♻ перезагрузка) даёт +25% ядер 🧬. Отличная неделя зайти глубоко и перезагрузиться.",
 	             "desc_en": "Prestige (♻ reboot) grants +25% cores 🧬. A great week to push deep and reboot."},
 }
+# 📅 ИВЕНТ-КВЕСТ: недельная цель под тему ивента (пирамида ретеншна: дейлики → недельный квест → сезон БП)
+const EVENT_QUESTS := {
+	"gold":     {"stat": "gold",   "target": 400000, "icon": "💰", "rew": 150},
+	"gacha":    {"stat": "mobs",   "target": 1500,   "icon": "🗡", "rew": 150},
+	"loot":     {"stat": "drops",  "target": 50,     "icon": "🎁", "rew": 150},
+	"prestige": {"stat": "bosses", "target": 30,     "icon": "👑", "rew": 150},
+}
+var ev_week := -1        # неделя, для которой снят снапшот
+var ev_base := {}        # снимок стата на старте недели
+var ev_claimed := false  # награда этой недели забрана
+
+func _ev_quest() -> Dictionary: return EVENT_QUESTS[_weekly_event()["id"]]
+func _ev_refresh() -> void:
+	var wk := _week_num()
+	if ev_week == wk: return
+	ev_week = wk; ev_claimed = false
+	ev_base = {_ev_quest()["stat"]: _dq_stat(str(_ev_quest()["stat"]))}
+func _ev_progress() -> float:
+	_ev_refresh()
+	var s := str(_ev_quest()["stat"])
+	return max(0.0, _dq_stat(s) - float(ev_base.get(s, 0)))
+func _ev_ready() -> bool: return not ev_claimed and _ev_progress() >= float(_ev_quest()["target"])
 func _weekly_event() -> Dictionary: return WEEKLY_EVENTS[_week_num() % WEEKLY_EVENTS.size()]
 func _event_is(id: String) -> bool: return _weekly_event()["id"] == id
 func _event_gold_mult() -> float: return 2.0 if _event_is("gold") else 1.0
@@ -694,6 +716,7 @@ const TR := {
 	"nick_soft_title": {"ru": "🎖 Позывной, наёмник?", "en": "🎖 Callsign, merc?"},
 	"nick_soft_sub": {"ru": "Первый босс разобран. Имя пойдёт в рейтинг и клан.", "en": "First boss down. Your name goes to the leaderboard and clan."},
 	"nick_later_btn": {"ru": "позже", "en": "later"},
+	"we_quest_title": {"ru": "🎯 ИВЕНТ-КВЕСТ НЕДЕЛИ", "en": "🎯 EVENT QUEST OF THE WEEK"},
 	# подтверждение полного сброса
 	"reset_title": {"ru": "♻ СБРОСИТЬ ВЕСЬ ПРОГРЕСС?", "en": "♻ RESET ALL PROGRESS?"},
 	"reset_body": {"ru": "Сотрёт уровни, шмот, ядра, усиления, стадию.\nЭто новая игра с нуля.", "en": "Wipes levels, gear, cores, augments, stage.\nA brand-new game from scratch."},
@@ -3258,6 +3281,7 @@ func _save() -> void:
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
+		"ev_week": ev_week, "ev_base": ev_base, "ev_claimed": ev_claimed,
 		"aug_lvl": aug_lvl, "equipped_augs": equipped_augs, "draft_offers": draft_offers, "slots_bought": slots_bought, "new_gear": new_gear, "fav": fav,
 		"stats_run": stats_run, "stats_all": stats_all, "rec_maxhit": rec_maxhit, "rec_prestiges": rec_prestiges, "heroes": hs,
 		"dialog_seen": dialog_seen,
@@ -3345,6 +3369,7 @@ func _load() -> void:
 			break
 	dq_base = _dct(d.get("dq_base", {}))
 	dq_claimed = _arr(d.get("dq_claimed", [])).map(func(x): return str(x))
+	ev_week = int(d.get("ev_week", -1)); ev_base = _dct(d.get("ev_base", {})); ev_claimed = bool(d.get("ev_claimed", false))
 	_apply_meta()
 	slots_bought = int(d.get("slots_bought", 0))
 	new_gear = d.get("new_gear", {})
@@ -4526,7 +4551,8 @@ func _refresh_hud() -> void:
 func _refresh_goal() -> void:   # гол-баннер новичка: цель меняется по прогрессу, исчезает после 1-го престижа
 	# 📅 баннер недельного ивента — всегда (кроме открытых панелей); имя ивента + язык авто-рефреш
 	if event_banner and event_lbl:
-		event_lbl.text = "📅 " + str(_weekly_event()["icon"])   # компакт: только иконка ивента, имя+описание в попапе по тапу
+		# компакт-пилюля: иконка ивента (+● когда ивент-квест готов к забору); детали по тапу
+		event_lbl.text = "📅 " + str(_weekly_event()["icon"]) + ("●" if _ev_ready() else "")
 		event_banner.visible = not (inv_open or impl_open or (reboot_panel and reboot_panel.visible))
 	if not goal_banner: return
 	if bot or onboarded or onboard_hidden:
@@ -4562,6 +4588,36 @@ func _open_event_popup() -> void:
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; d.custom_minimum_size = Vector2(360, 0)
 	v.add_child(d)
 	v.add_child(_lbl(_t("we_left") % _fmt_dur(_event_secs_left()), 14, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	# 📅 ивент-квест недели: цель под тему + награда (пирамида: дейлики → неделя)
+	_ev_refresh()
+	var q := _ev_quest()
+	var qbox := PanelContainer.new()
+	var qsb := StyleBoxFlat.new()
+	qsb.bg_color = Color(0.13, 0.11, 0.04, 0.97) if _ev_ready() else Color(0.07, 0.06, 0.03, 0.9)
+	qsb.set_corner_radius_all(8); qsb.set_content_margin_all(10)
+	qsb.border_color = Color("#ffd24a") if _ev_ready() else Color("#5a4a25"); qsb.set_border_width_all(2 if _ev_ready() else 1)
+	qbox.add_theme_stylebox_override("panel", qsb); v.add_child(qbox)
+	var qv := VBoxContainer.new(); qv.add_theme_constant_override("separation", 4); qbox.add_child(qv)
+	qv.add_child(_lbl(_t("we_quest_title"), 13, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
+	if ev_claimed:
+		qv.add_child(_lbl(_t("dq_claimed") + "+%d💎" % int(q["rew"]), 14, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER))
+	else:
+		qv.add_child(_lbl("%s %s / %s   →  +%d💎" % [str(q["icon"]), _gsep(int(_ev_progress())), _gsep(int(q["target"])), int(q["rew"])], 15, Color("#ffe1a8") if _ev_ready() else Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+		if _ev_ready():
+			var cb := Button.new(); cb.text = _t("claim"); cb.custom_minimum_size = Vector2(0, 38); cb.add_theme_font_size_override("font_size", 14)
+			cb.pressed.connect(func():
+				if _ev_ready():
+					ev_claimed = true; diamonds += int(q["rew"]); _save(); _refresh_hud()
+					_track("event_quest_claim", {"event": str(_weekly_event()["id"])})
+					_popup_center("+%d💎" % int(q["rew"]), Color("#ffd24a"), 2.0)
+				panel.queue_free(); _open_event_popup())
+			qv.add_child(cb)
+			qbox.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed and _ev_ready():
+					ev_claimed = true; diamonds += int(q["rew"]); _save(); _refresh_hud()
+					_track("event_quest_claim", {"event": str(_weekly_event()["id"])})
+					_popup_center("+%d💎" % int(q["rew"]), Color("#ffd24a"), 2.0)
+					panel.queue_free(); _open_event_popup())
 	var ok := Button.new(); ok.text = _t("close_x"); ok.custom_minimum_size = Vector2(0, 42); ok.add_theme_font_size_override("font_size", 16)
 	ok.pressed.connect(func(): panel.queue_free()); v.add_child(ok)
 
