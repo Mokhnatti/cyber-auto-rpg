@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.102" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.103" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -2401,7 +2401,7 @@ var vip_until := 0.0
 const VIP_DAYS := 30       # месячная подписка (4.99$/мес — рыночная норма; недельная была жадной, фидбэк Рамиля)
 
 # === 💳 БИЛЛИНГ (Google Play Billing, плагин v3.2). На web/десктопе/ботах iap=null → стабы как раньше ===
-const IAP_DIAMONDS := {"diamonds_100": 100, "diamonds_550": 550, "diamonds_1200": 1200, "diamonds_6500": 6500}
+const IAP_DIAMONDS := {"diamonds_100": 100, "diamonds_550": 550, "diamonds_1200": 1200, "diamonds_6500": 6500, "diamonds_15000": 15000, "diamonds_40000": 40000}
 const IAP_VIP_ID := "cyber_pass"      # id подписки в Play Console (base plan: "monthly")
 var iap: BillingClient = null
 var iap_ready := false
@@ -6263,19 +6263,23 @@ func _open_shop() -> void:
 	v.add_child(evb)
 	v.add_child(_lbl(_t("event_offer_perks") % 1000, 10, Color("#6ab8c9"), HORIZONTAL_ALIGNMENT_CENTER))
 	# value-ladder: 4 ступени $0.99→$49.99 с тегами-нуджами (UI Этап 3): старт=×2 за 1-ю покупку (визуальный хук), средний=популярное, топ=лучшая цена/алмаз
-	for pack in [[100, "0.99$", "first2"], [550, "4.99$", "popular"], [1200, "9.99$", ""], [6500, "49.99$", "best"]]:
+	# 💎 ПАКИ АЛМАЗОВ — СЕТКА плиток (фидбэк Дианы: блоки по 3 в ряд, не строчки)
+	var grid := GridContainer.new(); grid.columns = 3; grid.add_theme_constant_override("h_separation", 8); grid.add_theme_constant_override("v_separation", 8); v.add_child(grid)
+	for pack in [[100, "0.99$", "first2"], [550, "4.99$", "popular"], [1200, "9.99$", ""], [6500, "49.99$", "best"], [15000, "99.99$", ""], [40000, "199.99$", "best"]]:
 		var amt: int = pack[0]; var tag: String = pack[2]
-		var tagtxt := ""; var tagcol := Color("#ffffff")
+		var tagtxt := ""; var tagcol := Color("#39405a")
 		match tag:
-			"first2":  tagtxt = "   " + _t("shop_first_x2");   tagcol = Color("#3ad97a")
-			"popular": tagtxt = "   " + _t("shop_popular");    tagcol = Color("#7adfff")
-			"best":    tagtxt = "   " + _t("shop_best_value"); tagcol = Color("#ffd24a")
-		var bp := Button.new()
-		bp.text = "💎 %d — %s%s" % [amt, pack[1], tagtxt]
-		bp.custom_minimum_size = Vector2(0, 44); bp.add_theme_font_size_override("font_size", 15)
-		if tag != "": bp.add_theme_color_override("font_color", tagcol)
-		bp.pressed.connect(func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]); panel.queue_free())
-		v.add_child(bp)
+			"first2":  tagtxt = _t("shop_first_x2");   tagcol = Color("#3ad97a")
+			"popular": tagtxt = _t("shop_popular");    tagcol = Color("#7adfff")
+			"best":    tagtxt = _t("shop_best_value"); tagcol = Color("#ffd24a")
+		var tile := Button.new(); tile.custom_minimum_size = Vector2(116, 100); tile.add_theme_font_size_override("font_size", 14)
+		tile.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tile.text = "💎\n%s\n%s\n%s" % [_gsep(amt), pack[1], tagtxt]
+		var tsb := StyleBoxFlat.new(); tsb.bg_color = Color(0.14, 0.16, 0.22); tsb.set_corner_radius_all(12); tsb.border_color = tagcol; tsb.set_border_width_all(2 if tag != "" else 1); tsb.set_content_margin_all(4)
+		for st in ["normal", "hover", "pressed", "focus"]: tile.add_theme_stylebox_override(st, tsb)
+		tile.add_theme_color_override("font_color", Color("#e8ecf5"))
+		tile.pressed.connect(func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]); panel.queue_free())
+		grid.add_child(tile)
 	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
 	var bg := Button.new(); bg.text = _t("shop_gacha_btn"); bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
 	bg.pressed.connect(func(): panel.queue_free(); _open_gacha()); v.add_child(bg)
