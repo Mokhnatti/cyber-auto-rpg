@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.94" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.95" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -998,6 +998,13 @@ const TR := {
 	"cl_res_busy": {"ru": "Уже идёт изучение — дождись конца", "en": "Research already in progress — wait"},
 	"cl_res_nopool": {"ru": "Мало очков в пуле (нужно %s) — вкладывайтесь!", "en": "Not enough pool points (need %s) — donate!"},
 	"cl_res_started": {"ru": "▶ Запущено изучение: %s", "en": "▶ Research started: %s"},
+	"cl_rank_btn": {"ru": "🏆 Рейтинг", "en": "🏆 Ranking"},
+	"cl_rank_title": {"ru": "🏆 РЕЙТИНГ НЕДЕЛИ", "en": "🏆 WEEKLY RANKING"},
+	"cl_rank_hint": {"ru": "Вклад участников за неделю. Лидер 👑 назначает до 2 замов ⭐ (могут запускать изучение).", "en": "Weekly member contribution. Leader 👑 appoints up to 2 deputies ⭐ (can start research)."},
+	"cl_rank_promote": {"ru": "⭐ В замы", "en": "⭐ Promote"},
+	"cl_rank_demote": {"ru": "✖ Снять", "en": "✖ Demote"},
+	"cl_rank_leader": {"ru": "Только лидер клана 👑 назначает замов", "en": "Only the leader 👑 appoints deputies"},
+	"cl_rank_max": {"ru": "Максимум 2 зама в клане", "en": "Max 2 deputies per clan"},
 	"cl_tech_max": {"ru": "МАКС", "en": "MAX"},
 	"cl_tech_nopts": {"ru": "Нет очков — поднимите уровень клана (бейте боссов)", "en": "No points — raise clan level (fight bosses)"},
 	"cl_tech_leader": {"ru": "Только лидер клана 👑 качает технологии", "en": "Only the clan leader 👑 can level tech"},
@@ -1555,10 +1562,14 @@ func _open_clan() -> void:
 		bb.add_theme_font_size_override("font_size", 18)
 		bb.pressed.connect(func(): panel.queue_free(); _open_clan_boss())
 		panel.add_child(bb)
-		var btech := Button.new(); btech.text = _t("cl_tech_btn2"); btech.custom_minimum_size = Vector2(280, 44); btech.position = Vector2(W * 0.5 - 140, 556)
-		btech.add_theme_font_size_override("font_size", 17); btech.add_theme_color_override("font_color", Color("#7adfff"))
+		var btech := Button.new(); btech.text = _t("cl_tech_btn2"); btech.custom_minimum_size = Vector2(136, 44); btech.position = Vector2(W * 0.5 - 140, 556)
+		btech.add_theme_font_size_override("font_size", 15); btech.add_theme_color_override("font_color", Color("#7adfff"))
 		btech.pressed.connect(func(): panel.queue_free(); _open_clan_tech())
 		panel.add_child(btech)
+		var brank := Button.new(); brank.text = _t("cl_rank_btn"); brank.custom_minimum_size = Vector2(136, 44); brank.position = Vector2(W * 0.5 + 4, 556)
+		brank.add_theme_font_size_override("font_size", 15); brank.add_theme_color_override("font_color", Color("#ffd24a"))
+		brank.pressed.connect(func(): panel.queue_free(); _open_clan_ranks())
+		panel.add_child(brank)
 		var bch := Button.new(); bch.text = _t("cl_chat_btn"); bch.custom_minimum_size = Vector2(280, 42); bch.position = Vector2(W * 0.5 - 140, 604)
 		bch.add_theme_font_size_override("font_size", 16)
 		bch.pressed.connect(func(): panel.queue_free(); _open_clan_chat())
@@ -1684,6 +1695,7 @@ func _donate_gold() -> bool:
 	if cg_charges >= CG_MAX: cg_ts = _qa_now()   # тратим первый заряд из полного бака → запускаем реген-таймер
 	cg_charges -= 1
 	_clan_add_xp(CLAN_DON_GOLD_XP)
+	_clan_add_contrib(CLAN_DON_GOLD_XP)
 	_save(); _refresh_hud()
 	_popup_center(_t("cl_don_ok") % CLAN_DON_GOLD_XP, Color("#ffd24a"), 1.4)
 	return true
@@ -1694,10 +1706,25 @@ func _donate_gem() -> bool:
 	if diamonds < cost: _popup_center(_t("cl_don_nogem"), Color("#ff5050"), 1.6); return false
 	diamonds -= cost; cd_gem += 1
 	_clan_add_xp(CLAN_DON_GEM_XP)
+	_clan_add_contrib(CLAN_DON_GEM_XP)
 	_track("clan_donate_gem", {})
 	_save(); _refresh_hud()
 	_popup_center(_t("cl_don_ok") % CLAN_DON_GEM_XP, Color("#7adfff"), 1.4)
 	return true
+
+# 🏆 учёт вклада игрока за НЕДЕЛЮ (рейтинг активности). Сброс по номеру недели.
+func _clan_add_contrib(amount: int) -> void:
+	if player_clan == "" or not fb_ready or fb_uid == "" or amount <= 0: return
+	var wk := _week_num()
+	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/members/%s" % [player_clan, fb_uid], "", func(_c, d):
+		var m = JSON.parse_string(d)
+		if typeof(m) != TYPE_DICTIONARY: m = {}
+		var cw: int = int(m.get("cw", 0)) if int(m.get("cweek", -1)) == wk else 0
+		m["cw"] = cw + amount
+		m["cweek"] = wk
+		m["nick"] = _clan_name()
+		m["power"] = min(power_peak, 9.0e18)
+		_fb_rest(HTTPClient.METHOD_PATCH, "/clans/%s/members/%s" % [player_clan, fb_uid], JSON.stringify(m)))
 
 # начислить клан-опыт (вложения). Read-modify-write — гонки теряют копейки XP, некритично.
 func _clan_add_xp(amount: int) -> void:
@@ -1760,6 +1787,68 @@ func _clan_start_research(tree: String, key: String) -> void:
 
 func _tloc_u(d: Dictionary) -> String:
 	return str(d["unit"]) if lang == "ru" else str(d["unit_en"])
+
+# 🏅 лидер назначает/снимает зама (макс 2)
+func _clan_set_deputy(uid: String, on: bool, refresh: Callable) -> void:
+	if not _clan_is_leader(): _popup_center(_t("cl_rank_leader"), Color("#ff5050"), 2.0); return
+	if on and clan_deputies.size() >= 2 and not clan_deputies.has(uid):
+		_popup_center(_t("cl_rank_max"), Color("#ff5050"), 2.0); return
+	if on:
+		clan_deputies[uid] = true
+		_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/deputies/%s" % [player_clan, uid], "true", func(_c, _d): refresh.call())
+	else:
+		clan_deputies.erase(uid)
+		_fb_rest(HTTPClient.METHOD_DELETE, "/clans/%s/deputies/%s" % [player_clan, uid], "", func(_c, _d): refresh.call())
+
+# 🏆 РЕЙТИНГ ВКЛАДЧИКОВ НЕДЕЛИ + управление званиями
+func _open_clan_ranks() -> void:
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.93); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	panel.add_child(_clbl(_t("cl_rank_title"), 60, Color("#ffd24a"), 21))
+	panel.add_child(_clbl(_t("cl_rank_hint"), 96, Color("#9aa0b5"), 12))
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(30, 130); scroll.custom_minimum_size = Vector2(W - 60, 680); scroll.size = Vector2(W - 60, 680); panel.add_child(scroll)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 8); v.custom_minimum_size = Vector2(W - 60, 0); scroll.add_child(v)
+	var reload := func(): pass
+	reload = func():
+		if not is_instance_valid(panel): return
+		_fb_rest(HTTPClient.METHOD_GET, "/clans/%s" % player_clan, "", func(_c, d):
+			if not is_instance_valid(panel): return
+			var clan = JSON.parse_string(d)
+			if typeof(clan) != TYPE_DICTIONARY: return
+			clan_leader_uid = str(clan.get("leader", ""))
+			clan_deputies = clan.get("deputies", {})
+			var mem: Dictionary = clan.get("members", {})
+			var wk := _week_num()
+			var ranked := []
+			for u in mem:
+				var m = mem[u]
+				var cw: int = int(m.get("cw", 0)) if int(m.get("cweek", -1)) == wk else 0
+				ranked.append([str(u), str(m.get("nick", "?")), cw])
+			ranked.sort_custom(func(a, b): return a[2] > b[2])
+			for c in v.get_children(): c.queue_free()
+			for i in ranked.size():
+				var uid: String = ranked[i][0]; var nk: String = ranked[i][1]; var cw: int = ranked[i][2]
+				var role := " 👑" if uid == clan_leader_uid else (" ⭐" if clan_deputies.has(uid) else "")
+				var box := PanelContainer.new()
+				var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.08, 0.10, 0.16, 0.96); sb.set_corner_radius_all(9); sb.border_color = (Color("#ffd24a") if i == 0 else Color("#2a3350")); sb.set_border_width_all(2 if i == 0 else 1); sb.set_content_margin_all(9)
+				box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(W - 66, 0)
+				var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); box.add_child(hb)
+				var lbl := Label.new(); lbl.add_theme_font_size_override("font_size", 14); lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				lbl.text = "%d. %s%s\n🏆 вклад: %s" % [i + 1, nk, role, _gsep(cw)]
+				hb.add_child(lbl)
+				# лидер управляет званиями (не себя)
+				if _clan_is_leader() and uid != clan_leader_uid:
+					var isdep: bool = clan_deputies.has(uid)
+					var rb := Button.new(); rb.custom_minimum_size = Vector2(120, 40); rb.add_theme_font_size_override("font_size", 12)
+					rb.text = _t("cl_rank_demote") if isdep else _t("cl_rank_promote")
+					var u2 := uid
+					rb.pressed.connect(func(): _clan_set_deputy(u2, not isdep, reload))
+					hb.add_child(rb)
+				v.add_child(box))
+	reload.call()
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 830); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
 func _open_clan_tech() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
