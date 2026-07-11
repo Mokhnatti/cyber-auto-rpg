@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.98" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.99" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -640,7 +640,9 @@ var clan_xp := 0                                      # кэш клан-очко
 var clan_tree := {"war": {}, "econ": {}, "net": {}}
 var clan_leader_uid := ""                             # кэш лидера клана
 var clan_deputies := {}                               # кэш замов {uid: true}
-var clan_research := {}                               # активное изучение {cell, ends}
+var clan_research := {}                               # (устар.) активное изучение — для совместимости
+var clan_prog := {}                                   # кэш прогресса узлов {"war_dmg": очки} (пошкальная модель, реф Дианы)
+var clan_priority := ""                               # приоритетный узел от лидера/зама ("war.dmg") — 👆 в UI
 # 💰💎 ВЛОЖЕНИЯ в клан (спец Дианы): золото = заряды с кулдауном (заходи чаще), алмазы = растущая цена
 const CG_MAX := 5             # 💰 зарядов вклада золотом
 const CG_REGEN := 1200.0      # сек на реген 1 заряда (20 мин) → полный откат за 100 мин (спец Дианы)
@@ -1005,6 +1007,17 @@ const TR := {
 	"cl_res_btn2": {"ru": "▶ Изучить · %s", "en": "▶ Research · %s"},
 	"cl_node_locked": {"ru": "открой предыдущий", "en": "unlock previous"},
 	"cl_res_locked": {"ru": "Сначала прокачай предыдущий узел древа", "en": "Level up the previous node first"},
+	"cl_tech_hdr2": {"ru": "🌳 Технологии клана — тапни узел, чтобы вложиться", "en": "🌳 Clan tech — tap a node to donate"},
+	"cl_tech_tap": {"ru": "Тапни узел → окно вклада (шкала, награды, приоритет)", "en": "Tap a node → donate window (bar, rewards, priority)"},
+	"cl_prio_hdr": {"ru": "👆 Приоритет клана: %s", "en": "👆 Clan priority: %s"},
+	"cl_prio_none": {"ru": "Приоритет не задан (лидер/зам может отметить узел)", "en": "No priority set (leader/deputy can mark a node)"},
+	"cl_node_up": {"ru": "⬆️ %s → ур. %d (для всего клана!)", "en": "⬆️ %s → lvl %d (whole clan!)"},
+	"cl_prio_set": {"ru": "👆 Узел отмечен приоритетом клана!", "en": "👆 Node marked as clan priority!"},
+	"cl_prio_btn": {"ru": "👆 Сделать приоритетом", "en": "👆 Set as priority"},
+	"cl_node_rewards": {"ru": "🎁 За вклад: лом / клан-жетоны + рейтинг", "en": "🎁 For donating: scrap / tokens + ranking"},
+	"cl_nd_gold": {"ru": "💰 Вложить %s\nзолота  (%d/%d)", "en": "💰 Donate %s\ngold  (%d/%d)"},
+	"cl_nd_gold_cd": {"ru": "💰 Вложить %s\nзолота  (%d/%d ⏳)", "en": "💰 Donate %s\ngold  (%d/%d ⏳)"},
+	"cl_nd_gem": {"ru": "💎 Вложить\n%d алмазов", "en": "💎 Donate\n%d diamonds"},
 	"cl_rank_btn": {"ru": "🏆 Рейтинг", "en": "🏆 Ranking"},
 	"cl_rank_title": {"ru": "🏆 РЕЙТИНГ НЕДЕЛИ", "en": "🏆 WEEKLY RANKING"},
 	"cl_rank_hint": {"ru": "Вклад участников за неделю. Лидер 👑 назначает до 2 замов ⭐ (могут запускать изучение).", "en": "Weekly member contribution. Leader 👑 appoints up to 2 deputies ⭐ (can start research)."},
@@ -1706,42 +1719,75 @@ func _don_reward_popup(pts: int, crit: bool, col: Color) -> void:
 	if crit: _popup_center(_t("cl_don_crit") % _gsep(pts), Color("#ffd24a"), 1.8)
 	else: _popup_center(_t("cl_don_ok") % _gsep(pts), col, 1.4)
 
-func _donate_gold() -> bool:
+# --- пошкальная модель (реф Дианы): вклад льётся в КОНКРЕТНЫЙ узел, шкала заполняется ---
+func _node_prog(tree: String, key: String) -> int:
+	return int(clan_prog.get(tree + "_" + key, 0))
+
+func _contribute(tree: String, key: String, pts: int) -> void:
+	if player_clan == "" or not fb_ready or pts <= 0: return
+	var fk := tree + "_" + key
+	clan_prog[fk] = _node_prog(tree, key) + pts
+	_clan_add_contrib(pts)
+	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/prog/%s" % [player_clan, fk], "", func(_c, d):
+		var s := str(d).strip_edges()
+		var cur := int(s.to_int()) if s != "" and s != "null" else 0
+		var lvl := _cell_lvl(tree, key)
+		var cost := _cell_cost(lvl)
+		var nv := cur + pts
+		var d2 := _cell_def(tree, key)
+		if not d2.is_empty() and lvl < int(d2["max"]) and nv >= cost:
+			clan_prog[fk] = nv - cost
+			if not clan_tree.has(tree): clan_tree[tree] = {}
+			clan_tree[tree][key] = lvl + 1
+			_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/tree/%s/%s" % [player_clan, tree, key], str(lvl + 1))
+			_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/prog/%s" % [player_clan, fk], str(nv - cost))
+			_recalc_auras()
+			_popup_center(_t("cl_node_up") % [_tloc(d2, "name"), lvl + 1], Color("#3ad97a"), 2.2)
+		else:
+			clan_prog[fk] = nv
+			_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/prog/%s" % [player_clan, fk], str(nv)))
+
+func _clan_set_priority(tree: String, key: String) -> void:
+	if not _clan_is_officer(): _popup_center(_t("cl_res_officer"), Color("#ff5050"), 2.0); return
+	clan_priority = tree + "." + key
+	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/priority" % player_clan, JSON.stringify(clan_priority))
+	_popup_center(_t("cl_prio_set"), Color("#ffd24a"), 1.8)
+
+func _donate_gold(tree: String, key: String) -> bool:
 	if player_clan == "" or not fb_ready: return false
 	_cg_refresh()
 	if cg_charges <= 0: _popup_center(_t("cl_don_cd"), Color("#ff5050"), 1.8); return false
 	var cost := _don_gold_cost()
 	if gold < cost: _popup_center(_t("cl_don_nogold"), Color("#ff5050"), 1.6); return false
 	gold -= cost
-	if cg_charges >= CG_MAX: cg_ts = _qa_now()   # тратим первый заряд из полного бака → запускаем реген-таймер
+	if cg_charges >= CG_MAX: cg_ts = _qa_now()
 	cg_charges -= 1
 	var cr := _don_crit(CLAN_DON_GOLD_XP)
 	var pts: int = cr[0]
-	_clan_add_xp(pts); _clan_add_contrib(pts)
-	scrap += 200   # 🎁 награда вкладчику (реф Дианы)
+	_contribute(tree, key, pts)
+	scrap += 200
 	_save(); _refresh_hud()
 	_don_reward_popup(pts, cr[1], Color("#ffd24a"))
 	return true
 
-func _donate_gem() -> bool:
+func _donate_gem(tree: String, key: String) -> bool:
 	if player_clan == "" or not fb_ready: return false
 	var cost := _gem_cost()
 	if diamonds < cost: _popup_center(_t("cl_don_nogem"), Color("#ff5050"), 1.6); return false
 	diamonds -= cost; cd_gem += 1
 	var cr := _don_crit(CLAN_DON_GEM_XP)
 	var pts: int = cr[0]
-	_clan_add_xp(pts); _clan_add_contrib(pts)
-	clan_tokens += 30   # 🎁 награда вкладчику: клан-жетоны (реф Дианы)
+	_contribute(tree, key, pts)
+	clan_tokens += 30
 	_track("clan_donate_gem", {})
 	_save(); _refresh_hud()
 	_don_reward_popup(pts, cr[1], Color("#7adfff"))
 	return true
 
-# подтверждение траты алмазов (реф Дианы: диалог + «не показывать сегодня»)
-func _donate_gem_confirm(on_done: Callable) -> void:
+func _donate_gem_confirm(tree: String, key: String, on_done: Callable) -> void:
 	var today := int(floor(_qa_now() / 86400.0))
 	if gem_confirm_skip_day == today:
-		if _donate_gem(): on_done.call()
+		if _donate_gem(tree, key): on_done.call()
 		return
 	var dlg := Control.new(); dlg.set_anchors_preset(Control.PRESET_FULL_RECT); dlg.z_index = 4100; hud.add_child(dlg)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.85); dim.set_anchors_preset(Control.PRESET_FULL_RECT); dlg.add_child(dim)
@@ -1756,7 +1802,7 @@ func _donate_gem_confirm(on_done: Callable) -> void:
 	ok.pressed.connect(func():
 		if skip.button_pressed: gem_confirm_skip_day = today; _save()
 		dlg.queue_free()
-		if _donate_gem(): on_done.call())
+		if _donate_gem(tree, key): on_done.call())
 	no.pressed.connect(func(): dlg.queue_free())
 
 # 🏆 учёт вклада игрока за НЕДЕЛЮ (рейтинг активности). Сброс по номеру недели.
@@ -1800,6 +1846,8 @@ func _clan_sync_tech(on_done: Callable = Callable()) -> void:
 		var tr = clan.get("tree", {})
 		for tk in ["war", "econ", "net"]:
 			clan_tree[tk] = tr.get(tk, {}) if typeof(tr) == TYPE_DICTIONARY else {}
+		clan_prog = clan.get("prog", {}) if typeof(clan.get("prog", {})) == TYPE_DICTIONARY else {}
+		clan_priority = str(clan.get("priority", ""))
 		clan_research = clan.get("research", {})
 		# завершилось изучение? применяем (идемпотентно: ставим уровень = toLvl)
 		if typeof(clan_research) == TYPE_DICTIONARY and clan_research.has("cell") and _qa_now() >= float(clan_research.get("ends", 0)):
@@ -1907,6 +1955,61 @@ func _open_clan_ranks() -> void:
 	reload.call()
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 830); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
+# 🔍 ОКНО УЗЛА (реф Дианы): эффект, шкала прогресса, награды, вклад золото/алмазы, приоритет
+func _open_node_detail(tree: String, key: String) -> void:
+	var cd := _cell_def(tree, key)
+	if cd.is_empty(): return
+	var dlg := Control.new(); dlg.set_anchors_preset(Control.PRESET_FULL_RECT); dlg.z_index = 4000; hud.add_child(dlg)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: dlg.queue_free())
+	dlg.add_child(dim)
+	var tcol := Color(str(CLAN_TREES[tree]["col"]))
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.06, 0.09, 0.15, 0.99); sb.set_corner_radius_all(14); sb.border_color = tcol; sb.set_border_width_all(2); sb.set_content_margin_all(18)
+	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 190, 250); card.custom_minimum_size = Vector2(380, 0); dlg.add_child(card)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl("%s %s" % [str(cd["icon"]), _tloc(cd, "name")], 20, tcol, HORIZONTAL_ALIGNMENT_CENTER))
+	var eff := _lbl("", 14, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); v.add_child(eff)
+	# шкала прогресса
+	var barbg := ColorRect.new(); barbg.color = Color(0.1, 0.12, 0.18, 1); barbg.custom_minimum_size = Vector2(0, 26); v.add_child(barbg)
+	var barfill := ColorRect.new(); barfill.color = tcol; barfill.position = Vector2(0, 0); barfill.size = Vector2(0, 26); barbg.add_child(barfill)
+	var barlbl := Label.new(); barlbl.add_theme_font_size_override("font_size", 12); barlbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; barlbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; barlbl.set_anchors_preset(Control.PRESET_FULL_RECT); barbg.add_child(barlbl)
+	v.add_child(_lbl(_t("cl_node_rewards"), 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	# кнопки вклада
+	var don_row := HBoxContainer.new(); don_row.add_theme_constant_override("separation", 10); v.add_child(don_row)
+	var bgold := Button.new(); bgold.custom_minimum_size = Vector2(0, 52); bgold.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgold.add_theme_font_size_override("font_size", 13); bgold.add_theme_color_override("font_color", Color("#ffd24a")); don_row.add_child(bgold)
+	var bgem := Button.new(); bgem.custom_minimum_size = Vector2(0, 52); bgem.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgem.add_theme_font_size_override("font_size", 13); bgem.add_theme_color_override("font_color", Color("#7adfff")); don_row.add_child(bgem)
+	var refresh := func():
+		var lv := _cell_lvl(tree, key); var mx := int(cd["max"]); var per := float(cd["per"])
+		var nb := func(l):
+			if bool(cd.get("flat", false)): return "+%d" % int(l * per)
+			elif key == "critx": return "+%.2f" % (l * per)
+			else: return "+%d" % int(round(l * per * 100))
+		if lv >= mx:
+			eff.text = "%s%s  (ур. %d/%d — МАКС)" % [nb.call(lv), _tloc_u(cd), lv, mx]
+			barfill.size.x = barbg.size.x; barlbl.text = "МАКС"
+		else:
+			eff.text = "ур. %d → %d:  %s%s → %s%s" % [lv, lv + 1, nb.call(lv), _tloc_u(cd), nb.call(lv + 1), _tloc_u(cd)]
+			var cost := _cell_cost(lv); var pr := _node_prog(tree, key)
+			barfill.size.x = barbg.size.x * clampf(float(pr) / float(max(1, cost)), 0.0, 1.0)
+			barlbl.text = "%s / %s" % [_gsep(pr), _gsep(cost)]
+		var cgl := _cg_left()
+		bgold.text = _t("cl_nd_gold") % [_gsep(_don_gold_cost()), cgl, CG_MAX] if cgl >= CG_MAX else _t("cl_nd_gold_cd") % [_gsep(_don_gold_cost()), cgl, CG_MAX]
+		bgold.disabled = cgl <= 0 or lv >= mx
+		bgem.text = _t("cl_nd_gem") % _gem_cost()
+		bgem.disabled = diamonds < _gem_cost() or lv >= mx
+	refresh.call()
+	bgold.pressed.connect(func(): if _donate_gold(tree, key): refresh.call())
+	bgem.pressed.connect(func(): _donate_gem_confirm(tree, key, func(): refresh.call()))
+	# приоритет (офицер)
+	if _clan_is_officer():
+		var bp := Button.new(); bp.text = _t("cl_prio_btn"); bp.custom_minimum_size = Vector2(0, 42); bp.add_theme_color_override("font_color", Color("#ffd24a"))
+		bp.pressed.connect(func(): _clan_set_priority(tree, key))
+		v.add_child(bp)
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): dlg.queue_free()); v.add_child(bc)
+	var tmr := Timer.new(); tmr.wait_time = 1.0; tmr.autostart = true; dlg.add_child(tmr)
+	tmr.timeout.connect(func(): if is_instance_valid(dlg): refresh.call())
+
 var _ct_tree := "war"   # активная вкладка древа
 func _open_clan_tech() -> void:
 	if not (_ct_tree in ["war", "econ", "net"]): _ct_tree = "war"
@@ -1923,14 +2026,13 @@ func _open_clan_tech() -> void:
 	var col := VBoxContainer.new(); col.add_theme_constant_override("separation", 0); col.custom_minimum_size = Vector2(W - 40, 0); col.alignment = BoxContainer.ALIGNMENT_CENTER; scroll.add_child(col)
 	var node_upds := []
 	var refresh_top := func():
-		hdr.text = _t("cl_tech_hdr") % _gsep(clan_xp)
-		if typeof(clan_research) == TYPE_DICTIONARY and clan_research.has("cell") and _qa_now() < float(clan_research.get("ends", 0)):
-			var left := int(ceil(float(clan_research["ends"]) - _qa_now()))
-			var cp := str(clan_research["cell"]).split(".")
-			var cd := _cell_def(cp[0], cp[1]) if cp.size() == 2 else {}
-			resl.text = _t("cl_res_active") % [_tloc(cd, "name") if not cd.is_empty() else "?", left / 60, left % 60]
+		hdr.text = _t("cl_tech_hdr2")
+		if clan_priority != "":
+			var cp := clan_priority.split(".")
+			var cdd := _cell_def(cp[0], cp[1]) if cp.size() == 2 else {}
+			resl.text = _t("cl_prio_hdr") % [_tloc(cdd, "name") if not cdd.is_empty() else "?"]
 		else:
-			resl.text = _t("cl_res_idle")
+			resl.text = _t("cl_prio_none")
 	var rebuild = func(): pass
 	rebuild = func():
 		for c in col.get_children(): c.queue_free()
@@ -1944,7 +2046,7 @@ func _open_clan_tech() -> void:
 			node.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			var wrap := CenterContainer.new(); wrap.custom_minimum_size = Vector2(W - 44, 62); wrap.add_child(node); col.add_child(wrap)
 			var tt: String = _ct_tree
-			node.pressed.connect(func(): _clan_start_research(tt, ck); await get_tree().create_timer(0.7).timeout; for u in node_upds: u.call(); refresh_top.call())
+			node.pressed.connect(func(): _open_node_detail(tt, ck))
 			if ci < cells.size() - 1:
 				col.add_child(_lbl("▼", 18, Color(str(td["col"])).darkened(0.1), HORIZONTAL_ALIGNMENT_CENTER))
 			var c2: Dictionary = cell
@@ -1955,24 +2057,21 @@ func _open_clan_tech() -> void:
 				elif ck == "critx": vstr = "+%.2f" % (lv * per)
 				else: vstr = "+%d" % int(round(lv * per * 100))
 				var unlocked := _cell_unlocked(_ct_tree, ck)
-				var researching: bool = typeof(clan_research) == TYPE_DICTIONARY and str(clan_research.get("cell", "")) == _ct_tree + "." + ck and _qa_now() < float(clan_research.get("ends", 0))
-				var busy: bool = typeof(clan_research) == TYPE_DICTIONARY and clan_research.has("cell") and _qa_now() < float(clan_research.get("ends", 0))
+				var prio: bool = clan_priority == _ct_tree + "." + ck
 				var action := ""; var bcol := Color("#39405a")
 				if not unlocked:
 					action = "🔒 " + _t("cl_node_locked"); bcol = Color("#39405a")
 				elif lv >= mx:
 					action = _t("cl_tech_max"); bcol = Color("#ffd24a")
-				elif researching:
-					var left := int(ceil(float(clan_research["ends"]) - _qa_now()))
-					action = "⏳ %d:%02d" % [left / 60, left % 60]; bcol = Color("#00f0ff")
 				else:
-					action = _t("cl_res_btn2") % _gsep(_cell_cost(lv))
-					bcol = Color("#3ad97a") if (_clan_is_officer() and not busy and clan_xp >= _cell_cost(lv)) else Color("#5a6178")
-				node.text = "%s %s   %s%s  (ур.%d/%d)\n%s" % [str(c2["icon"]), _tloc(c2, "name"), vstr, _tloc_u(c2), lv, mx, action]
+					var cost := _cell_cost(lv); var pr := _node_prog(_ct_tree, ck)
+					action = "%s / %s" % [_gsep(pr), _gsep(cost)]; bcol = Color("#3ad97a") if pr > 0 else Color("#5a6178")
+				var finger := "  👆" if prio else ""
+				node.text = "%s %s%s   %s%s  (ур.%d/%d)\n%s" % [str(c2["icon"]), _tloc(c2, "name"), finger, vstr, _tloc_u(c2), lv, mx, action]
 				var nsb := StyleBoxFlat.new(); nsb.bg_color = Color(0.09, 0.11, 0.17, 0.98) if unlocked else Color(0.05, 0.05, 0.08, 0.9)
-				nsb.set_corner_radius_all(10); nsb.border_color = bcol; nsb.set_border_width_all(2 if unlocked else 1); nsb.set_content_margin_all(6)
+				nsb.set_corner_radius_all(10); nsb.border_color = (Color("#ffd24a") if prio else bcol); nsb.set_border_width_all(3 if prio else (2 if unlocked else 1)); nsb.set_content_margin_all(6)
 				for st in ["normal", "hover", "pressed", "disabled", "focus"]: node.add_theme_stylebox_override(st, nsb)
-				node.disabled = not unlocked or lv >= mx or researching or busy or not _clan_is_officer() or clan_xp < _cell_cost(lv)
+				node.disabled = not unlocked
 			node_upds.append(upd); upd.call()
 	for tk in ["war", "econ", "net"]:
 		var td2: Dictionary = CLAN_TREES[tk]
@@ -1985,24 +2084,10 @@ func _open_clan_tech() -> void:
 			tb.modulate = Color(1.25, 1.25, 1.25) if _ct_tree == tk else Color(0.7, 0.7, 0.7)
 		tab_btns[tk].call()
 	rebuild.call()
-	var don_row := HBoxContainer.new(); don_row.add_theme_constant_override("separation", 10); don_row.position = Vector2(24, 770); don_row.size = Vector2(W - 48, 50); panel.add_child(don_row)
-	var bgold := Button.new(); bgold.custom_minimum_size = Vector2(0, 50); bgold.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgold.add_theme_font_size_override("font_size", 13); bgold.add_theme_color_override("font_color", Color("#ffd24a")); don_row.add_child(bgold)
-	var bgem := Button.new(); bgem.custom_minimum_size = Vector2(0, 50); bgem.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgem.add_theme_font_size_override("font_size", 13); bgem.add_theme_color_override("font_color", Color("#7adfff")); don_row.add_child(bgem)
-	var upd_don := func():
-		var cgl := _cg_left()
-		if cgl >= CG_MAX: bgold.text = _t("cl_don_gold") % [_gsep(_don_gold_cost()), cgl, CG_MAX]
-		else:
-			var ns := _cg_next_sec()
-			bgold.text = _t("cl_don_gold_cd") % [_gsep(_don_gold_cost()), cgl, CG_MAX, ns / 60, ns % 60]
-		bgold.disabled = cgl <= 0
-		bgem.text = _t("cl_don_gem") % _gem_cost()
-		bgem.disabled = diamonds < _gem_cost()
-	upd_don.call()
-	bgold.pressed.connect(func(): if _donate_gold(): upd_don.call(); refresh_top.call())
-	bgem.pressed.connect(func(): _donate_gem_confirm(func(): upd_don.call(); refresh_top.call()))
-	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 38); bc.position = Vector2(W * 0.5 - 100, 830); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+	panel.add_child(_clbl(_t("cl_tech_tap"), 776, Color("#9aa0b5"), 12))   # подсказка: тапни узел
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 40); bc.position = Vector2(W * 0.5 - 100, 826); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 	var tmr := Timer.new(); tmr.wait_time = 1.0; tmr.autostart = true; panel.add_child(tmr)
-	tmr.timeout.connect(func(): if is_instance_valid(panel): upd_don.call(); refresh_top.call(); for u in node_upds: u.call())
+	tmr.timeout.connect(func(): if is_instance_valid(panel): refresh_top.call(); for u in node_upds: u.call())
 	refresh_top.call()
 	_clan_sync_tech(func(): if is_instance_valid(panel): rebuild.call(); refresh_top.call())
 
