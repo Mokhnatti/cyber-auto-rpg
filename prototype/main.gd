@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.106" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.107" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -6233,8 +6233,8 @@ func _open_shop() -> void:
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
 	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _grey_style(Color("#ffd24a"))); card.position = Vector2(W * 0.5 - 205, 140); card.custom_minimum_size = Vector2(410, 0)
-	panel.add_child(card)
+	card.add_theme_stylebox_override("panel", _grey_style(Color("#ffd24a"))); card.custom_minimum_size = Vector2(410, 0)
+	var crow := HBoxContainer.new(); crow.alignment = BoxContainer.ALIGNMENT_CENTER; crow.position = Vector2(0, 140); crow.size = Vector2(W, 0); crow.add_child(card); panel.add_child(crow)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
 	v.add_child(_lbl(_t("shop_title") % diamonds, 23, Color("#ffe089"), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(_t("shop_note"), 13, Color("#b3aecc"), HORIZONTAL_ALIGNMENT_CENTER))
@@ -6390,8 +6390,8 @@ func _open_gacha() -> void:
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
 	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _grey_style(Color("#ff7adf"))); card.position = Vector2(W * 0.5 - 210, 130); card.custom_minimum_size = Vector2(420, 0)
-	panel.add_child(card)
+	card.add_theme_stylebox_override("panel", _grey_style(Color("#ff7adf"))); card.custom_minimum_size = Vector2(420, 0)
+	var crow := HBoxContainer.new(); crow.alignment = BoxContainer.ALIGNMENT_CENTER; crow.position = Vector2(0, 130); crow.size = Vector2(W, 0); crow.add_child(card); panel.add_child(crow)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
 	v.add_child(_lbl(_t("gacha_title"), 24, Color("#ff9ae0"), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(_t("gacha_pity") % [diamonds, max(0, GACHA_HARD_PITY - gacha_pity)], 15, Color("#e0d0ff"), HORIZONTAL_ALIGNMENT_CENTER))
@@ -6476,8 +6476,8 @@ func _open_hero_gacha() -> void:
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
 	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _grey_style(Color("#00f0ff"))); card.position = Vector2(W * 0.5 - 210, 130); card.custom_minimum_size = Vector2(420, 0)
-	panel.add_child(card)
+	card.add_theme_stylebox_override("panel", _grey_style(Color("#00f0ff"))); card.custom_minimum_size = Vector2(420, 0)
+	var crow := HBoxContainer.new(); crow.alignment = BoxContainer.ALIGNMENT_CENTER; crow.position = Vector2(0, 130); crow.size = Vector2(W, 0); crow.add_child(card); panel.add_child(crow)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
 	v.add_child(_lbl(_t("hg_title"), 24, Color("#66eaff"), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(_t("hg_pity") % [diamonds, max(0, HG_HARD_PITY - hg_pity)], 15, Color("#d5e8ff"), HORIZONTAL_ALIGNMENT_CENTER))
