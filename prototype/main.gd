@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.107" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.108" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -8177,6 +8177,7 @@ func _build_implants() -> void:
 		impl_panel.add_child(hp)
 		cell["hsb"] = hsb; cell["hcol"] = Color(HEROES[i]["color"])
 		var hic := _lbl(HEROES[i]["icon"], 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); hic.position = Vector2(16, ry + 8); hic.size = Vector2(168, 46); impl_panel.add_child(hic)
+		cell["hic"] = hic   # значок класса — обновляется по РЕАЛЬНОМУ герою в слоте (баг Насти: был привязан к слоту)
 		var hnm := _lbl(_hname(i), 15, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER); hnm.position = Vector2(16, ry + 56); hnm.size = Vector2(168, 20); impl_panel.add_child(hnm)
 		cell["hnm"] = hnm
 		var hlv := _lbl("", 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER); hlv.position = Vector2(20, ry + 80); hlv.size = Vector2(160, 48); impl_panel.add_child(hlv)
@@ -8243,6 +8244,10 @@ func _refresh_impl() -> void:
 		var hh = heroes[i]
 		var cell = impl_grid[i]
 		cell["hlv"].text = "%s %d" % [_t("lv_dot"), hh["level"]]
+		# 🔧 значок/имя/цвет класса — по РЕАЛЬНОМУ герою в слоте (фикс Насти: были привязаны к индексу слота)
+		if cell.has("hic"): cell["hic"].text = str(hh["data"]["icon"])
+		cell["hnm"].text = str(hh.get("hname", _hname(hh["cls"])))
+		cell["hcol"] = Color(hh["data"]["color"])
 		var hnew: bool = _hero_has_new(i)   # боец с новым лутом → золотая рамка строки
 		cell["hsb"].border_color = Color("#ffd24a") if hnew else cell["hcol"]
 		cell["hsb"].set_border_width_all(4 if hnew else 2)
