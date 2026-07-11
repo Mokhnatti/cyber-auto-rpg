@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.96" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.97" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1000,6 +1000,9 @@ const TR := {
 	"cl_res_busy": {"ru": "Уже идёт изучение — дождись конца", "en": "Research already in progress — wait"},
 	"cl_res_nopool": {"ru": "Мало очков в пуле (нужно %s) — вкладывайтесь!", "en": "Not enough pool points (need %s) — donate!"},
 	"cl_res_started": {"ru": "▶ Запущено изучение: %s", "en": "▶ Research started: %s"},
+	"cl_res_btn2": {"ru": "▶ Изучить · %s", "en": "▶ Research · %s"},
+	"cl_node_locked": {"ru": "открой предыдущий", "en": "unlock previous"},
+	"cl_res_locked": {"ru": "Сначала прокачай предыдущий узел древа", "en": "Level up the previous node first"},
 	"cl_rank_btn": {"ru": "🏆 Рейтинг", "en": "🏆 Ranking"},
 	"cl_rank_title": {"ru": "🏆 РЕЙТИНГ НЕДЕЛИ", "en": "🏆 WEEKLY RANKING"},
 	"cl_rank_hint": {"ru": "Вклад участников за неделю. Лидер 👑 назначает до 2 замов ⭐ (могут запускать изучение).", "en": "Weekly member contribution. Leader 👑 appoints up to 2 deputies ⭐ (can start research)."},
@@ -1771,8 +1774,18 @@ func _clan_sync_tech(on_done: Callable = Callable()) -> void:
 		if on_done.is_valid(): on_done.call())
 
 # офицер запускает изучение ячейки: списывает пул, ставит таймер
+# узел открыт, если предыдущий в древе прокачан ≥1 (первый всегда открыт) — стрелки-порядок (схема Дианы)
+func _cell_unlocked(tree: String, key: String) -> bool:
+	var cells: Array = CLAN_TREES.get(tree, {}).get("cells", [])
+	for i in cells.size():
+		if str(cells[i]["key"]) == key:
+			if i == 0: return true
+			return _cell_lvl(tree, str(cells[i - 1]["key"])) >= 1
+	return false
+
 func _clan_start_research(tree: String, key: String) -> void:
 	if not _clan_is_officer(): _popup_center(_t("cl_res_officer"), Color("#ff5050"), 2.2); return
+	if not _cell_unlocked(tree, key): _popup_center(_t("cl_res_locked"), Color("#ff5050"), 2.0); return
 	if typeof(clan_research) == TYPE_DICTIONARY and clan_research.has("cell") and _qa_now() < float(clan_research.get("ends", 0)):
 		_popup_center(_t("cl_res_busy"), Color("#ff5050"), 2.0); return
 	var lvl := _cell_lvl(tree, key)
@@ -1853,17 +1866,21 @@ func _open_clan_ranks() -> void:
 	reload.call()
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 830); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
+var _ct_tree := "war"   # активная вкладка древа
 func _open_clan_tech() -> void:
+	if not (_ct_tree in ["war", "econ", "net"]): _ct_tree = "war"
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
-	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.94); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.95); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
-	panel.add_child(_clbl(_t("cl_tech_title"), 30, Color("#00f0ff"), 21))
-	var hdr := _clbl("", 62, Color("#ffd24a"), 14); hdr.size = Vector2(W, 22); panel.add_child(hdr)
-	var resl := _clbl("", 86, Color("#7ee08a"), 13); resl.size = Vector2(W, 20); panel.add_child(resl)
-	var scroll := ScrollContainer.new(); scroll.position = Vector2(24, 116); scroll.custom_minimum_size = Vector2(W - 48, 660); scroll.size = Vector2(W - 48, 660); panel.add_child(scroll)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 8); v.custom_minimum_size = Vector2(W - 48, 0); scroll.add_child(v)
-	var cell_rows := []   # массив Callable-обновлялок ячеек
+	panel.add_child(_clbl(_t("cl_tech_title"), 22, Color("#00f0ff"), 20))
+	var hdr := _clbl("", 52, Color("#ffd24a"), 13); hdr.size = Vector2(W, 20); panel.add_child(hdr)
+	var resl := _clbl("", 74, Color("#7ee08a"), 12); resl.size = Vector2(W, 18); panel.add_child(resl)
+	var tabs := HBoxContainer.new(); tabs.add_theme_constant_override("separation", 6); tabs.position = Vector2(24, 98); tabs.size = Vector2(W - 48, 40); panel.add_child(tabs)
+	var tab_btns := {}
+	var scroll := ScrollContainer.new(); scroll.position = Vector2(20, 146); scroll.custom_minimum_size = Vector2(W - 40, 610); scroll.size = Vector2(W - 40, 610); panel.add_child(scroll)
+	var col := VBoxContainer.new(); col.add_theme_constant_override("separation", 0); col.custom_minimum_size = Vector2(W - 40, 0); col.alignment = BoxContainer.ALIGNMENT_CENTER; scroll.add_child(col)
+	var node_upds := []
 	var refresh_top := func():
 		hdr.text = _t("cl_tech_hdr") % _gsep(clan_xp)
 		if typeof(clan_research) == TYPE_DICTIONARY and clan_research.has("cell") and _qa_now() < float(clan_research.get("ends", 0)):
@@ -1873,43 +1890,61 @@ func _open_clan_tech() -> void:
 			resl.text = _t("cl_res_active") % [_tloc(cd, "name") if not cd.is_empty() else "?", left / 60, left % 60]
 		else:
 			resl.text = _t("cl_res_idle")
-	for tree in ["war", "econ", "net"]:
-		var td: Dictionary = CLAN_TREES[tree]
-		v.add_child(_lbl(td["name"] if lang == "ru" else td["name_en"], 16, Color(str(td["col"])), HORIZONTAL_ALIGNMENT_CENTER))
-		for cell in td["cells"]:
+	var rebuild = func(): pass
+	rebuild = func():
+		for c in col.get_children(): c.queue_free()
+		node_upds.clear()
+		var td: Dictionary = CLAN_TREES[_ct_tree]
+		var cells: Array = td["cells"]
+		for ci in cells.size():
+			var cell: Dictionary = cells[ci]
 			var ck: String = cell["key"]
-			var box := PanelContainer.new()
-			var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.07, 0.09, 0.14, 0.96); sb.set_corner_radius_all(9); sb.border_color = Color(str(td["col"])).darkened(0.4); sb.set_border_width_all(1); sb.set_content_margin_all(9)
-			box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(W - 60, 0)
-			var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); box.add_child(hb)
-			var lbl := Label.new(); lbl.add_theme_font_size_override("font_size", 13); lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hb.add_child(lbl)
-			var btn := Button.new(); btn.custom_minimum_size = Vector2(128, 42); btn.add_theme_font_size_override("font_size", 12); hb.add_child(btn)
-			v.add_child(box)
-			var t2: String = tree; var c2: Dictionary = cell
-			btn.pressed.connect(func(): _clan_start_research(t2, ck); await get_tree().create_timer(0.7).timeout; for r in cell_rows: r.call(); refresh_top.call())
+			var node := Button.new(); node.custom_minimum_size = Vector2(330, 62); node.add_theme_font_size_override("font_size", 13)
+			node.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			var wrap := CenterContainer.new(); wrap.custom_minimum_size = Vector2(W - 44, 62); wrap.add_child(node); col.add_child(wrap)
+			var tt: String = _ct_tree
+			node.pressed.connect(func(): _clan_start_research(tt, ck); await get_tree().create_timer(0.7).timeout; for u in node_upds: u.call(); refresh_top.call())
+			if ci < cells.size() - 1:
+				col.add_child(_lbl("▼", 18, Color(str(td["col"])).darkened(0.1), HORIZONTAL_ALIGNMENT_CENTER))
+			var c2: Dictionary = cell
 			var upd := func():
-				var lv := _cell_lvl(tree, ck); var mx := int(c2["max"])
-				var per := float(c2["per"])
-				var val = (lv * per) if ck != "critx" else (lv * per)   # crit-урон показываем как ×
+				var lv := _cell_lvl(_ct_tree, ck); var mx := int(c2["max"]); var per := float(c2["per"])
 				var vstr: String
 				if bool(c2.get("flat", false)): vstr = "+%d" % int(lv * per)
 				elif ck == "critx": vstr = "+%.2f" % (lv * per)
 				else: vstr = "+%d" % int(round(lv * per * 100))
-				lbl.text = "%s %s  %s%s\n(ур. %d/%d)" % [str(c2["icon"]), _tloc(c2, "name"), vstr, _tloc_u(c2), lv, mx]
-				var researching: bool = typeof(clan_research) == TYPE_DICTIONARY and str(clan_research.get("cell", "")) == tree + "." + ck and _qa_now() < float(clan_research.get("ends", 0))
+				var unlocked := _cell_unlocked(_ct_tree, ck)
+				var researching: bool = typeof(clan_research) == TYPE_DICTIONARY and str(clan_research.get("cell", "")) == _ct_tree + "." + ck and _qa_now() < float(clan_research.get("ends", 0))
 				var busy: bool = typeof(clan_research) == TYPE_DICTIONARY and clan_research.has("cell") and _qa_now() < float(clan_research.get("ends", 0))
-				if lv >= mx:
-					btn.text = _t("cl_tech_max"); btn.disabled = true
+				var action := ""; var bcol := Color("#39405a")
+				if not unlocked:
+					action = "🔒 " + _t("cl_node_locked"); bcol = Color("#39405a")
+				elif lv >= mx:
+					action = _t("cl_tech_max"); bcol = Color("#ffd24a")
 				elif researching:
 					var left := int(ceil(float(clan_research["ends"]) - _qa_now()))
-					btn.text = _t("cl_res_wait") % [left / 60, left % 60]; btn.disabled = true
+					action = "⏳ %d:%02d" % [left / 60, left % 60]; bcol = Color("#00f0ff")
 				else:
-					btn.text = _t("cl_res_btn") % _gsep(_cell_cost(lv))
-					btn.disabled = busy or not _clan_is_officer() or clan_xp < _cell_cost(lv)
-			cell_rows.append(upd); upd.call()
-	# 💰💎 ВЛОЖЕНИЯ
-	v.add_child(_lbl(_t("cl_don_title"), 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
-	var don_row := HBoxContainer.new(); don_row.add_theme_constant_override("separation", 10); v.add_child(don_row)
+					action = _t("cl_res_btn2") % _gsep(_cell_cost(lv))
+					bcol = Color("#3ad97a") if (_clan_is_officer() and not busy and clan_xp >= _cell_cost(lv)) else Color("#5a6178")
+				node.text = "%s %s   %s%s  (ур.%d/%d)\n%s" % [str(c2["icon"]), _tloc(c2, "name"), vstr, _tloc_u(c2), lv, mx, action]
+				var nsb := StyleBoxFlat.new(); nsb.bg_color = Color(0.09, 0.11, 0.17, 0.98) if unlocked else Color(0.05, 0.05, 0.08, 0.9)
+				nsb.set_corner_radius_all(10); nsb.border_color = bcol; nsb.set_border_width_all(2 if unlocked else 1); nsb.set_content_margin_all(6)
+				for st in ["normal", "hover", "pressed", "disabled", "focus"]: node.add_theme_stylebox_override(st, nsb)
+				node.disabled = not unlocked or lv >= mx or researching or busy or not _clan_is_officer() or clan_xp < _cell_cost(lv)
+			node_upds.append(upd); upd.call()
+	for tk in ["war", "econ", "net"]:
+		var td2: Dictionary = CLAN_TREES[tk]
+		var tb := Button.new(); tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tb.custom_minimum_size = Vector2(0, 38); tb.add_theme_font_size_override("font_size", 13)
+		tb.text = (td2["name"] if lang == "ru" else td2["name_en"])
+		var kk: String = tk
+		tb.pressed.connect(func(): _ct_tree = kk; rebuild.call(); for tk2 in tab_btns: tab_btns[tk2].call())
+		tabs.add_child(tb); tab_btns[tk] = func():
+			tb.add_theme_color_override("font_color", Color(str(td2["col"])) if _ct_tree == tk else Color("#6a7088"))
+			tb.modulate = Color(1.25, 1.25, 1.25) if _ct_tree == tk else Color(0.7, 0.7, 0.7)
+		tab_btns[tk].call()
+	rebuild.call()
+	var don_row := HBoxContainer.new(); don_row.add_theme_constant_override("separation", 10); don_row.position = Vector2(24, 770); don_row.size = Vector2(W - 48, 50); panel.add_child(don_row)
 	var bgold := Button.new(); bgold.custom_minimum_size = Vector2(0, 50); bgold.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgold.add_theme_font_size_override("font_size", 13); bgold.add_theme_color_override("font_color", Color("#ffd24a")); don_row.add_child(bgold)
 	var bgem := Button.new(); bgem.custom_minimum_size = Vector2(0, 50); bgem.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgem.add_theme_font_size_override("font_size", 13); bgem.add_theme_color_override("font_color", Color("#7adfff")); don_row.add_child(bgem)
 	var upd_don := func():
@@ -1924,13 +1959,11 @@ func _open_clan_tech() -> void:
 	upd_don.call()
 	bgold.pressed.connect(func(): if _donate_gold(): upd_don.call(); refresh_top.call())
 	bgem.pressed.connect(func(): if _donate_gem(): upd_don.call(); refresh_top.call())
-	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 40); bc.position = Vector2(W * 0.5 - 100, 830); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
-	# тик: реген золота + обратный отсчёт изучения
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 38); bc.position = Vector2(W * 0.5 - 100, 830); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 	var tmr := Timer.new(); tmr.wait_time = 1.0; tmr.autostart = true; panel.add_child(tmr)
-	tmr.timeout.connect(func(): if is_instance_valid(panel): upd_don.call(); refresh_top.call(); for r in cell_rows: r.call())
+	tmr.timeout.connect(func(): if is_instance_valid(panel): upd_don.call(); refresh_top.call(); for u in node_upds: u.call())
 	refresh_top.call()
-	# подтянуть свежак с сервера и перерисовать
-	_clan_sync_tech(func(): if is_instance_valid(panel): refresh_top.call(); for r in cell_rows: r.call())
+	_clan_sync_tech(func(): if is_instance_valid(panel): rebuild.call(); refresh_top.call())
 
 func _open_clan_boss() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
