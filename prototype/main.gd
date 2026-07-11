@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.90" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.91" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -603,9 +603,20 @@ var fb_ready := false
 var fb_t := 0.0
 var player_clan := ""       # код клана игрока (6 цифр), "" = без клана
 var boss_my_dmg := 0        # мой накопленный урон по клан-боссу (локально → пишу свой узел contrib, без гонки)
-var boss_atk_cd := 0.0      # кулдаун кнопки «Ударить»
+var boss_atk_cd := 0.0      # кулдаун кнопки «Ударить» (анти-дабл-тап)
 var clan_tokens := 0        # 🎖 клан-жетоны (НЕ продаются за деньги → клан-магаз, награда за клан-боссов)
 var boss_claimed := 0       # started-ts последнего босса, с которого забрал награду (анти-дабл-клейм)
+const CB_DAILY_TRIES := 3   # 🩸 клан-босс: попыток В ДЕНЬ на игрока (задумка Рамиля: жирный недельный босс, дожимаешь заходя каждый день)
+var cb_day := -1            # день последней атаки клан-босса (сброс лимита в полночь)
+var cb_used := 0            # использовано попыток сегодня
+# ⚙️ КЛАН-ТЕХНОЛОГИИ (задумка Рамиля): клан копит XP за общий вклад → лидер качает вечные перки для ВСЕХ
+const CLAN_PERKS := {
+	"dmg":  {"icon": "💥", "name": "Боевые протоколы", "name_en": "Combat Protocols", "per": 0.02, "unit": "% урона",   "unit_en": "% dmg",   "max": 15},
+	"atk":  {"icon": "⚡", "name": "Разгон систем",    "name_en": "Overclock",        "per": 0.02, "unit": "% скор.",   "unit_en": "% atk spd", "max": 15},
+	"gold": {"icon": "💰", "name": "Крипто-майнинг",   "name_en": "Crypto-mining",    "per": 0.04, "unit": "% золота",  "unit_en": "% gold",  "max": 15},
+}
+var clan_xp := 0                                      # кэш клан-опыта (из Firebase)
+var clan_perks := {"dmg": 0, "atk": 0, "gold": 0}     # кэш уровней перков клана
 # 9 клан-боссов из 3 фракций (имена-заглушки Рамиля), недельная ротация
 const CLAN_BOSSES := [
 	{"name": "Корпорат Биба Бобович", "fac": "🏢 ZenoCore", "fac_en": "🏢 ZenoCore", "icon": "🏢"},
@@ -941,6 +952,17 @@ const TR := {
 	"cl_atk_btn": {"ru": "⚔ УДАРИТЬ", "en": "⚔ ATTACK"},
 	"cl_boss_summoned": {"ru": "%s призван! Бейте все!", "en": "%s summoned! Attack!"},
 	"cl_boss_hit": {"ru": "⚔ −%s урона боссу!", "en": "⚔ −%s dmg to boss!"},
+	"cl_no_tries": {"ru": "❌ Попытки на сегодня кончились (3/день). Возвращайся завтра!", "en": "❌ No attempts left today (3/day). Come back tomorrow!"},
+	"cl_tries_hint": {"ru": "%d удара в день на игрока — дожимайте босса всем кланом за неделю", "en": "%d hits/day per player — take the boss down as a clan over the week"},
+	"cl_tech_btn2": {"ru": "⚙️ КЛАН-ТЕХНОЛОГИИ", "en": "⚙️ CLAN TECH"},
+	"cl_tech_title": {"ru": "⚙️ КЛАН-ТЕХНОЛОГИИ", "en": "⚙️ CLAN TECH"},
+	"cl_tech_hint": {"ru": "Клан копит опыт за урон по боссам. Лидер качает перки — бонус ВСЕМ участникам навсегда.", "en": "The clan earns XP from boss damage. The leader levels perks — a permanent bonus for ALL members."},
+	"cl_tech_hdr": {"ru": "Клан ур. %d  ·  очков: %d  ·  XP %s / %s", "en": "Clan lvl %d  ·  points: %d  ·  XP %s / %s"},
+	"cl_tech_btn": {"ru": "▲ Качать (1 очко)", "en": "▲ Level up (1 pt)"},
+	"cl_tech_max": {"ru": "МАКС", "en": "MAX"},
+	"cl_tech_nopts": {"ru": "Нет очков — поднимите уровень клана (бейте боссов)", "en": "No points — raise clan level (fight bosses)"},
+	"cl_tech_leader": {"ru": "Только лидер клана 👑 качает технологии", "en": "Only the clan leader 👑 can level tech"},
+	"cl_tech_up": {"ru": "⚙️ %s → ур. %d (для всего клана!)", "en": "⚙️ %s → lvl %d (whole clan!)"},
 	# чат клана
 	"cl_chat_title": {"ru": "💬 ЧАТ КЛАНА %s", "en": "💬 CLAN CHAT %s"},
 	"cl_chat_empty": {"ru": "Сообщений пока нет.\nНапиши первым 👋", "en": "No messages yet.\nBe the first 👋"},
@@ -1314,6 +1336,8 @@ func _qa_poll() -> void:
 		_district_popup(cur_location); return
 	if cmd == "positions":   # QA: окно расстановки
 		_open_positions(); return
+	if cmd == "clantech":   # QA: экран клан-технологий с мок-данными (без Firebase)
+		player_clan = "QATEST"; clan_xp = 26000; clan_perks = {"dmg": 4, "atk": 2, "gold": 3}; _open_clan_tech(); return
 	if cmd.begins_with("dayofs="):   # QA: машина времени — сдвиг даты в днях (тест дейликов/недель/сезонов БП)
 		qa_day_ofs = int(cmd.substr(7))
 		_dq_refresh(); _ev_refresh(); _bp_check_season(); _refresh_hud()
@@ -1478,19 +1502,24 @@ func _open_clan() -> void:
 				var m = mem[u]
 				txt += "• %s — ⚡%s%s\n" % [str(m.get("nick", "?")), _gsep(int(min(float(m.get("power", 0)), 9.0e18))), ("  👑" if str(clan.get("leader", "")) == str(u) else "")]
 			ml.text = txt)
-		var bb := Button.new(); bb.text = _t("cl_boss_btn"); bb.custom_minimum_size = Vector2(280, 48); bb.position = Vector2(W * 0.5 - 140, 540)
+		_clan_sync_tech()   # подтянуть клан-перки в кэш (для боя)
+		var bb := Button.new(); bb.text = _t("cl_boss_btn"); bb.custom_minimum_size = Vector2(280, 46); bb.position = Vector2(W * 0.5 - 140, 506)
 		bb.add_theme_font_size_override("font_size", 18)
 		bb.pressed.connect(func(): panel.queue_free(); _open_clan_boss())
 		panel.add_child(bb)
-		var bch := Button.new(); bch.text = _t("cl_chat_btn"); bch.custom_minimum_size = Vector2(280, 44); bch.position = Vector2(W * 0.5 - 140, 596)
-		bch.add_theme_font_size_override("font_size", 17)
+		var btech := Button.new(); btech.text = _t("cl_tech_btn2"); btech.custom_minimum_size = Vector2(280, 44); btech.position = Vector2(W * 0.5 - 140, 556)
+		btech.add_theme_font_size_override("font_size", 17); btech.add_theme_color_override("font_color", Color("#7adfff"))
+		btech.pressed.connect(func(): panel.queue_free(); _open_clan_tech())
+		panel.add_child(btech)
+		var bch := Button.new(); bch.text = _t("cl_chat_btn"); bch.custom_minimum_size = Vector2(280, 42); bch.position = Vector2(W * 0.5 - 140, 604)
+		bch.add_theme_font_size_override("font_size", 16)
 		bch.pressed.connect(func(): panel.queue_free(); _open_clan_chat())
 		panel.add_child(bch)
-		var bshop := Button.new(); bshop.text = _t("cls_btn"); bshop.custom_minimum_size = Vector2(280, 44); bshop.position = Vector2(W * 0.5 - 140, 648)
-		bshop.add_theme_font_size_override("font_size", 17); bshop.add_theme_color_override("font_color", Color("#ffd24a"))
+		var bshop := Button.new(); bshop.text = _t("cls_btn"); bshop.custom_minimum_size = Vector2(280, 42); bshop.position = Vector2(W * 0.5 - 140, 650)
+		bshop.add_theme_font_size_override("font_size", 16); bshop.add_theme_color_override("font_color", Color("#ffd24a"))
 		bshop.pressed.connect(func(): panel.queue_free(); _open_clan_shop())
 		panel.add_child(bshop)
-		var bl := Button.new(); bl.text = _t("cl_leave_btn"); bl.custom_minimum_size = Vector2(200, 40); bl.position = Vector2(W * 0.5 - 100, 700)
+		var bl := Button.new(); bl.text = _t("cl_leave_btn"); bl.custom_minimum_size = Vector2(200, 38); bl.position = Vector2(W * 0.5 - 100, 698)
 		bl.pressed.connect(func(): _clan_leave(); panel.queue_free(); await get_tree().create_timer(0.6).timeout; _open_clan())
 		panel.add_child(bl)
 	_clan_close_btn(panel)
@@ -1499,19 +1528,133 @@ func _open_clan() -> void:
 func _clan_boss_spawn() -> void:
 	if player_clan == "" or not fb_ready: return
 	var wb := _weekly_boss()
-	var hpmax: int = int(min(max(100000.0, power_peak * 1000.0), 9.0e18))  # ~1000 hits to kill: 20min solo / 4min clan-of-5 (bot ppwr peak ~940M → ~940B boss HP); кламп к int64-safe перед int()
+	# HP на НЕДЕЛЮ клана: ~120 попыток (клан из 5 × 3/день × ~7дн ≈ 105). Соло (3/день) не убить — только кланом (задумка Рамиля).
+	var hpmax: int = int(min(max(1000000.0, power_peak * 120.0), 9.0e18))
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss" % player_clan, JSON.stringify({"hpMax": hpmax, "started": int(_qa_now()), "name": wb["name"], "fac": wb["fac"], "week": _week_num()}), func(c, _d):
 		if c >= 200 and c < 300:
 			boss_my_dmg = 0
 			_popup_center(_t("cl_boss_summoned") % wb["name"], Color("#ff2d95"), 2.8))
 
+# сколько попыток осталось сегодня (сброс в полночь по _qa_now)
+func _cb_tries_left() -> int:
+	var today := int(floor(_qa_now() / 86400.0))
+	if cb_day != today: return CB_DAILY_TRIES
+	return max(0, CB_DAILY_TRIES - cb_used)
+
 func _clan_boss_attack() -> void:
 	if player_clan == "" or not fb_ready or boss_atk_cd > 0.0: return
-	boss_atk_cd = 1.2
-	var hit: int = max(1, int(min(power_peak * randf_range(0.8, 1.4), 9.0e18)))
+	var today := int(floor(_qa_now() / 86400.0))
+	if cb_day != today: cb_day = today; cb_used = 0   # новый день → лимит сброшен
+	if cb_used >= CB_DAILY_TRIES:
+		_popup_center(_t("cl_no_tries"), Color("#ff5050"), 2.0); return
+	boss_atk_cd = 0.5
+	cb_used += 1
+	# удар БОЛЬШОЙ (всего 3/день): пик-мощь ×3-5 — вклад ощутимый
+	var hit: int = max(1, int(min(power_peak * randf_range(3.0, 5.0), 9.0e18)))
 	boss_my_dmg += hit
+	_save()
 	_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/boss/contrib/%s" % [player_clan, fb_uid], JSON.stringify({"nick": _clan_name(), "dmg": boss_my_dmg}))
+	_clan_add_xp(hit)   # ⚙️ клан-технологии: вклад в клан-опыт
 	_popup_center(_t("cl_boss_hit") % _gsep(hit), Color("#ff5050"), 0.9)
+
+# ⚙️ КЛАН-ТЕХНОЛОГИИ ---
+func _clan_level(xp: int) -> int:
+	# level = floor(sqrt(xp / 1000)) — плавно замедляется; ур.1 = 1k xp, ур.5 = 25k, ур.10 = 100k
+	return int(floor(sqrt(float(max(0, xp)) / 1000.0)))
+
+func _clan_xp_for(lvl: int) -> int:
+	return lvl * lvl * 1000   # обратное: сколько XP нужно на уровень
+
+func _clan_points_spent() -> int:
+	var t := 0
+	for k in clan_perks: t += int(clan_perks[k])
+	return t
+
+func _clan_points_free() -> int:
+	return max(0, _clan_level(clan_xp) - _clan_points_spent())
+
+func _clan_perk_mult(key: String) -> float:
+	if player_clan == "": return 1.0
+	var lv: int = int(clan_perks.get(key, 0))
+	return 1.0 + lv * float(CLAN_PERKS[key]["per"])
+
+# начислить клан-опыт за вклад (урон по боссу). Read-modify-write — гонки теряют копейки XP, некритично.
+func _clan_add_xp(amount: int) -> void:
+	if player_clan == "" or not fb_ready or amount <= 0: return
+	var add := int(min(float(amount), 1.0e15))
+	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/xp" % player_clan, "", func(_c, d):
+		var cur := int(str(d).to_int()) if str(d).strip_edges() != "null" and str(d).strip_edges() != "" else 0
+		var nv := cur + add
+		clan_xp = nv
+		_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/xp" % player_clan, str(nv)))
+
+# подтянуть XP+перки клана в кэш (для боя и экрана)
+func _clan_sync_tech() -> void:
+	if player_clan == "" or player_clan == "QATEST" or not fb_ready: return
+	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/xp" % player_clan, "", func(_c, d):
+		var s := str(d).strip_edges()
+		clan_xp = int(s.to_int()) if s != "" and s != "null" else 0)
+	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s/perks" % player_clan, "", func(_c, d):
+		var pk = JSON.parse_string(d)
+		if typeof(pk) == TYPE_DICTIONARY:
+			for k in ["dmg", "atk", "gold"]:
+				clan_perks[k] = int(pk.get(k, 0))
+			_recalc_auras())
+
+func _clan_upgrade_perk(key: String) -> void:
+	# только ЛИДЕР качает — для всех сразу (задумка Рамиля)
+	if player_clan == "" or not fb_ready: return
+	if _clan_points_free() <= 0: _popup_center(_t("cl_tech_nopts"), Color("#ff5050"), 1.8); return
+	if int(clan_perks.get(key, 0)) >= int(CLAN_PERKS[key]["max"]): return
+	_fb_rest(HTTPClient.METHOD_GET, "/clans/%s" % player_clan, "", func(_c, d):
+		var clan = JSON.parse_string(d)
+		if typeof(clan) != TYPE_DICTIONARY: return
+		if str(clan.get("leader", "")) != fb_uid:
+			_popup_center(_t("cl_tech_leader"), Color("#ff5050"), 2.2); return
+		var pk: Dictionary = clan.get("perks", {})
+		var nl := int(pk.get(key, 0)) + 1
+		clan_perks[key] = nl
+		_fb_rest(HTTPClient.METHOD_PUT, "/clans/%s/perks/%s" % [player_clan, key], str(nl), func(_c2, _d2):
+			_recalc_auras(); _popup_center(_t("cl_tech_up") % [_tloc(CLAN_PERKS[key], "name"), nl], Color("#7ee08a"), 1.8)))
+
+func _open_clan_tech() -> void:
+	_clan_sync_tech()
+	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
+	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.92); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
+	panel.add_child(dim)
+	panel.add_child(_clbl(_t("cl_tech_title"), 90, Color("#00f0ff"), 22))
+	var hdr := _clbl("", 132, Color("#ffd24a"), 15); hdr.size = Vector2(W, 24); panel.add_child(hdr)
+	var sub := _clbl(_t("cl_tech_hint"), 158, Color("#9aa0b5"), 12); sub.size = Vector2(W, 40); panel.add_child(sub)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); v.position = Vector2(40, 220); v.size = Vector2(W - 80, 0); panel.add_child(v)
+	var rows := {}
+	var refresh_hdr := func():
+		var lvl := _clan_level(clan_xp)
+		var nxt := _clan_xp_for(lvl + 1)
+		hdr.text = _t("cl_tech_hdr") % [lvl, _clan_points_free(), _gsep(clan_xp), _gsep(nxt)]
+	for key in ["dmg", "atk", "gold"]:
+		var pdef: Dictionary = CLAN_PERKS[key]
+		var box := PanelContainer.new()
+		var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.08, 0.10, 0.16, 0.96); sb.set_corner_radius_all(10); sb.border_color = Color("#2a3350"); sb.set_border_width_all(1); sb.set_content_margin_all(12)
+		box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(W - 80, 0)
+		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 10); box.add_child(hb)
+		var lbl := Label.new(); lbl.add_theme_font_size_override("font_size", 14); lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hb.add_child(lbl)
+		var up := Button.new(); up.custom_minimum_size = Vector2(120, 44); up.add_theme_font_size_override("font_size", 14)
+		var kk: String = key
+		up.pressed.connect(func(): _clan_upgrade_perk(kk); await get_tree().create_timer(0.6).timeout; rows[kk].call(); refresh_hdr.call())
+		hb.add_child(up)
+		v.add_child(box)
+		rows[key] = func():
+			var lv := int(clan_perks.get(key, 0)); var mx := int(pdef["max"])
+			lbl.text = "%s %s\n+%d%s  (ур. %d/%d)" % [str(pdef["icon"]), _tloc(pdef, "name"), int(round(lv * float(pdef["per"]) * 100)), _tloc_u(pdef), lv, mx]
+			up.text = (_t("cl_tech_max") if lv >= mx else _t("cl_tech_btn"))
+			up.disabled = lv >= mx or _clan_points_free() <= 0
+		rows[key].call()
+	refresh_hdr.call()
+	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 44); bc.position = Vector2(W * 0.5 - 100, 780); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
+
+func _tloc_u(d: Dictionary) -> String:
+	return str(d["unit"]) if lang == "ru" else str(d["unit_en"])
 
 func _open_clan_boss() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3600; hud.add_child(panel)
@@ -1568,9 +1711,16 @@ func _open_clan_boss() -> void:
 	var bspawn := Button.new(); bspawn.text = _t("cl_spawn_btn"); bspawn.custom_minimum_size = Vector2(260, 44); bspawn.position = Vector2(W * 0.5 - 130, 600)
 	bspawn.pressed.connect(func(): _clan_boss_spawn(); await get_tree().create_timer(1.0).timeout; refresh.call())
 	panel.add_child(bspawn)
-	var batk := Button.new(); batk.text = _t("cl_atk_btn"); batk.custom_minimum_size = Vector2(260, 56); batk.position = Vector2(W * 0.5 - 130, 540); batk.add_theme_font_size_override("font_size", 22)
-	batk.pressed.connect(func(): _clan_boss_attack(); await get_tree().create_timer(0.5).timeout; refresh.call())
+	var batk := Button.new(); batk.custom_minimum_size = Vector2(260, 56); batk.position = Vector2(W * 0.5 - 130, 540); batk.add_theme_font_size_override("font_size", 22)
+	var upd_atk := func():
+		var left := _cb_tries_left()
+		batk.text = _t("cl_atk_btn") + "  (%d/%d)" % [left, CB_DAILY_TRIES]
+		batk.disabled = left <= 0
+	upd_atk.call()
+	batk.pressed.connect(func(): _clan_boss_attack(); upd_atk.call(); await get_tree().create_timer(0.5).timeout; refresh.call())
 	panel.add_child(batk)
+	# подсказка про дневной лимит
+	panel.add_child(_clbl(_t("cl_tries_hint") % CB_DAILY_TRIES, 500, Color("#9aa0b5"), 12))
 	# авто-обновление HP-бара каждые 3с (realtime ощущение)
 	var tmr := Timer.new(); tmr.wait_time = 3.0; tmr.autostart = true; panel.add_child(tmr)
 	tmr.timeout.connect(func(): refresh.call())
@@ -2241,13 +2391,13 @@ func _recalc_hero(hh: Dictionary) -> void:
 	# УРОН: у ТАНКА качается ОТВРАТИТЕЛЬНО (он HP-двигатель, не дамагер); у остальных полный ×уровень×излом
 	var dmg_scale: float = (1.0 + lv * 0.04) if is_tank else (lv * milestone)
 	var rar: float = RARITY_MULT.get(int(hh.get("rarity", 1)), 1.0) * _hero_rank_mult(str(hh.get("hid", "")))   # ×редкость ×РАНГ (осколки → сильнее; вот почему редких/легенд стоит фармить)
-	hh["dmg"] = min(base_dmg * dmg_scale * rar * aug_dmg * _ad_mult("dmg") * _clan_boost_mult("dmg") * meta_pow * _prestige_mult(), STAT_CAP)   # float: int64 overflow при stage>133
+	hh["dmg"] = min(base_dmg * dmg_scale * rar * aug_dmg * _ad_mult("dmg") * _clan_boost_mult("dmg") * _clan_perk_mult("dmg") * meta_pow * _prestige_mult(), STAT_CAP)   # ×клан-перк (вечный); float: int64 overflow при stage>133
 	# HP: НЕ от своего уровня, а от АУРЫ ТАНКА (его уровень, экспонента) + аугменты/модуль/surv. Качаешь танка = HP всему отряду.
 	hh["max"] = min(base_hp * rar * aura_hp * aug_hp * (float(_cfg("surv", 1.0)) if bot else 1.0) * _prestige_mult(), STAT_CAP)   # float; ×perma-множитель — HP растёт с престижами как и урон (иначе бот дохнет на глубине, survival-плато)
 	# крит / скорость атаки / заряд ульты — от шмоток + аугментов
 	hh["crit"] = clamp(hh["data"]["crit"] + _gear_bonus(hh, "crit") / 100.0 + aug_crit, 0.0, 0.95)
 	hh["critx"] = hh["data"]["critx"] * aug_critx   # множитель крита растёт экспонентой (крит-билд)
-	hh["atk_mult"] = (1.0 + _gear_bonus(hh, "atk") / 100.0) * aug_atk * _ad_mult("atk") * _clan_boost_mult("atk")   # ×бусты скорости
+	hh["atk_mult"] = (1.0 + _gear_bonus(hh, "atk") / 100.0) * aug_atk * _ad_mult("atk") * _clan_boost_mult("atk") * _clan_perk_mult("atk")   # ×бусты скорости ×клан-перк
 	hh["ult_cd_eff"] = hh["data"]["ult_cd"] * aura_ult * max(0.4, 1.0 - _gear_bonus(hh, "ult") / 100.0) * aug_ultcd
 	# ⬍ бонус позиции формации (тыл +урон / фронт +HP): тактика расстановки, ресёрч P1
 	var _sl: int = int(hh.get("slot", -1))
@@ -3553,7 +3703,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "music_on": music_on, "sfx_on": sfx_on, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "cb_day": cb_day, "cb_used": cb_used, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3594,7 +3744,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
-	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); iap_granted = d.get("iap_granted", [])
+	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); iap_granted = d.get("iap_granted", []); cb_day = int(d.get("cb_day", -1)); cb_used = int(d.get("cb_used", 0))
 	formation_pos = d.get("formation_pos", [0, 1, 2, 3])
 	if formation_pos.size() != 4: formation_pos = [0, 1, 2, 3]
 	formation_pos = formation_pos.map(func(x): return int(x))
@@ -4260,7 +4410,7 @@ func _deal(hh: Dictionary, e: Dictionary, d: float, is_crit := false) -> void:
 		e["alive"] = false
 		var pas: String = str(hh.get("passive", ""))
 		if pas == "chainkill": hh["ult_t"] = 0.0   # 💀 «Цепь смерти»: килл сбрасывает КД ульты (чейн-киллы)
-		var kg: float = (50.0 if e.get("boss", false) else 5.0) * pow(GOLD_PER_STAGE, stage - 1) * aug_gold * _ad_mult("gold") * _clan_boost_mult("gold") * _event_gold_mult() * _vip_gold_mult() * (1.5 if pas == "datamine" else 1.0)   # ×бусты ×ивент ×VIP ×💰дата-майнинг
+		var kg: float = (50.0 if e.get("boss", false) else 5.0) * pow(GOLD_PER_STAGE, stage - 1) * aug_gold * _ad_mult("gold") * _clan_boost_mult("gold") * _clan_perk_mult("gold") * _event_gold_mult() * _vip_gold_mult() * (1.5 if pas == "datamine" else 1.0)   # ×бусты ×ивент ×VIP ×💰дата-майнинг
 		gold += kg
 		_stat_add("gold", kg)
 		if e.get("boss", false):
@@ -7227,7 +7377,7 @@ func _batch_cost(hh: Dictionary, n: int) -> int:
 
 func _passive_rate() -> float:
 	# ПАССИВ/с = (база + надбавка от глубины) × аугмент золота × реклама-буст
-	return (gold_ps + float(max(stage, best_stage)) * 1.5) * aug_gold * _ad_mult("gold") * _clan_boost_mult("gold") * _event_gold_mult() * _vip_gold_mult()
+	return (gold_ps + float(max(stage, best_stage)) * 1.5) * aug_gold * _ad_mult("gold") * _clan_boost_mult("gold") * _clan_perk_mult("gold") * _event_gold_mult() * _vip_gold_mult()
 
 # --- ИМПЛАНТ-ИНВЕНТАРЬ (шмотки → база статов; уровень множит) ---
 func _toggle_impl() -> void:
