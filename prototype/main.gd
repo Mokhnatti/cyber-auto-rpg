@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.92" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.93" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -617,14 +617,16 @@ const CLAN_PERKS := {
 }
 var clan_xp := 0                                      # кэш клан-опыта (из Firebase)
 var clan_perks := {"dmg": 0, "atk": 0, "gold": 0}     # кэш уровней перков клана
-# 💰💎 ВЛОЖЕНИЯ в клан (задумка Рамиля): дневной лимит → дейли-ретеншн; клан качается месяцами
-const CLAN_DON_TRIES := 5     # вложений золотом И алмазами в день (каждого)
-const CLAN_DON_GEM_COST := 20 # 💎 за одно вложение алмазами
-const CLAN_DON_GOLD_XP := 800 # клан-опыт за вложение золота (золото «дешёвое»)
-const CLAN_DON_GEM_XP := 3000 # клан-опыт за вложение алмазов (премиум-ускорение)
-var cd_day := -1              # день последних вложений (сброс лимита в полночь)
-var cd_gold := 0             # вложений золотом сегодня
-var cd_gem := 0              # вложений алмазами сегодня
+# 💰💎 ВЛОЖЕНИЯ в клан (спец Дианы): золото = заряды с кулдауном (заходи чаще), алмазы = растущая цена
+const CG_MAX := 5             # 💰 зарядов вклада золотом
+const CG_REGEN := 1200.0      # сек на реген 1 заряда (20 мин) → полный откат за 100 мин (спец Дианы)
+const CLAN_DON_GOLD_XP := 800 # клан-опыт за вложение золота
+const CLAN_DON_GEM_XP := 3000 # клан-опыт за вложение алмазов
+const GEM_DON_BASE := 20      # 💎 базовая цена вклада алмазами (растёт +10 за каждый в этот день: 20→30→40)
+var cg_charges := CG_MAX      # текущие заряды золота
+var cg_ts := 0.0             # время последнего пересчёта зарядов
+var cd_day := -1             # день (сброс роста алмазной цены в полночь)
+var cd_gem := 0              # вложений алмазами сегодня (для растущей цены)
 # 9 клан-боссов из 3 фракций (имена-заглушки Рамиля), недельная ротация
 const CLAN_BOSSES := [
 	{"name": "Корпорат Биба Бобович", "fac": "🏢 ZenoCore", "fac_en": "🏢 ZenoCore", "icon": "🏢"},
@@ -973,7 +975,9 @@ const TR := {
 	"cl_tech_up": {"ru": "⚙️ %s → ур. %d (для всего клана!)", "en": "⚙️ %s → lvl %d (whole clan!)"},
 	"cl_don_title": {"ru": "— ВЛОЖИТЬСЯ В КЛАН (каждый день) —", "en": "— DONATE TO CLAN (daily) —"},
 	"cl_don_gold": {"ru": "💰 Вложить %s\nзолота  (%d/%d)", "en": "💰 Donate %s\ngold  (%d/%d)"},
-	"cl_don_gem": {"ru": "💎 Вложить %d\nалмазов  (%d/%d)", "en": "💎 Donate %d\ndiamonds  (%d/%d)"},
+	"cl_don_gold_cd": {"ru": "💰 Вложить %s\nзолота  (%d/%d · +1 через %d:%02d)", "en": "💰 Donate %s\ngold  (%d/%d · +1 in %d:%02d)"},
+	"cl_don_cd": {"ru": "Заряды вклада на кулдауне — подожди", "en": "Donation charges recharging — wait"},
+	"cl_don_gem": {"ru": "💎 Вложить %d\nалмазов  (цена растёт)", "en": "💎 Donate %d\ndiamonds  (rising cost)"},
 	"cl_don_ok": {"ru": "⚙️ +%s клан-опыта!", "en": "⚙️ +%s clan XP!"},
 	"cl_don_max": {"ru": "Лимит вложений на сегодня исчерпан", "en": "Daily donation limit reached"},
 	"cl_don_nogold": {"ru": "Мало золота для вложения", "en": "Not enough gold to donate"},
@@ -1595,25 +1599,45 @@ func _clan_perk_mult(key: String) -> float:
 # 💰💎 ВЛОЖЕНИЯ — сброс дневного лимита
 func _don_day_check() -> void:
 	var today := int(floor(_qa_now() / 86400.0))
-	if cd_day != today: cd_day = today; cd_gold = 0; cd_gem = 0
+	if cd_day != today: cd_day = today; cd_gem = 0
 
-func _don_gold_left() -> int:
-	_don_day_check(); return max(0, CLAN_DON_TRIES - cd_gold)
+# 💰 золото = заряды с регеном (спец Дианы): пересчёт по прошедшему времени
+func _cg_refresh() -> void:
+	var now := _qa_now()
+	if cg_ts <= 0.0: cg_ts = now
+	if cg_charges >= CG_MAX:
+		cg_ts = now; return
+	var regen := int(floor((now - cg_ts) / CG_REGEN))
+	if regen > 0:
+		cg_charges = min(CG_MAX, cg_charges + regen)
+		cg_ts += regen * CG_REGEN
+		if cg_charges >= CG_MAX: cg_ts = now
 
-func _don_gem_left() -> int:
-	_don_day_check(); return max(0, CLAN_DON_TRIES - cd_gem)
+func _cg_left() -> int:
+	_cg_refresh(); return cg_charges
+
+func _cg_next_sec() -> int:   # сек до следующего заряда (для таймера в UI)
+	_cg_refresh()
+	if cg_charges >= CG_MAX: return 0
+	return int(ceil(CG_REGEN - (_qa_now() - cg_ts)))
 
 func _don_gold_cost() -> int:
 	# 25% текущего золота — сток масштабируется сам под прогресс (кламп int64)
 	return int(min(max(100.0, gold * 0.25), 9.0e17))
 
+func _gem_cost() -> int:
+	_don_day_check()
+	return GEM_DON_BASE + 10 * cd_gem   # 20 → 30 → 40 … (растёт за день, сброс в полночь)
+
 func _donate_gold() -> bool:
 	if player_clan == "" or not fb_ready: return false
-	_don_day_check()
-	if cd_gold >= CLAN_DON_TRIES: _popup_center(_t("cl_don_max"), Color("#ff5050"), 1.6); return false
+	_cg_refresh()
+	if cg_charges <= 0: _popup_center(_t("cl_don_cd"), Color("#ff5050"), 1.8); return false
 	var cost := _don_gold_cost()
 	if gold < cost: _popup_center(_t("cl_don_nogold"), Color("#ff5050"), 1.6); return false
-	gold -= cost; cd_gold += 1
+	gold -= cost
+	if cg_charges >= CG_MAX: cg_ts = _qa_now()   # тратим первый заряд из полного бака → запускаем реген-таймер
+	cg_charges -= 1
 	_clan_add_xp(CLAN_DON_GOLD_XP)
 	_save(); _refresh_hud()
 	_popup_center(_t("cl_don_ok") % CLAN_DON_GOLD_XP, Color("#ffd24a"), 1.4)
@@ -1621,10 +1645,9 @@ func _donate_gold() -> bool:
 
 func _donate_gem() -> bool:
 	if player_clan == "" or not fb_ready: return false
-	_don_day_check()
-	if cd_gem >= CLAN_DON_TRIES: _popup_center(_t("cl_don_max"), Color("#ff5050"), 1.6); return false
-	if diamonds < CLAN_DON_GEM_COST: _popup_center(_t("cl_don_nogem"), Color("#ff5050"), 1.6); return false
-	diamonds -= CLAN_DON_GEM_COST; cd_gem += 1
+	var cost := _gem_cost()
+	if diamonds < cost: _popup_center(_t("cl_don_nogem"), Color("#ff5050"), 1.6); return false
+	diamonds -= cost; cd_gem += 1
 	_clan_add_xp(CLAN_DON_GEM_XP)
 	_track("clan_donate_gem", {})
 	_save(); _refresh_hud()
@@ -1710,11 +1733,19 @@ func _open_clan_tech() -> void:
 	var bgold := Button.new(); bgold.custom_minimum_size = Vector2(0, 52); bgold.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgold.add_theme_font_size_override("font_size", 14); bgold.add_theme_color_override("font_color", Color("#ffd24a")); don_row.add_child(bgold)
 	var bgem := Button.new(); bgem.custom_minimum_size = Vector2(0, 52); bgem.size_flags_horizontal = Control.SIZE_EXPAND_FILL; bgem.add_theme_font_size_override("font_size", 14); bgem.add_theme_color_override("font_color", Color("#7adfff")); don_row.add_child(bgem)
 	var upd_don := func():
-		bgold.text = _t("cl_don_gold") % [_gsep(_don_gold_cost()), _don_gold_left(), CLAN_DON_TRIES]
-		bgold.disabled = _don_gold_left() <= 0
-		bgem.text = _t("cl_don_gem") % [CLAN_DON_GEM_COST, _don_gem_left(), CLAN_DON_TRIES]
-		bgem.disabled = _don_gem_left() <= 0
+		var cgl := _cg_left()
+		if cgl >= CG_MAX:
+			bgold.text = _t("cl_don_gold") % [_gsep(_don_gold_cost()), cgl, CG_MAX]
+		else:
+			var ns := _cg_next_sec()
+			bgold.text = _t("cl_don_gold_cd") % [_gsep(_don_gold_cost()), cgl, CG_MAX, ns / 60, ns % 60]
+		bgold.disabled = cgl <= 0
+		bgem.text = _t("cl_don_gem") % _gem_cost()
+		bgem.disabled = diamonds < _gem_cost()
 	upd_don.call()
+	# тик таймера регена золота (раз в 1с)
+	var dtmr := Timer.new(); dtmr.wait_time = 1.0; dtmr.autostart = true; panel.add_child(dtmr)
+	dtmr.timeout.connect(func(): if is_instance_valid(panel): upd_don.call())
 	bgold.pressed.connect(func(): if _donate_gold(): upd_don.call(); refresh_hdr.call())
 	bgem.pressed.connect(func(): if _donate_gem(): upd_don.call(); refresh_hdr.call())
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 810); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
@@ -3769,7 +3800,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "music_on": music_on, "sfx_on": sfx_on, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "cb_day": cb_day, "cb_used": cb_used, "cd_day": cd_day, "cd_gold": cd_gold, "cd_gem": cd_gem, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "cb_day": cb_day, "cb_used": cb_used, "cd_day": cd_day, "cd_gem": cd_gem, "cg_charges": cg_charges, "cg_ts": cg_ts, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -3810,7 +3841,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
-	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); iap_granted = d.get("iap_granted", []); cb_day = int(d.get("cb_day", -1)); cb_used = int(d.get("cb_used", 0)); cd_day = int(d.get("cd_day", -1)); cd_gold = int(d.get("cd_gold", 0)); cd_gem = int(d.get("cd_gem", 0))
+	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); iap_granted = d.get("iap_granted", []); cb_day = int(d.get("cb_day", -1)); cb_used = int(d.get("cb_used", 0)); cd_day = int(d.get("cd_day", -1)); cd_gem = int(d.get("cd_gem", 0)); cg_charges = int(d.get("cg_charges", CG_MAX)); cg_ts = float(d.get("cg_ts", 0.0))
 	formation_pos = d.get("formation_pos", [0, 1, 2, 3])
 	if formation_pos.size() != 4: formation_pos = [0, 1, 2, 3]
 	formation_pos = formation_pos.map(func(x): return int(x))
