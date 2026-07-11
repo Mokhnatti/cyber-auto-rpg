@@ -39,6 +39,12 @@ with sync_playwright() as p:
     click(513, 850); shot("7_ults")            # ульта хакера
     click(292, 930); shot("7b_equip")          # 🦾 ЭКИПИРОВКА (сетка 4×3)
     click(300, 810)                            # закрыть экип
+    # новые панели (v1.9.85-93): позиции / клан-техно / босс-алерт+серия
+    pg.evaluate("window._qa='positions'"); time.sleep(1.0); shot("9_positions")
+    pg.evaluate("window._qa='close'"); time.sleep(0.4)
+    pg.evaluate("window._qa='clantech'"); time.sleep(1.0); shot("9b_clantech")
+    pg.evaluate("window._qa='close'"); time.sleep(0.4)
+    pg.evaluate("window._qa='goboss'"); time.sleep(1.2); shot("9c_bossalert")   # босс-алерт + бой
     click(33, 30);   shot("8_restart")         # ↻ РЕСТАРТ (лев-верх угол)
     b.close()
 
