@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.104" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.105" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1270,11 +1270,11 @@ const TR := {
 	"shop_best_value":   {"ru": "🔥 ЛУЧШАЯ ЦЕНА", "en": "🔥 BEST VALUE"},
 	"shop_popular":      {"ru": "⭐ ПОПУЛЯРНОЕ", "en": "⭐ POPULAR"},
 	"shop_first_x2":     {"ru": "🎁 ×2 ЗА 1-Ю ПОКУПКУ", "en": "🎁 ×2 FIRST BUY"},
-	"shop_gacha_short":  {"ru": "Гача\nшмота", "en": "Gear\nGacha"},
-	"hg_short":          {"ru": "Гача\nгероев", "en": "Hero\nGacha"},
+	"shop_gacha_short":  {"ru": "Сундук\nснаряжения", "en": "Gear\nCrate"},
+	"hg_short":          {"ru": "Вербовка\nбойцов", "en": "Recruit\nFighters"},
 	"reactor_short":     {"ru": "Оффлайн-\nреактор", "en": "Offline\nReactor"},
 	"ad_short":          {"ru": "Бонусы\nза рекламу", "en": "Ad\nBonuses"},
-	"shop_gacha_btn":    {"ru": "🎰 ГАЧА — призыв шмота", "en": "🎰 GACHA — summon gear"},
+	"shop_gacha_btn":    {"ru": "🎁 СУНДУК СНАРЯЖЕНИЯ", "en": "🎁 GEAR CRATE"},
 	# офлайн-реактор (экспон. сток алмазов)
 	"reactor_btn":       {"ru": "🔋 ОФЛАЙН-РЕАКТОР — дольше копит без тебя", "en": "🔋 OFFLINE REACTOR — banks longer while away"},
 	"reactor_title":     {"ru": "🔋 ОФЛАЙН-РЕАКТОР", "en": "🔋 OFFLINE REACTOR"},
@@ -1284,21 +1284,21 @@ const TR := {
 	"reactor_max":       {"ru": "✅ МАКСИМУМ (%d ч)", "en": "✅ MAXED (%d h)"},
 	"reactor_pop":       {"ru": "🔋 Реактор: окно +2 ч", "en": "🔋 Reactor: window +2 h"},
 	# гача
-	"gacha_title":       {"ru": "🎰 ГАЧА — призыв снаряжения", "en": "🎰 GACHA — summon equipment"},
-	"hg_title":          {"ru": "🦸 ГАЧА ГЕРОЕВ", "en": "🦸 HERO GACHA"},
+	"gacha_title":       {"ru": "🎁 СУНДУК СНАРЯЖЕНИЯ", "en": "🎁 GEAR CRATE"},
+	"hg_title":          {"ru": "🦸 ВЕРБОВКА БОЙЦОВ", "en": "🦸 RECRUIT FIGHTERS"},
 	"hg_pity":           {"ru": "💎 %d   ·   до гаранта Легенды: %d", "en": "💎 %d   ·   to guaranteed Legendary: %d"},
 	"hg_rates":          {"ru": "Обычный 60% · Редкий 28% · Эпик 10% · Легенда 2%\n(с 60-й крутки шанс легенды растёт, на 80-й — гарант)", "en": "Common 60% · Rare 28% · Epic 10% · Legendary 2%\n(from pull 60 legendary chance rises, at 80 — guaranteed)"},
 	"hg_pull1":          {"ru": "🎲 1 крутка — %d 💎", "en": "🎲 Pull 1 — %d 💎"},
 	"hg_pull10":         {"ru": "🎲 10 круток — %d 💎", "en": "🎲 Pull 10 — %d 💎"},
 	"hg_new":            {"ru": "🆕 НОВЫЙ: %s %s [%s]", "en": "🆕 NEW: %s %s [%s]"},
 	"hg_dupe":           {"ru": "%s %s [%s] → +%d💠", "en": "%s %s [%s] → +%d💠"},
-	"hg_btn":            {"ru": "🦸 ГАЧА ГЕРОЕВ — собери отряд", "en": "🦸 HERO GACHA — build your squad"},
+	"hg_btn":            {"ru": "🦸 ВЕРБОВКА БОЙЦОВ — собери отряд", "en": "🦸 RECRUIT — build your squad"},
 	"hg_nogems":         {"ru": "Не хватает алмазов", "en": "Not enough diamonds"},
 	"hp_rank":           {"ru": "⭐%d", "en": "⭐%d"},
 	"hp_shards":         {"ru": "💠 %d/%d", "en": "💠 %d/%d"},
 	"hp_rankup":         {"ru": "⭐ Ранг↑ (%d💠)", "en": "⭐ Rank up (%d💠)"},
 	"hp_maxrank":        {"ru": "⭐ МАКС ранг", "en": "⭐ MAX rank"},
-	"hp_locked":         {"ru": "🔒 Закрыт (гача)", "en": "🔒 Locked (gacha)"},
+	"hp_locked":         {"ru": "🔒 Закрыт (вербовка)", "en": "🔒 Locked (recruit)"},
 	"hp_rankup_pop":     {"ru": "⭐ %s → ранг %d!", "en": "⭐ %s → rank %d!"},
 	"gacha_pity":        {"ru": "💎 %d   ·   до гаранта Эпического: %d пуллов", "en": "💎 %d   ·   to guaranteed Epic: %d pulls"},
 	"gacha_rates":       {"ru": "Шансы: Обычный 50% · Необычный 30% · Редкий 15% · Эпический 5%\n(с 74-го пулла шанс Эпического растёт, на 90-м — гарант)", "en": "Rates: Common 50% · Uncommon 30% · Rare 15% · Epic 5%\n(from pull 74 the Epic chance rises, at 90 — guaranteed)"},
