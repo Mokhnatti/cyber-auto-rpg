@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.95" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.96" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -631,8 +631,10 @@ const CLAN_TREES := {
 		{"key": "rare",    "icon": "🌟", "name": "Редкий лут",     "name_en": "Rare Loot",    "per": 0.02, "unit": "% редк.",  "unit_en": "% rare",  "max": 15},
 		{"key": "cores",   "icon": "🧬", "name": "Ядра престижа",  "name_en": "Prestige Cores","per": 0.02,"unit": "% ядра",   "unit_en": "% cores", "max": 15},
 		{"key": "offgold", "icon": "🏦", "name": "Клан-казна",    "name_en": "Clan Vault",   "per": 0.03, "unit": "% жетон.", "unit_en": "% tokens", "max": 15},
+		{"key": "expand",  "icon": "👥", "name": "Расширение клана","name_en": "Clan Expansion","per": 2, "unit": " мест", "unit_en": " slots", "max": 5, "flat": true},
 	]},
 }
+const CLAN_BASE_CAP := 20   # базовый лимит участников (+ ячейка «Расширение клана» ×2/ур → до 30)
 var clan_xp := 0                                      # кэш клан-очков (пул вкладов из Firebase)
 # кэш уровней ячеек: {"war": {"dmg": 0, ...}, "econ": {...}, "net": {...}}
 var clan_tree := {"war": {}, "econ": {}, "net": {}}
@@ -965,7 +967,7 @@ const TR := {
 	"cl_no_server_j": {"ru": "Нет связи с сервером", "en": "No server connection"},
 	"cl_code_6d": {"ru": "Код = 6 цифр", "en": "Code = 6 digits"},
 	"cl_not_found": {"ru": "Клан %s не найден", "en": "Clan %s not found"},
-	"cl_full": {"ru": "Клан полон (20/20)", "en": "Clan is full (20/20)"},
+	"cl_full": {"ru": "Клан полон (%d мест)", "en": "Clan is full (%d slots)"},
 	"cl_created": {"ru": "🛡 Клан создан! Код: %s", "en": "🛡 Clan created! Code: %s"},
 	"cl_err_create": {"ru": "Ошибка создания (%d)", "en": "Create error (%d)"},
 	"cl_joined": {"ru": "🛡 Вступил в клан %s!", "en": "🛡 Joined clan %s!"},
@@ -1495,8 +1497,9 @@ func _clan_join(code: String) -> void:
 		if typeof(clan) != TYPE_DICTIONARY:
 			_popup_center(_t("cl_not_found") % code, Color("#ff5050"), 2.2); return
 		var members: Dictionary = clan.get("members", {})
-		if members.size() >= 20:
-			_popup_center(_t("cl_full"), Color("#ff5050"), 2.2); return
+		var cap := CLAN_BASE_CAP + 2 * int(clan.get("tree", {}).get("net", {}).get("expand", 0))   # 👥 ячейка «Расширение клана»
+		if members.size() >= cap:
+			_popup_center(_t("cl_full") % cap, Color("#ff5050"), 2.2); return
 		_fb_rest(HTTPClient.METHOD_PATCH, "/clans/%s/members" % code, JSON.stringify({fb_uid: {"nick": _clan_name(), "power": min(power_peak, 9.0e18)}}), func(c2, _d2):
 			if c2 >= 200 and c2 < 300:
 				player_clan = code; _fb_write_profile(); _save()
@@ -1888,7 +1891,10 @@ func _open_clan_tech() -> void:
 				var lv := _cell_lvl(tree, ck); var mx := int(c2["max"])
 				var per := float(c2["per"])
 				var val = (lv * per) if ck != "critx" else (lv * per)   # crit-урон показываем как ×
-				var vstr := ("+%.2f" % (lv * per)) if ck == "critx" else ("+%d" % int(round(lv * per * 100)))
+				var vstr: String
+				if bool(c2.get("flat", false)): vstr = "+%d" % int(lv * per)
+				elif ck == "critx": vstr = "+%.2f" % (lv * per)
+				else: vstr = "+%d" % int(round(lv * per * 100))
 				lbl.text = "%s %s  %s%s\n(ур. %d/%d)" % [str(c2["icon"]), _tloc(c2, "name"), vstr, _tloc_u(c2), lv, mx]
 				var researching: bool = typeof(clan_research) == TYPE_DICTIONARY and str(clan_research.get("cell", "")) == tree + "." + ck and _qa_now() < float(clan_research.get("ends", 0))
 				var busy: bool = typeof(clan_research) == TYPE_DICTIONARY and clan_research.has("cell") and _qa_now() < float(clan_research.get("ends", 0))
