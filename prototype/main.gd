@@ -110,10 +110,10 @@ const GROUND_Y := 0.55 * H   # горизонт выше → дорога ещё
 # РОМБ-формация (индекс = HEROES: 0 снайпер, 1 штурм, 2 танк, 3 хакер). y относит. центра, s = масштаб
 # Гибкая: на будущее отряд набирается сам (3 в ряд) — массив легко расширяется.
 const FORMATION := [
-	{"x": 48.0,  "y": 148.0, "s": 0.82},   # СНАЙПЕР — тыл (дальний-лево)
-	{"x": 170.0, "y": 126.0, "s": 0.90},   # ШТУРМОВИК — центр-верх (глубже)
-	{"x": 262.0, "y": 184.0, "s": 1.00},   # ТАНК — остриё/фронт (ближе к врагам, крупный)
-	{"x": 110.0, "y": 212.0, "s": 0.88},   # ХАКЕР — низ-перед. Ещё −26 вниз (фидбэк Рамиля: большой зазор до кнопок ульт)
+	{"x": 48.0,  "y": 148.0, "s": 0.94},   # СНАЙПЕР — тыл (дальний-лево)
+	{"x": 170.0, "y": 126.0, "s": 0.97},   # ШТУРМОВИК — центр-верх (глубже)
+	{"x": 262.0, "y": 184.0, "s": 1.00},   # ТАНК — остриё/фронт (ближе к врагам)
+	{"x": 110.0, "y": 212.0, "s": 0.95},   # ХАКЕР — низ-перед (фидбэк Насти: разброс размеров бросался в глаза → выровнял 0.94-1.0)
 ]
 
 var heroes := []
@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.89" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.90" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -204,6 +204,7 @@ var kill_streak_t := 0.0
 var streak_lbl: Label = null
 var shake_t := 0.0
 var shake_pow := 0.0
+var shot_snd_flip := false   # чётность выстрелов для прореживания звука на ускорении
 var hud: Control
 var wave_label: Label
 var status_label: Label
@@ -2337,6 +2338,14 @@ func _reboot() -> void:
 	best_stage = max(best_stage, stage)
 	stage = max(1, int(floor(best_stage * 0.5)))   # Memory-Bonus: старт от лучшей стадии
 	_grant_skipped_loot(stage)   # п.5: лут за боссов, пропущенных из-за Memory-Bonus
+	# 🗺 после престижа локация подстраивается под стартовую стадию (фидбэк Насти: осталась в эндгейм-районе после сброса)
+	var want_loc := 0
+	for li in LOCATIONS.size():
+		if LOCATIONS[li].get("side", false): continue   # Подземка/Нео-Квартал — опциональные, только вручную с карты
+		if stage >= int(LOCATIONS[li]["unlock"]): want_loc = li
+	if want_loc != cur_location:
+		cur_location = want_loc
+		_apply_location_theme()
 	sub = 1; in_boss = false; boss_retry = false
 	gold = 0.0; gold_ps = 2.0
 	for hh in heroes:
@@ -4660,11 +4669,14 @@ func _fire_shot(hh: Dictionary, tgt: Dictionary) -> void:
 	var from: Vector2 = hh["node"].position + Vector2(30, -58)   # дуло (герои смотрят вправо, враги справа)
 	var to: Vector2 = tgt["node"].position + Vector2(0, -55)
 	var col: Color = hh["data"]["color"]
+	# 🔊 звук выстрела реже при ускорении (фидбэк Насти: «горох об ведро» на фоне музыки) — на x2/x3 половина выстрелов беззвучна
+	var shoot_snd: bool = Engine.time_scale < 2.0 or (shot_snd_flip if true else false)
+	shot_snd_flip = not shot_snd_flip
 	match hh["data"]["atk_type"]:
-		"snipe": _proj_tracer(from, to, Color("#7ff0ff")); _sfx("shot_sniper", -13.0)   # рельса — мгновенный яркий луч
-		"aoe":   _proj_drone(from, to, Color("#ff2d95")); _sfx("shot_hack", -14.0)      # хакер — дрон летит и рвётся кольцом
-		"tank":  _proj_bullet(from, to, Color("#8affab"), 0.28, 7.0, 20.0); _sfx("shot_heavy", -13.0)  # тяж-снаряд, медленнее/толще
-		_:       _proj_bullet(from, to, Color("#ffce6a"), 0.18, 4.0, 15.0); _sfx("shot_assault", -14.0)  # штурм — быстрая пуля
+		"snipe": _proj_tracer(from, to, Color("#7ff0ff")); if shoot_snd: _sfx("shot_sniper", -16.0)   # рельса — мгновенный яркий луч
+		"aoe":   _proj_drone(from, to, Color("#ff2d95")); if shoot_snd: _sfx("shot_hack", -17.0)      # хакер — дрон летит и рвётся кольцом
+		"tank":  _proj_bullet(from, to, Color("#8affab"), 0.28, 7.0, 20.0); if shoot_snd: _sfx("shot_heavy", -16.0)  # тяж-снаряд
+		_:       _proj_bullet(from, to, Color("#ffce6a"), 0.18, 4.0, 15.0); if shoot_snd: _sfx("shot_assault", -17.0)  # штурм — быстрая пуля
 	_muzzle_flash(from, col)
 
 func _muzzle_flash(pos: Vector2, col: Color) -> void:
@@ -6772,6 +6784,22 @@ func _show_daily() -> void:
 func _rarity_color(r: int) -> Color:
 	return {1: Color("#9aa0b5"), 2: Color("#5ad1ff"), 3: Color("#b46bff"), 4: Color("#ffd24a")}.get(r, Color.WHITE)
 
+# выбрать героя hid в слот cls; если он уже занят в другом слоте — СВАП (фикс Насти: дубли во всех слотах)
+func _pick_hero(cls: int, hid: String) -> void:
+	var other := -1
+	for si in 4:
+		if si != cls and str(_squad_hero(si).get("id", "")) == hid:
+			other = si; break
+	if other != -1:
+		squad_pick[other] = _squad_hero(cls)["id"]   # в освободившийся слот — прежний герой этого слота
+		squad_pick[cls] = hid
+		_apply_hero_pick(other)
+		_apply_hero_pick(cls)
+	else:
+		squad_pick[cls] = hid
+		_apply_hero_pick(cls)
+	_save()
+
 func _apply_hero_pick(slot: int) -> void:   # применить выбранного героя к живому слоту
 	if slot < 0 or slot >= heroes.size(): return
 	var hero := _squad_hero(slot)
@@ -6834,7 +6862,7 @@ func _open_hero_picker(cls: int) -> void:
 				v.add_child(_lbl(_t("hp_maxrank"), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_LEFT))
 			var pick := Button.new(); pick.text = _t("hp_active") if hid == cur else _t("hp_pick"); pick.custom_minimum_size = Vector2(0, 32); pick.disabled = hid == cur
 			var hnm: String = _tloc(h, "name"); var hcol: Color = HEROES[hc]["color"]
-			pick.pressed.connect(func(): squad_pick[cls] = hid; _apply_hero_pick(cls); _save(); _popup_center(_t("hp_swapped") % hnm, hcol, 1.8); panel.queue_free(); if impl_open: _refresh_impl())
+			pick.pressed.connect(func(): _pick_hero(cls, hid); _popup_center(_t("hp_swapped") % hnm, hcol, 1.8); panel.queue_free(); if impl_open: _refresh_impl())
 			v.add_child(pick)
 		list.add_child(box)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 842); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
