@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.101" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.102" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -6229,12 +6229,11 @@ func _open_shop() -> void:
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
 	var card := PanelContainer.new()
-	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.10, 0.08, 0.04, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ffd24a"); sb.set_border_width_all(2); sb.set_content_margin_all(18)
-	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 200, 150); card.custom_minimum_size = Vector2(400, 0)
+	card.add_theme_stylebox_override("panel", _grey_style(Color("#ffd24a"))); card.position = Vector2(W * 0.5 - 205, 140); card.custom_minimum_size = Vector2(410, 0)
 	panel.add_child(card)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
-	v.add_child(_lbl(_t("shop_title") % diamonds, 18, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl(_t("shop_note"), 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	v.add_child(_lbl(_t("shop_title") % diamonds, 23, Color("#ffe089"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("shop_note"), 13, Color("#b3aecc"), HORIZONTAL_ALIGNMENT_CENTER))
 	# 🎁 СТАРТ-ПАК — разовый оффер новичку (топ-конверсия), только пока не куплен
 	if not starter_bought:
 		var stb := Button.new(); stb.text = _t("starter_btn"); stb.custom_minimum_size = Vector2(0, 48); stb.add_theme_font_size_override("font_size", 15)
@@ -8290,6 +8289,24 @@ func _lbl(txt: String, sz: int, col: Color, align := HORIZONTAL_ALIGNMENT_LEFT) 
 	l.add_theme_color_override("font_color", col)
 	l.horizontal_alignment = align
 	return l
+
+# 🎨 ЕДИНЫЙ ЧИСТЫЙ СТИЛЬ (фидбэк Дианы): графитово-серая карточка + неон-акцент
+func _grey_style(accent := Color("#00f0ff")) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.20, 0.23, 0.30)
+	sb.set_corner_radius_all(18)
+	sb.border_color = accent; sb.set_border_width_all(3)
+	sb.set_content_margin_all(20)
+	sb.shadow_color = Color(0, 0, 0, 0.5); sb.shadow_size = 10
+	return sb
+
+# цветная кнопка чистого стиля (белый текст)
+func _prim_btn(txt: String, bg: Color, h := 56, fs := 16) -> Button:
+	var b := Button.new(); b.text = txt; b.custom_minimum_size = Vector2(0, h); b.add_theme_font_size_override("font_size", fs)
+	var s := StyleBoxFlat.new(); s.bg_color = bg; s.set_corner_radius_all(12); s.set_content_margin_all(6)
+	for st in ["normal", "hover", "pressed", "focus"]: b.add_theme_stylebox_override(st, s)
+	b.add_theme_color_override("font_color", Color.WHITE)
+	return b
 
 # красный бейдж-счётчик новых вещей в углу слота (Диана) — невидим пока 0
 func _new_badge(pos: Vector2) -> Label:
