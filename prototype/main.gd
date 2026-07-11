@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.105" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.106" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -6390,22 +6390,21 @@ func _open_gacha() -> void:
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
 	var card := PanelContainer.new()
-	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.12, 0.05, 0.13, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#ff7adf"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
-	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 110); card.custom_minimum_size = Vector2(420, 0)
+	card.add_theme_stylebox_override("panel", _grey_style(Color("#ff7adf"))); card.position = Vector2(W * 0.5 - 210, 130); card.custom_minimum_size = Vector2(420, 0)
 	panel.add_child(card)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 9); card.add_child(v)
-	v.add_child(_lbl(_t("gacha_title"), 19, Color("#ff7adf"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl(_t("gacha_pity") % [diamonds, max(0, GACHA_HARD_PITY - gacha_pity)], 13, Color("#d9c7ff"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl(_t("gacha_rates"), 11, Color("#9a8fb5"), HORIZONTAL_ALIGNMENT_CENTER))
-	# кнопка раскрытия шансов (требование сторов): полная таблица вероятностей + объяснение pity
-	var bodds := Button.new(); bodds.text = _t("gacha_odds_btn"); bodds.custom_minimum_size = Vector2(0, 34); bodds.add_theme_font_size_override("font_size", 13); bodds.add_theme_color_override("font_color", Color("#ffd24a"))
-	bodds.pressed.connect(_open_gacha_odds); v.add_child(bodds)
-	var res := _lbl("", 13, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); res.custom_minimum_size = Vector2(0, 90); res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(res)
-	var p1 := Button.new(); p1.text = _t("gacha_pull1") % _event_gacha_cost(GACHA_COST1); p1.custom_minimum_size = Vector2(0, 46); p1.add_theme_font_size_override("font_size", 15)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	v.add_child(_lbl(_t("gacha_title"), 24, Color("#ff9ae0"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("gacha_pity") % [diamonds, max(0, GACHA_HARD_PITY - gacha_pity)], 15, Color("#e0d0ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("gacha_rates"), 12, Color("#a89cc0"), HORIZONTAL_ALIGNMENT_CENTER))
+	var res := _lbl("", 14, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); res.custom_minimum_size = Vector2(0, 80); res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(res)
+	# ПУЛЛЫ — крупные цветные блоки
+	var p1 := _prim_btn(_t("gacha_pull1") % _event_gacha_cost(GACHA_COST1), Color("#c94db8"), 58, 16)
 	p1.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(1)); _gacha_refresh_hdr(v)); v.add_child(p1)
-	var p10 := Button.new(); p10.text = _t("gacha_pull10") % _event_gacha_cost(GACHA_COST10); p10.custom_minimum_size = Vector2(0, 46); p10.add_theme_font_size_override("font_size", 15)
+	var p10 := _prim_btn(_t("gacha_pull10") % _event_gacha_cost(GACHA_COST10), Color("#e0409a"), 58, 16)
 	p10.pressed.connect(func(): res.text = _gacha_result_text(_gacha_pull(10)); _gacha_refresh_hdr(v)); v.add_child(p10)
-	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bodds := Button.new(); bodds.text = _t("gacha_odds_btn"); bodds.custom_minimum_size = Vector2(0, 38); bodds.add_theme_font_size_override("font_size", 13); bodds.add_theme_color_override("font_color", Color("#ffd24a"))
+	bodds.pressed.connect(_open_gacha_odds); v.add_child(bodds)
+	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 42, 15); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 func _gacha_refresh_hdr(v: VBoxContainer) -> void:
 	# обновить строку алмазов/pity (2-й ребёнок) после пулла
@@ -6477,26 +6476,25 @@ func _open_hero_gacha() -> void:
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
 	var card := PanelContainer.new()
-	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.06, 0.08, 0.16, 0.99); sb.set_corner_radius_all(14); sb.border_color = Color("#00f0ff"); sb.set_border_width_all(2); sb.set_content_margin_all(16)
-	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 120); card.custom_minimum_size = Vector2(420, 0)
+	card.add_theme_stylebox_override("panel", _grey_style(Color("#00f0ff"))); card.position = Vector2(W * 0.5 - 210, 130); card.custom_minimum_size = Vector2(420, 0)
 	panel.add_child(card)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 9); card.add_child(v)
-	v.add_child(_lbl(_t("hg_title"), 19, Color("#00f0ff"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl(_t("hg_pity") % [diamonds, max(0, HG_HARD_PITY - hg_pity)], 13, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl(_t("hg_rates"), 11, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
-	var res := _lbl("", 13, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); res.custom_minimum_size = Vector2(0, 130); res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(res)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
+	v.add_child(_lbl(_t("hg_title"), 24, Color("#66eaff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("hg_pity") % [diamonds, max(0, HG_HARD_PITY - hg_pity)], 15, Color("#d5e8ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(_t("hg_rates"), 12, Color("#9aa0b5"), HORIZONTAL_ALIGNMENT_CENTER))
+	var res := _lbl("", 14, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER); res.custom_minimum_size = Vector2(0, 110); res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(res)
 	var hdr := func(): (v.get_child(1) as Label).text = _t("hg_pity") % [diamonds, max(0, HG_HARD_PITY - hg_pity)]
-	var p1 := Button.new(); p1.text = _t("hg_pull1") % HERO_GACHA_COST1; p1.custom_minimum_size = Vector2(0, 46); p1.add_theme_font_size_override("font_size", 15); p1.add_theme_color_override("font_color", Color("#00f0ff"))
+	var p1 := _prim_btn(_t("hg_pull1") % HERO_GACHA_COST1, Color("#2b8fb8"), 58, 16)
 	p1.pressed.connect(func():
 		if diamonds < HERO_GACHA_COST1: res.text = _t("hg_nogems"); return
 		diamonds -= HERO_GACHA_COST1; _track("hero_gacha", {"n": 1}); res.text = _hg_result_text(_hero_gacha_pull(1)); hdr.call())
 	v.add_child(p1)
-	var p10 := Button.new(); p10.text = _t("hg_pull10") % HERO_GACHA_COST10; p10.custom_minimum_size = Vector2(0, 46); p10.add_theme_font_size_override("font_size", 15); p10.add_theme_color_override("font_color", Color("#ffd24a"))
+	var p10 := _prim_btn(_t("hg_pull10") % HERO_GACHA_COST10, Color("#e0a020"), 58, 16)
 	p10.pressed.connect(func():
 		if diamonds < HERO_GACHA_COST10: res.text = _t("hg_nogems"); return
 		diamonds -= HERO_GACHA_COST10; _track("hero_gacha", {"n": 10}); res.text = _hg_result_text(_hero_gacha_pull(10)); hdr.call())
 	v.add_child(p10)
-	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 42, 15); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
 
 # === РАСКРЫТИЕ ШАНСОВ ГАЧИ (обязательно для Google Play / App Store) ===
 # Текст СТРОИТСЯ из тех же констант, что и роллер _gacha_rarity → показанные шансы = реальные.
