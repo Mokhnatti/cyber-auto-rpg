@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.103" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.104" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1270,6 +1270,10 @@ const TR := {
 	"shop_best_value":   {"ru": "🔥 ЛУЧШАЯ ЦЕНА", "en": "🔥 BEST VALUE"},
 	"shop_popular":      {"ru": "⭐ ПОПУЛЯРНОЕ", "en": "⭐ POPULAR"},
 	"shop_first_x2":     {"ru": "🎁 ×2 ЗА 1-Ю ПОКУПКУ", "en": "🎁 ×2 FIRST BUY"},
+	"shop_gacha_short":  {"ru": "Гача\nшмота", "en": "Gear\nGacha"},
+	"hg_short":          {"ru": "Гача\nгероев", "en": "Hero\nGacha"},
+	"reactor_short":     {"ru": "Оффлайн-\nреактор", "en": "Offline\nReactor"},
+	"ad_short":          {"ru": "Бонусы\nза рекламу", "en": "Ad\nBonuses"},
 	"shop_gacha_btn":    {"ru": "🎰 ГАЧА — призыв шмота", "en": "🎰 GACHA — summon gear"},
 	# офлайн-реактор (экспон. сток алмазов)
 	"reactor_btn":       {"ru": "🔋 ОФЛАЙН-РЕАКТОР — дольше копит без тебя", "en": "🔋 OFFLINE REACTOR — banks longer while away"},
@@ -6280,16 +6284,21 @@ func _open_shop() -> void:
 		tile.add_theme_color_override("font_color", Color("#e8ecf5"))
 		tile.pressed.connect(func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]); panel.queue_free())
 		grid.add_child(tile)
-	# (убрана кнопка «+10💎 ежедневный бонус» — был эксплойт спама алмазов; дейлики покрывает _show_daily)
-	var bg := Button.new(); bg.text = _t("shop_gacha_btn"); bg.custom_minimum_size = Vector2(0, 46); bg.add_theme_font_size_override("font_size", 15); bg.add_theme_color_override("font_color", Color("#ff7adf"))
-	bg.pressed.connect(func(): panel.queue_free(); _open_gacha()); v.add_child(bg)
-	var bhg := Button.new(); bhg.text = _t("hg_btn"); bhg.custom_minimum_size = Vector2(0, 46); bhg.add_theme_font_size_override("font_size", 15); bhg.add_theme_color_override("font_color", Color("#00f0ff"))
-	bhg.pressed.connect(func(): panel.queue_free(); _open_hero_gacha()); v.add_child(bhg)
-	var brk := Button.new(); brk.text = _t("reactor_btn"); brk.custom_minimum_size = Vector2(0, 46); brk.add_theme_font_size_override("font_size", 14); brk.add_theme_color_override("font_color", Color("#7adfff"))
-	brk.pressed.connect(func(): panel.queue_free(); _open_offline_reactor()); v.add_child(brk)
-	var ba := Button.new(); ba.text = _t("ad_bonuses"); ba.custom_minimum_size = Vector2(0, 46); ba.add_theme_font_size_override("font_size", 15); ba.add_theme_color_override("font_color", Color("#3ad97a"))
-	ba.pressed.connect(func(): panel.queue_free(); _open_ad_boosts()); v.add_child(ba)
-	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 40); bc.pressed.connect(func(): panel.queue_free()); v.add_child(bc)
+	# разделы магазина — ПЛИТКИ с крупными иконками (фидбэк Дианы: блоки, не строчки)
+	var ngrid := GridContainer.new(); ngrid.columns = 2; ngrid.add_theme_constant_override("h_separation", 8); ngrid.add_theme_constant_override("v_separation", 8); v.add_child(ngrid)
+	var _nav_tile := func(icon: String, txt: String, accent: Color, cb: Callable) -> void:
+		var tl := Button.new(); tl.custom_minimum_size = Vector2(182, 78); tl.add_theme_font_size_override("font_size", 14)
+		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; tl.text = "%s\n%s" % [icon, txt]
+		var tsb := StyleBoxFlat.new(); tsb.bg_color = Color(0.14, 0.16, 0.22); tsb.set_corner_radius_all(12); tsb.border_color = accent; tsb.set_border_width_all(2); tsb.set_content_margin_all(4)
+		for st in ["normal", "hover", "pressed", "focus"]: tl.add_theme_stylebox_override(st, tsb)
+		tl.add_theme_color_override("font_color", Color("#e8ecf5"))
+		tl.pressed.connect(cb); ngrid.add_child(tl)
+	_nav_tile.call("🎰", _t("shop_gacha_short"), Color("#ff7adf"), func(): panel.queue_free(); _open_gacha())
+	_nav_tile.call("🦸", _t("hg_short"), Color("#00f0ff"), func(): panel.queue_free(); _open_hero_gacha())
+	_nav_tile.call("🔋", _t("reactor_short"), Color("#7adfff"), func(): panel.queue_free(); _open_offline_reactor())
+	_nav_tile.call("📺", _t("ad_short"), Color("#3ad97a"), func(): panel.queue_free(); _open_ad_boosts())
+	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 44, 15); v.add_child(bc)
+	bc.pressed.connect(func(): panel.queue_free())
 
 # === ОФЛАЙН-РЕАКТОР: экспон. сток алмазов (×1.5/ур), расширяет окно офлайн-дохода на +2 ч/ур ===
 func _reactor_cost() -> int:
