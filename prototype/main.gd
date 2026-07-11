@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.100" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.101" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1960,25 +1960,25 @@ func _open_node_detail(tree: String, key: String) -> void:
 	var cd := _cell_def(tree, key)
 	if cd.is_empty(): return
 	var tcol := Color(str(CLAN_TREES[tree]["col"]))
-	var dark := Color(0.13, 0.15, 0.22)      # тёмный текст на светлой карточке
-	var subt := Color(0.42, 0.45, 0.54)
+	var dark := Color(0.93, 0.95, 0.98)      # светлый текст на серой карточке
+	var subt := Color(0.68, 0.72, 0.80)
 	var dlg := Control.new(); dlg.set_anchors_preset(Control.PRESET_FULL_RECT); dlg.z_index = 4000; hud.add_child(dlg)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: dlg.queue_free())
 	dlg.add_child(dim)
 	# СВЕТЛАЯ карточка (чистый стиль, реф Дианы)
 	var card := PanelContainer.new()
-	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.94, 0.96, 0.99); sb.set_corner_radius_all(20); sb.border_color = tcol; sb.set_border_width_all(4); sb.set_content_margin_all(24)
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.20, 0.23, 0.30); sb.set_corner_radius_all(20); sb.border_color = tcol; sb.set_border_width_all(4); sb.set_content_margin_all(24)
 	sb.shadow_color = Color(0, 0, 0, 0.5); sb.shadow_size = 12
 	card.add_theme_stylebox_override("panel", sb); card.position = Vector2(W * 0.5 - 210, 250); card.custom_minimum_size = Vector2(420, 0); dlg.add_child(card)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 18); card.add_child(v)
 	# заголовок: крупная иконка + имя
-	v.add_child(_lbl("%s  %s" % [str(cd["icon"]), _tloc(cd, "name")], 28, tcol.darkened(0.15), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("%s  %s" % [str(cd["icon"]), _tloc(cd, "name")], 28, tcol.lightened(0.2), HORIZONTAL_ALIGNMENT_CENTER))
 	var eff := _lbl("", 18, dark, HORIZONTAL_ALIGNMENT_CENTER); v.add_child(eff)
 	# шкала прогресса — высокая, контрастная
-	var barbg := ColorRect.new(); barbg.color = Color(0.82, 0.85, 0.90); barbg.custom_minimum_size = Vector2(0, 38); v.add_child(barbg)
+	var barbg := ColorRect.new(); barbg.color = Color(0.12, 0.14, 0.19); barbg.custom_minimum_size = Vector2(0, 38); v.add_child(barbg)
 	var barfill := ColorRect.new(); barfill.color = tcol; barfill.position = Vector2(0, 0); barfill.size = Vector2(0, 38); barbg.add_child(barfill)
-	var barlbl := Label.new(); barlbl.add_theme_font_size_override("font_size", 16); barlbl.add_theme_color_override("font_color", Color(0.1, 0.11, 0.16)); barlbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; barlbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; barlbl.set_anchors_preset(Control.PRESET_FULL_RECT); barbg.add_child(barlbl)
+	var barlbl := Label.new(); barlbl.add_theme_font_size_override("font_size", 16); barlbl.add_theme_color_override("font_color", Color(0.95, 0.96, 0.99)); barlbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; barlbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; barlbl.set_anchors_preset(Control.PRESET_FULL_RECT); barbg.add_child(barlbl)
 	v.add_child(_lbl(_t("cl_node_rewards"), 14, subt, HORIZONTAL_ALIGNMENT_CENTER))
 	# кнопки вклада — большие, цветные, белый текст
 	var don_row := HBoxContainer.new(); don_row.add_theme_constant_override("separation", 14); v.add_child(don_row)
@@ -2014,9 +2014,9 @@ func _open_node_detail(tree: String, key: String) -> void:
 	bgem.pressed.connect(func(): _donate_gem_confirm(tree, key, func(): refresh.call()))
 	if _clan_is_officer():
 		var bp := Button.new(); bp.text = _t("cl_prio_btn"); bp.custom_minimum_size = Vector2(0, 50); bp.add_theme_font_size_override("font_size", 15)
-		var psb := StyleBoxFlat.new(); psb.bg_color = Color(0.88, 0.90, 0.95); psb.set_corner_radius_all(12); psb.border_color = Color("#f0a91e"); psb.set_border_width_all(2); psb.set_content_margin_all(6)
+		var psb := StyleBoxFlat.new(); psb.bg_color = Color(0.16, 0.18, 0.24); psb.set_corner_radius_all(12); psb.border_color = Color("#f0a91e"); psb.set_border_width_all(2); psb.set_content_margin_all(6)
 		for st in ["normal", "hover", "pressed", "focus"]: bp.add_theme_stylebox_override(st, psb)
-		bp.add_theme_color_override("font_color", Color(0.5, 0.36, 0.05))
+		bp.add_theme_color_override("font_color", Color("#ffd24a"))
 		bp.pressed.connect(func(): _clan_set_priority(tree, key))
 		v.add_child(bp)
 	var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(0, 48); bc.add_theme_font_size_override("font_size", 15)
