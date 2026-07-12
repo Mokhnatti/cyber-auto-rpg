@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.110" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.111" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1270,6 +1270,11 @@ const TR := {
 	"shop_best_value":   {"ru": "🔥 ЛУЧШАЯ ЦЕНА", "en": "🔥 BEST VALUE"},
 	"shop_popular":      {"ru": "⭐ ПОПУЛЯРНОЕ", "en": "⭐ POPULAR"},
 	"shop_first_x2":     {"ru": "🎁 ×2 ЗА 1-Ю ПОКУПКУ", "en": "🎁 ×2 FIRST BUY"},
+	"offer_starter":     {"ru": "Старт-пак", "en": "Starter"},
+	"offer_vip":         {"ru": "Кибер-пропуск", "en": "Cyber-Pass"},
+	"offer_event":       {"ru": "Ивент-пак", "en": "Event Pack"},
+	"offer_bought":      {"ru": "куплено ✓", "en": "owned ✓"},
+	"offer_vip_on":      {"ru": "актив %dд", "en": "active %dd"},
 	"shop_gacha_short":  {"ru": "Сундук\nснаряжения", "en": "Gear\nCrate"},
 	"hg_short":          {"ru": "Вербовка\nбойцов", "en": "Recruit\nFighters"},
 	"reactor_short":     {"ru": "Оффлайн-\nреактор", "en": "Offline\nReactor"},
@@ -6242,37 +6247,26 @@ func _open_shop() -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
 	v.add_child(_lbl(_t("shop_title") % diamonds, 23, Color("#ffe089"), HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(_t("shop_note"), 13, Color("#b3aecc"), HORIZONTAL_ALIGNMENT_CENTER))
-	# 🎁 СТАРТ-ПАК — разовый оффер новичку (топ-конверсия), только пока не куплен
-	if not starter_bought:
-		var stb := Button.new(); stb.text = _t("starter_btn"); stb.custom_minimum_size = Vector2(0, 48); stb.add_theme_font_size_override("font_size", 15)
-		var stsb := StyleBoxFlat.new(); stsb.bg_color = Color("#0e3a1c"); stsb.set_corner_radius_all(10); stsb.border_color = Color("#3ad97a"); stsb.set_border_width_all(2)
-		stb.add_theme_stylebox_override("normal", stsb); stb.add_theme_color_override("font_color", Color("#9affc0"))
-		stb.pressed.connect(func(): _buy_starter(); panel.queue_free(); _open_shop())
-		v.add_child(stb)
-		v.add_child(_lbl(_t("starter_perks") % [STARTER_DIAMONDS, STARTER_SCRAP, STARTER_CORES], 10, Color("#6ac98a"), HORIZONTAL_ALIGNMENT_CENTER))
-	# 👑 VIP «Кибер-пропуск» — рекуррентная подписка сверху воронки (лучший LTV-рычаг)
-	var vipb := Button.new()
-	if _vip_active():
-		var left := vip_until - _qa_now()
-		vipb.text = _t("vip_shop_active") % [int(left / 86400.0), int(fmod(left, 86400.0) / 3600.0)]
+	# 🎁 ОФФЕРЫ — сетка из 3 плиток на всю ширину (фидбэк Дианы)
+	var ogrid := GridContainer.new(); ogrid.columns = 3; ogrid.add_theme_constant_override("h_separation", 8); ogrid.add_theme_constant_override("v_separation", 8); ogrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ogrid)
+	var _offer_tile := func(icon: String, nm: String, price: String, bgc: Color, accent: Color, cb: Callable, done := false) -> void:
+		var t := Button.new(); t.custom_minimum_size = Vector2(0, 94); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL; t.add_theme_font_size_override("font_size", 13)
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; t.text = "%s\n%s\n%s" % [icon, nm, price]
+		var sbx := StyleBoxFlat.new(); sbx.bg_color = bgc; sbx.set_corner_radius_all(12); sbx.border_color = accent; sbx.set_border_width_all(2); sbx.set_content_margin_all(4)
+		for st in ["normal", "hover", "pressed", "focus", "disabled"]: t.add_theme_stylebox_override(st, sbx)
+		t.add_theme_color_override("font_color", accent.lightened(0.3)); t.disabled = done
+		if not done: t.pressed.connect(cb)
+		ogrid.add_child(t)
+	if starter_bought:
+		_offer_tile.call("🎁", _t("offer_starter"), _t("offer_bought"), Color(0.1, 0.12, 0.1), Color("#4a6a4a"), func(): pass, true)
 	else:
-		vipb.text = _t("vip_shop_btn")
-	vipb.custom_minimum_size = Vector2(0, 48); vipb.add_theme_font_size_override("font_size", 15)
-	var vsb := StyleBoxFlat.new(); vsb.bg_color = Color("#3a2e0a"); vsb.set_corner_radius_all(10); vsb.border_color = Color("#ffd24a"); vsb.set_border_width_all(2)
-	vipb.add_theme_stylebox_override("normal", vsb); vipb.add_theme_color_override("font_color", Color("#ffe89a"))
-	vipb.pressed.connect(func(): _buy_vip(); panel.queue_free(); _open_shop())
-	v.add_child(vipb)
-	v.add_child(_lbl(_t("vip_perks") % VIP_DAILY_DIAMONDS, 10, Color("#c9b06a"), HORIZONTAL_ALIGNMENT_CENTER))
-	# 📅 ИВЕНТ-ПАК — лимит по таймеру недельного ивента (urgency/FOMO)
-	var evb := Button.new(); evb.text = _t("event_offer_btn") % _fmt_dur(_event_secs_left()); evb.custom_minimum_size = Vector2(0, 46); evb.add_theme_font_size_override("font_size", 14)
-	var evsb := StyleBoxFlat.new(); evsb.bg_color = Color("#0a2a3a"); evsb.set_corner_radius_all(10); evsb.border_color = Color("#7adfff"); evsb.set_border_width_all(2)
-	evb.add_theme_stylebox_override("normal", evsb); evb.add_theme_color_override("font_color", Color("#a8ecff"))
-	evb.pressed.connect(func(): _buy_event_offer(); panel.queue_free(); _open_shop())
-	v.add_child(evb)
-	v.add_child(_lbl(_t("event_offer_perks") % 1000, 10, Color("#6ab8c9"), HORIZONTAL_ALIGNMENT_CENTER))
+		_offer_tile.call("🎁", _t("offer_starter"), "2.99$", Color("#0e3a1c"), Color("#3ad97a"), func(): _buy_starter(); panel.queue_free(); _open_shop())
+	var vip_price := (_t("offer_vip_on") % int((vip_until - _qa_now()) / 86400.0)) if _vip_active() else "4.99$/мес"
+	_offer_tile.call("👑", _t("offer_vip"), vip_price, Color("#3a2e0a"), Color("#ffd24a"), func(): _buy_vip(); panel.queue_free(); _open_shop())
+	_offer_tile.call("📅", _t("offer_event"), "4.99$", Color("#0a2a3a"), Color("#7adfff"), func(): _buy_event_offer(); panel.queue_free(); _open_shop())
 	# value-ladder: 4 ступени $0.99→$49.99 с тегами-нуджами (UI Этап 3): старт=×2 за 1-ю покупку (визуальный хук), средний=популярное, топ=лучшая цена/алмаз
 	# 💎 ПАКИ АЛМАЗОВ — СЕТКА плиток (фидбэк Дианы: блоки по 3 в ряд, не строчки)
-	var grid := GridContainer.new(); grid.columns = 3; grid.add_theme_constant_override("h_separation", 8); grid.add_theme_constant_override("v_separation", 8); v.add_child(grid)
+	var grid := GridContainer.new(); grid.columns = 3; grid.add_theme_constant_override("h_separation", 8); grid.add_theme_constant_override("v_separation", 8); grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(grid)
 	for pack in [[100, "0.99$", "first2"], [550, "4.99$", "popular"], [1200, "9.99$", ""], [6500, "49.99$", "best"], [15000, "99.99$", ""], [40000, "199.99$", "best"]]:
 		var amt: int = pack[0]; var tag: String = pack[2]
 		var tagtxt := ""; var tagcol := Color("#39405a")
@@ -6280,7 +6274,7 @@ func _open_shop() -> void:
 			"first2":  tagtxt = _t("shop_first_x2");   tagcol = Color("#3ad97a")
 			"popular": tagtxt = _t("shop_popular");    tagcol = Color("#7adfff")
 			"best":    tagtxt = _t("shop_best_value"); tagcol = Color("#ffd24a")
-		var tile := Button.new(); tile.custom_minimum_size = Vector2(116, 100); tile.add_theme_font_size_override("font_size", 14)
+		var tile := Button.new(); tile.custom_minimum_size = Vector2(0, 100); tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tile.add_theme_font_size_override("font_size", 14)
 		tile.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tile.text = "💎\n%s\n%s\n%s" % [_gsep(amt), pack[1], tagtxt]
 		var tsb := StyleBoxFlat.new(); tsb.bg_color = Color(0.14, 0.16, 0.22); tsb.set_corner_radius_all(12); tsb.border_color = tagcol; tsb.set_border_width_all(2 if tag != "" else 1); tsb.set_content_margin_all(4)
@@ -6289,9 +6283,9 @@ func _open_shop() -> void:
 		tile.pressed.connect(func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]); panel.queue_free())
 		grid.add_child(tile)
 	# разделы магазина — ПЛИТКИ с крупными иконками (фидбэк Дианы: блоки, не строчки)
-	var ngrid := GridContainer.new(); ngrid.columns = 2; ngrid.add_theme_constant_override("h_separation", 8); ngrid.add_theme_constant_override("v_separation", 8); v.add_child(ngrid)
+	var ngrid := GridContainer.new(); ngrid.columns = 3; ngrid.add_theme_constant_override("h_separation", 8); ngrid.add_theme_constant_override("v_separation", 8); ngrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ngrid)
 	var _nav_tile := func(icon: String, txt: String, accent: Color, cb: Callable) -> void:
-		var tl := Button.new(); tl.custom_minimum_size = Vector2(182, 78); tl.add_theme_font_size_override("font_size", 14)
+		var tl := Button.new(); tl.custom_minimum_size = Vector2(0, 84); tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tl.add_theme_font_size_override("font_size", 13)
 		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; tl.text = "%s\n%s" % [icon, txt]
 		var tsb := StyleBoxFlat.new(); tsb.bg_color = Color(0.14, 0.16, 0.22); tsb.set_corner_radius_all(12); tsb.border_color = accent; tsb.set_border_width_all(2); tsb.set_content_margin_all(4)
 		for st in ["normal", "hover", "pressed", "focus"]: tl.add_theme_stylebox_override(st, tsb)
