@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.109" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.110" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1243,14 +1243,14 @@ const TR := {
 	"spd_pop_x2":        {"ru": "▶ Реклама → x2 на 30 минут!", "en": "▶ Ad → x2 for 30 minutes!"},
 	"spd_pop_x3":        {"ru": "⏩⏩⏩ x3 разблокирована навсегда!", "en": "⏩⏩⏩ x3 unlocked forever!"},
 	"ad_bonuses":        {"ru": "📺 БОНУСЫ ЗА РЕКЛАМУ", "en": "📺 AD BONUSES"},
-	"diamond_shop":      {"ru": "💎 МАГАЗИН АЛМАЗОВ", "en": "💎 DIAMOND SHOP"},
+	"diamond_shop":      {"ru": "🛒 МАГАЗИН", "en": "🛒 SHOP"},
 	# панель реклама-бустов
 	"ad_subtitle":       {"ru": "Добровольно · 30 мин · чем больше смотришь — тем выше %", "en": "Optional · 30 min · the more you watch, the higher the %"},
 	"ad_row_active":     {"ru": "▶ %s: +%d%% активен (%dмин, ур.%d) — ещё реклама → +%d%%", "en": "▶ %s: +%d%% active (%d min, lv.%d) — another ad → +%d%%"},
 	"ad_row_idle":       {"ru": "▶ %s — реклама → +%d%% на 30 мин (ур.%d)", "en": "▶ %s — ad → +%d%% for 30 min (lv.%d)"},
 	"ad_apply_pop":      {"ru": "📺 %s +%d%% на 30 мин!\n(уровень буста %d)", "en": "📺 %s +%d%% for 30 min!\n(boost level %d)"},
 	# магазин алмазов
-	"shop_title":        {"ru": "💎 МАГАЗИН АЛМАЗОВ  (есть: %d)", "en": "💎 DIAMOND SHOP  (have: %d)"},
+	"shop_title":        {"ru": "🛒 МАГАЗИН   (💎 %d)", "en": "🛒 SHOP   (💎 %d)"},
 	"shop_note":         {"ru": "(покупка за реал — подключится в сборке под Google Play / App Store)", "en": "(real-money purchase — enabled in the Google Play / App Store build)"},
 	"shop_buy_pop":      {"ru": "💎 +%d (стаб покупки)", "en": "💎 +%d (purchase stub)"},
 	"vip_shop_btn":      {"ru": "👑 КИБЕР-ПРОПУСК — 4.99$/мес", "en": "👑 CYBER-PASS — $4.99/mo"},
@@ -1288,8 +1288,8 @@ const TR := {
 	"hg_title":          {"ru": "🦸 ВЕРБОВКА БОЙЦОВ", "en": "🦸 RECRUIT FIGHTERS"},
 	"hg_pity":           {"ru": "💎 %d   ·   до гаранта Легенды: %d", "en": "💎 %d   ·   to guaranteed Legendary: %d"},
 	"hg_rates":          {"ru": "Обычный 60% · Редкий 28% · Эпик 10% · Легенда 2%\n(с 60-й крутки шанс легенды растёт, на 80-й — гарант)", "en": "Common 60% · Rare 28% · Epic 10% · Legendary 2%\n(from pull 60 legendary chance rises, at 80 — guaranteed)"},
-	"hg_pull1":          {"ru": "🎲 1 крутка — %d 💎", "en": "🎲 Pull 1 — %d 💎"},
-	"hg_pull10":         {"ru": "🎲 10 круток — %d 💎", "en": "🎲 Pull 10 — %d 💎"},
+	"hg_pull1":          {"ru": "🎁 Открыть ×1 — %d 💎", "en": "🎁 Open ×1 — %d 💎"},
+	"hg_pull10":         {"ru": "🎁 Открыть ×10 — %d 💎", "en": "🎁 Open ×10 — %d 💎"},
 	"hg_new":            {"ru": "🆕 НОВЫЙ: %s %s [%s]", "en": "🆕 NEW: %s %s [%s]"},
 	"hg_dupe":           {"ru": "%s %s [%s] → +%d💠", "en": "%s %s [%s] → +%d💠"},
 	"hg_btn":            {"ru": "🦸 ВЕРБОВКА БОЙЦОВ — собери отряд", "en": "🦸 RECRUIT — build your squad"},
@@ -1309,8 +1309,8 @@ const TR := {
 	"gacha_odds_pity_b":  {"ru": "• С %d-го пулла без Эпического шанс Эпического растёт на +%d%% за каждый следующий пулл.\n• На %d-м пулле — гарантированный Эпический.\n• Счётчик гаранта сбрасывается после любого Эпического (из пулла или гаранта).", "en": "• From pull %d without an Epic, the Epic chance rises by +%d%% each further pull.\n• On pull %d — a guaranteed Epic.\n• The pity counter resets after any Epic (rolled or guaranteed)."},
 	"gacha_odds_cost":    {"ru": "Цена: 1 пулл = %d 💎 · 10 пуллов = %d 💎.", "en": "Cost: 1 pull = %d 💎 · 10 pulls = %d 💎."},
 	"gacha_odds_foot":    {"ru": "Шансы реальные и зашиты в код игры (раскрытие по требованию сторов).", "en": "Rates are real and hard-coded in the game (disclosed per store requirements)."},
-	"gacha_pull1":       {"ru": "🎲 ПУЛЛ x1 — %d 💎", "en": "🎲 PULL x1 — %d 💎"},
-	"gacha_pull10":      {"ru": "🎲 ПУЛЛ x10 — %d 💎", "en": "🎲 PULL x10 — %d 💎"},
+	"gacha_pull1":       {"ru": "🎁 Открыть ×1 — %d 💎", "en": "🎁 Open ×1 — %d 💎"},
+	"gacha_pull10":      {"ru": "🎁 Открыть ×10 — %d 💎", "en": "🎁 Open ×10 — %d 💎"},
 	"gacha_no_diamonds": {"ru": "Недостаточно алмазов 💎", "en": "Not enough diamonds 💎"},
 	"gacha_epic":        {"ru": "🎉 ЭПИЧЕСКИЙ!", "en": "🎉 EPIC!"},
 	"gacha_rare":        {"ru": "✨ Редкий!", "en": "✨ Rare!"},
@@ -6300,7 +6300,6 @@ func _open_shop() -> void:
 	_nav_tile.call("🎰", _t("shop_gacha_short"), Color("#ff7adf"), func(): panel.queue_free(); _open_gacha())
 	_nav_tile.call("🦸", _t("hg_short"), Color("#00f0ff"), func(): panel.queue_free(); _open_hero_gacha())
 	_nav_tile.call("🔋", _t("reactor_short"), Color("#7adfff"), func(): panel.queue_free(); _open_offline_reactor())
-	_nav_tile.call("📺", _t("ad_short"), Color("#3ad97a"), func(): panel.queue_free(); _open_ad_boosts())
 	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 44, 15); v.add_child(bc)
 	bc.pressed.connect(func(): panel.queue_free())
 
