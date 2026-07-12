@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.112" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.113" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -6249,21 +6249,13 @@ func _open_shop() -> void:
 	v.add_child(_lbl(_t("shop_note"), 13, Color("#b3aecc"), HORIZONTAL_ALIGNMENT_CENTER))
 	# 🎁 ОФФЕРЫ — сетка из 3 плиток на всю ширину (фидбэк Дианы)
 	var ogrid := GridContainer.new(); ogrid.columns = 3; ogrid.add_theme_constant_override("h_separation", 8); ogrid.add_theme_constant_override("v_separation", 8); ogrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ogrid)
-	var _offer_tile := func(icon: String, nm: String, price: String, bgc: Color, accent: Color, cb: Callable, done := false) -> void:
-		var t := Button.new(); t.custom_minimum_size = Vector2(0, 94); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL; t.add_theme_font_size_override("font_size", 13)
-		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; t.text = "%s\n%s\n%s" % [icon, nm, price]
-		var sbx := StyleBoxFlat.new(); sbx.bg_color = bgc; sbx.set_corner_radius_all(12); sbx.border_color = accent; sbx.set_border_width_all(2); sbx.set_content_margin_all(4)
-		for st in ["normal", "hover", "pressed", "focus", "disabled"]: t.add_theme_stylebox_override(st, sbx)
-		t.add_theme_color_override("font_color", accent.lightened(0.3)); t.disabled = done
-		if not done: t.pressed.connect(cb)
-		ogrid.add_child(t)
 	if starter_bought:
-		_offer_tile.call("🎁", _t("offer_starter"), _t("offer_bought"), Color(0.1, 0.12, 0.1), Color("#4a6a4a"), func(): pass, true)
+		ogrid.add_child(_art_tile("offer_starter", "🎁", "%s\n%s" % [_t("offer_starter"), _t("offer_bought")], Color(0.1, 0.12, 0.1), Color("#4a6a4a"), 118, func(): pass, true))
 	else:
-		_offer_tile.call("🎁", _t("offer_starter"), "2.99$", Color("#0e3a1c"), Color("#3ad97a"), func(): _buy_starter(); panel.queue_free(); _open_shop())
+		ogrid.add_child(_art_tile("offer_starter", "🎁", "%s\n2.99$" % _t("offer_starter"), Color("#0e3a1c"), Color("#3ad97a"), 118, func(): _buy_starter(); panel.queue_free(); _open_shop()))
 	var vip_price := (_t("offer_vip_on") % int((vip_until - _qa_now()) / 86400.0)) if _vip_active() else "4.99$/мес"
-	_offer_tile.call("👑", _t("offer_vip"), vip_price, Color("#3a2e0a"), Color("#ffd24a"), func(): _buy_vip(); panel.queue_free(); _open_shop())
-	_offer_tile.call("📅", _t("offer_event"), "4.99$", Color("#0a2a3a"), Color("#7adfff"), func(): _buy_event_offer(); panel.queue_free(); _open_shop())
+	ogrid.add_child(_art_tile("offer_vip", "👑", "%s\n%s" % [_t("offer_vip"), vip_price], Color("#3a2e0a"), Color("#ffd24a"), 118, func(): _buy_vip(); panel.queue_free(); _open_shop()))
+	ogrid.add_child(_art_tile("offer_event", "📅", "%s\n4.99$" % _t("offer_event"), Color("#0a2a3a"), Color("#7adfff"), 118, func(): _buy_event_offer(); panel.queue_free(); _open_shop()))
 	# value-ladder: 4 ступени $0.99→$49.99 с тегами-нуджами (UI Этап 3): старт=×2 за 1-ю покупку (визуальный хук), средний=популярное, топ=лучшая цена/алмаз
 	# 💎 ПАКИ АЛМАЗОВ — СЕТКА плиток (фидбэк Дианы: блоки по 3 в ряд, не строчки)
 	var grid := GridContainer.new(); grid.columns = 3; grid.add_theme_constant_override("h_separation", 8); grid.add_theme_constant_override("v_separation", 8); grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(grid)
@@ -6274,26 +6266,15 @@ func _open_shop() -> void:
 			"first2":  tagtxt = _t("shop_first_x2");   tagcol = Color("#3ad97a")
 			"popular": tagtxt = _t("shop_popular");    tagcol = Color("#7adfff")
 			"best":    tagtxt = _t("shop_best_value"); tagcol = Color("#ffd24a")
-		var tile := Button.new(); tile.custom_minimum_size = Vector2(0, 100); tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tile.add_theme_font_size_override("font_size", 14)
-		tile.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		tile.text = "💎\n%s\n%s\n%s" % [_gsep(amt), pack[1], tagtxt]
-		var tsb := StyleBoxFlat.new(); tsb.bg_color = Color(0.14, 0.16, 0.22); tsb.set_corner_radius_all(12); tsb.border_color = tagcol; tsb.set_border_width_all(2 if tag != "" else 1); tsb.set_content_margin_all(4)
-		for st in ["normal", "hover", "pressed", "focus"]: tile.add_theme_stylebox_override(st, tsb)
-		tile.add_theme_color_override("font_color", Color("#e8ecf5"))
-		tile.pressed.connect(func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]); panel.queue_free())
+		var gtx := "gems_small" if amt <= 1200 else "gems_big"
+		var lines := "%s 💎\n%s%s" % [_gsep(amt), pack[1], ("\n" + tagtxt) if tagtxt != "" else ""]
+		var tile := _art_tile(gtx, "💎", lines, Color(0.14, 0.16, 0.22), tagcol, 118, func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]), false, Color("#e8ecf5"))
 		grid.add_child(tile)
 	# разделы магазина — ПЛИТКИ с крупными иконками (фидбэк Дианы: блоки, не строчки)
 	var ngrid := GridContainer.new(); ngrid.columns = 3; ngrid.add_theme_constant_override("h_separation", 8); ngrid.add_theme_constant_override("v_separation", 8); ngrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ngrid)
-	var _nav_tile := func(icon: String, txt: String, accent: Color, cb: Callable) -> void:
-		var tl := Button.new(); tl.custom_minimum_size = Vector2(0, 84); tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tl.add_theme_font_size_override("font_size", 13)
-		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; tl.text = "%s\n%s" % [icon, txt]
-		var tsb := StyleBoxFlat.new(); tsb.bg_color = Color(0.14, 0.16, 0.22); tsb.set_corner_radius_all(12); tsb.border_color = accent; tsb.set_border_width_all(2); tsb.set_content_margin_all(4)
-		for st in ["normal", "hover", "pressed", "focus"]: tl.add_theme_stylebox_override(st, tsb)
-		tl.add_theme_color_override("font_color", Color("#e8ecf5"))
-		tl.pressed.connect(cb); ngrid.add_child(tl)
-	_nav_tile.call("🎰", _t("shop_gacha_short"), Color("#ff7adf"), func(): panel.queue_free(); _open_gacha())
-	_nav_tile.call("🦸", _t("hg_short"), Color("#00f0ff"), func(): panel.queue_free(); _open_hero_gacha())
-	_nav_tile.call("🔋", _t("reactor_short"), Color("#7adfff"), func(): panel.queue_free(); _open_offline_reactor())
+	ngrid.add_child(_art_tile("crate_gear", "🎰", _t("shop_gacha_short"), Color(0.14, 0.16, 0.22), Color("#ff7adf"), 110, func(): panel.queue_free(); _open_gacha(), false, Color("#e8ecf5")))
+	ngrid.add_child(_art_tile("crate_heroes", "🦸", _t("hg_short"), Color(0.14, 0.16, 0.22), Color("#00f0ff"), 110, func(): panel.queue_free(); _open_hero_gacha(), false, Color("#e8ecf5")))
+	ngrid.add_child(_art_tile("reactor", "🔋", _t("reactor_short"), Color(0.14, 0.16, 0.22), Color("#7adfff"), 110, func(): panel.queue_free(); _open_offline_reactor(), false, Color("#e8ecf5")))
 	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 44, 15); v.add_child(bc)
 	bc.pressed.connect(func(): panel.queue_free())
 
@@ -8320,6 +8301,36 @@ func _prim_btn(txt: String, bg: Color, h := 56, fs := 16) -> Button:
 	for st in ["normal", "hover", "pressed", "focus"]: b.add_theme_stylebox_override(st, s)
 	b.add_theme_color_override("font_color", Color.WHITE)
 	return b
+
+# 🖼 кэш иллюстраций магазина (res://art/shop/*.png) — грузим один раз
+var _shop_tex_cache := {}
+func _shop_tex(nm: String) -> Texture2D:
+	if _shop_tex_cache.has(nm): return _shop_tex_cache[nm]
+	var p := "res://art/shop/%s.png" % nm
+	var t: Texture2D = load(p) if ResourceLoader.exists(p) else null
+	_shop_tex_cache[nm] = t
+	return t
+
+# 🖼 ПЛИТКА-ИЛЛЮСТРАЦИЯ (фидбэк Дианы: «много текста, добавь иллюстраций»):
+# картинка сверху + короткий текст снизу, вся плитка = кнопка. Фолбэк на эмодзи если текстуры нет.
+func _art_tile(texname: String, emoji: String, lines: String, bgc: Color, accent: Color, minh: int, cb: Callable, done := false, txtcol := Color(0, 0, 0, 0)) -> Button:
+	var tc := accent.lightened(0.35) if txtcol.a == 0.0 else txtcol
+	var t := Button.new(); t.custom_minimum_size = Vector2(0, minh); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sbx := StyleBoxFlat.new(); sbx.bg_color = bgc; sbx.set_corner_radius_all(12); sbx.border_color = accent; sbx.set_border_width_all(2); sbx.set_content_margin_all(4)
+	for st in ["normal", "hover", "pressed", "focus", "disabled"]: t.add_theme_stylebox_override(st, sbx)
+	var vb := VBoxContainer.new(); vb.set_anchors_preset(Control.PRESET_FULL_RECT); vb.add_theme_constant_override("separation", 1); vb.alignment = BoxContainer.ALIGNMENT_CENTER; vb.mouse_filter = Control.MOUSE_FILTER_IGNORE; t.add_child(vb)
+	var tex := _shop_tex(texname)
+	if tex != null:
+		var tr := TextureRect.new(); tr.texture = tex; tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.custom_minimum_size = Vector2(0, minh * 0.56); tr.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(tr)
+	else:
+		vb.add_child(_lbl(emoji, 26, accent.lightened(0.3), HORIZONTAL_ALIGNMENT_CENTER))
+	var lbl := Label.new(); lbl.text = lines; lbl.add_theme_font_size_override("font_size", 12); lbl.add_theme_color_override("font_color", tc); lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(lbl)
+	t.disabled = done
+	if not done: t.pressed.connect(cb)
+	return t
 
 # красный бейдж-счётчик новых вещей в углу слота (Диана) — невидим пока 0
 func _new_badge(pos: Vector2) -> Label:
