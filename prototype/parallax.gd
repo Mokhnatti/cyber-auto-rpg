@@ -57,6 +57,8 @@ func _draw() -> void:
 		_buildings(0.25, 150.0, 0.34 * H, Color("#11152a"), 7, pal[2])
 		_buildings(0.5, 110.0, 0.5 * H, Color("#171a30"), 13, pal[1])
 		_buildings(1.0, 90.0, 0.62 * H, Color("#0d1018"), 5, pal[0])
+	# 🌑 ПРИГЛУШЕНИЕ ФОНА (фидбэк Дианы: фон перегружен деталями) — затемняем, чтоб бойцы/UI выделялись
+	draw_rect(Rect2(0, 0, W, GROUND_Y), Color(0.03, 0.04, 0.08, 0.38))
 	# дорога
 	draw_rect(Rect2(0, GROUND_Y, W, H - GROUND_Y), Color("#070709"))
 	if road_tex != null:
