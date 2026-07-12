@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.113" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.114" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -5467,6 +5467,7 @@ func _refresh_hud() -> void:
 		bp_btn.modulate = Color(1.6, 1.4, 0.3) if _bp_badge_cache > 0 else Color(1, 1, 1)
 	if login_btn:
 		var lavail := _daily_available()
+		login_btn.visible = lavail   # 🎁 награду видно ТОЛЬКО пока не забрал (фидбэк Дианы: забрал → исчезла, не мозолит глаза)
 		login_btn.text = "🎁" + (" ●" if lavail else "")
 		login_btn.modulate = Color(1.6, 1.4, 0.3) if lavail else Color(1, 1, 1)
 	if loot_badge:
@@ -6259,14 +6260,16 @@ func _open_shop() -> void:
 	# value-ladder: 4 ступени $0.99→$49.99 с тегами-нуджами (UI Этап 3): старт=×2 за 1-ю покупку (визуальный хук), средний=популярное, топ=лучшая цена/алмаз
 	# 💎 ПАКИ АЛМАЗОВ — СЕТКА плиток (фидбэк Дианы: блоки по 3 в ряд, не строчки)
 	var grid := GridContainer.new(); grid.columns = 3; grid.add_theme_constant_override("h_separation", 8); grid.add_theme_constant_override("v_separation", 8); grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(grid)
-	for pack in [[100, "0.99$", "first2"], [550, "4.99$", "popular"], [1200, "9.99$", ""], [6500, "49.99$", "best"], [15000, "99.99$", ""], [40000, "199.99$", "best"]]:
+	var _packs := [[100, "0.99$", "first2"], [550, "4.99$", "popular"], [1200, "9.99$", ""], [6500, "49.99$", "best"], [15000, "99.99$", ""], [40000, "199.99$", "best"]]
+	for pi in _packs.size():
+		var pack: Array = _packs[pi]
 		var amt: int = pack[0]; var tag: String = pack[2]
 		var tagtxt := ""; var tagcol := Color("#39405a")
 		match tag:
 			"first2":  tagtxt = _t("shop_first_x2");   tagcol = Color("#3ad97a")
 			"popular": tagtxt = _t("shop_popular");    tagcol = Color("#7adfff")
 			"best":    tagtxt = _t("shop_best_value"); tagcol = Color("#ffd24a")
-		var gtx := "gems_small" if amt <= 1200 else "gems_big"
+		var gtx := "gems_%d" % (pi + 1)   # каждый пак = своя иконка прогрессии (gems_1..6), фидбэк Дианы
 		var lines := "%s 💎\n%s%s" % [_gsep(amt), pack[1], ("\n" + tagtxt) if tagtxt != "" else ""]
 		var tile := _art_tile(gtx, "💎", lines, Color(0.14, 0.16, 0.22), tagcol, 118, func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]), false, Color("#e8ecf5"))
 		grid.add_child(tile)
