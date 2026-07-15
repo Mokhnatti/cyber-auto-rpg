@@ -137,7 +137,12 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.114" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.115" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+# 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
+# Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
+# калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
+# После глобал-лонча вводить поэтапно: чат+помощь → кооп(боссы)+древо → рейтинг/донаты.
+const CLANS_ENABLED := false
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -784,6 +789,9 @@ const TR := {
 	"m_rewards": {"ru": "🎁 Награды", "en": "🎁 Rewards"},
 	"m_map": {"ru": "🗺 Карта локаций", "en": "🗺 Locations map"},
 	"m_clans": {"ru": "🛡 Кланы", "en": "🛡 Clans"},
+	"m_clans_soon": {"ru": "🛡 Кланы   🔒 Скоро", "en": "🛡 Clans   🔒 Soon"},
+	"clan_soon_title": {"ru": "🛡 КЛАНЫ — СКОРО", "en": "🛡 CLANS — COMING SOON"},
+	"clan_soon_body": {"ru": "Кланы, совместные боссы, клан-технологии и рейтинги уже на подходе!\n\nСначала мы вылизываем одиночную кампанию, а мультиплеер добавим следующим большим обновлением. Следи за апдейтами 👀", "en": "Clans, co-op bosses, clan tech and rankings are on the way!\n\nWe're polishing the solo campaign first — multiplayer arrives in the next big update. Stay tuned 👀"},
 	"m_settings": {"ru": "⚙ Настройки", "en": "⚙ Settings"},
 	# панель ПРОКАЧКА
 	"u_level": {"ru": "УРОВЕНЬ", "en": "LEVEL"},
@@ -1553,6 +1561,10 @@ func _clan_close_btn(panel: Control) -> void:
 	var close := Button.new(); close.text = _t("close"); close.custom_minimum_size = Vector2(200, 40)
 	close.position = Vector2(W * 0.5 - 100, 770); close.pressed.connect(panel.queue_free); panel.add_child(close)
 
+# 🔒 lean-v1: заглушка «Кланы — скоро» вместо клан-панели на первый запуск
+func _clan_soon() -> void:
+	_show_help(_t("clan_soon_title"), _t("clan_soon_body"))
+
 func _open_clan() -> void:
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3500; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.9); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1669,6 +1681,7 @@ func _cell_research_secs(lvl: int) -> int:
 
 # аддитивный бонус ячейки (lvl×per). Для combat/econ формул.
 func _cbon(tree: String, key: String) -> float:
+	if not CLANS_ENABLED: return 0.0   # 🔒 lean-v1: клан-перки не влияют на баланс пока кланы спрятаны
 	if player_clan == "": return 0.0
 	var d := _cell_def(tree, key)
 	if d.is_empty(): return 0.0
@@ -7055,8 +7068,11 @@ func _open_more() -> void:
 	var more_items := [
 		[_t("m_story") + story_b, Callable(self, "_open_story_group")],
 		[_t("m_rewards") + rew_b, Callable(self, "_open_rewards_group")],
-		[_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")],
 	]
+	if CLANS_ENABLED:
+		more_items.append([_t("m_clans") + ("   %s" % player_clan if player_clan != "" else ""), Callable(self, "_open_clan")])
+	else:   # 🔒 lean-v1: тизер «Скоро» (сам по себе ретеншн-крючок «дальше будет больше»)
+		more_items.append([_t("m_clans_soon"), Callable(self, "_clan_soon")])
 	# ENDLESS — башня. В прогоне = «Покинуть»; разблок со стадии 30 (иначе 🔒-тизер); рекорд в подписи
 	if endless_active:
 		more_items.append([_t("endless_leave"), Callable(self, "_endless_end")])
