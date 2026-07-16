@@ -137,12 +137,15 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.117" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.118" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
 # После глобал-лонча вводить поэтапно: чат+помощь → кооп(боссы)+древо → рейтинг/донаты.
 const CLANS_ENABLED := false
+# 🔒 QA-читы промо-кодов (MIDRUN/DEEPCORE дают бесплатные ресурсы) — ВСЕГДА false в релизе.
+# Гигиена запуска: игроки/тестеры не должны читерить экономику. true — только для локального QA.
+const DEBUG_PROMO := false
 var nick := ""
 var lang := "ru"   # язык интерфейса (i18n): ru/en, переключатель в настройках
 var tele_t := 30.0
@@ -1289,6 +1292,7 @@ const TR := {
 	"event_offer_pop":   {"ru": "📅 Ивент-пак получен! +%d💎", "en": "📅 Event pack claimed! +%d💎"},
 	"shop_best_value":   {"ru": "🔥 ЛУЧШАЯ ЦЕНА", "en": "🔥 BEST VALUE"},
 	"shop_popular":      {"ru": "⭐ ПОПУЛЯРНОЕ", "en": "⭐ POPULAR"},
+	"shop_value_mult":   {"ru": "💚 выгоднее ×%.1f", "en": "💚 ×%.1f value"},
 	"shop_first_x2":     {"ru": "🎁 ×2 ЗА 1-Ю ПОКУПКУ", "en": "🎁 ×2 FIRST BUY"},
 	"offer_starter":     {"ru": "Старт-пак", "en": "Starter"},
 	"offer_vip":         {"ru": "Кибер-пропуск", "en": "Cyber-Pass"},
@@ -4007,17 +4011,21 @@ func _open_promo() -> void:
 	inp.grab_focus()
 
 func _apply_promo(code: String) -> void:
-	match code.to_upper().strip_edges():
-		"MIDRUN":   # мид-гейм: открыты доки/БП-прогресс, ресурсы на прокачку
-			best_stage = maxi(best_stage, 20); stage = 15; sub = 1; in_boss = false; boss_retry = false
-			cores += 150; diamonds += 800; scrap += 15000; rec_prestiges = maxi(rec_prestiges, 1)
-		"DEEPCORE": # лейт-гейм: честный пост-престиж заход к сингулярности (ядра на усиления есть)
-			best_stage = maxi(best_stage, 38); stage = 25; sub = 1; in_boss = false; boss_retry = false
-			cores += 1500; diamonds += 3000; scrap += 60000; rec_prestiges = maxi(rec_prestiges, 5)
-		_:
-			_popup_center(_t("promo_bad"), Color("#ff4d4d"), 1.6)
-			return
-	_track("promo", {"code": code.to_upper().strip_edges()})
+	var c := code.to_upper().strip_edges()
+	var matched := false
+	if DEBUG_PROMO:   # 🔒 QA-читы, ВСЕГДА выкл в релизе (гигиена: без бесплатных ресурсов игрокам/тестерам)
+		match c:
+			"MIDRUN":   # мид-гейм: открыты доки/БП-прогресс, ресурсы на прокачку
+				best_stage = maxi(best_stage, 20); stage = 15; sub = 1; in_boss = false; boss_retry = false
+				cores += 150; diamonds += 800; scrap += 15000; rec_prestiges = maxi(rec_prestiges, 1); matched = true
+			"DEEPCORE": # лейт-гейм: честный пост-престиж заход к сингулярности
+				best_stage = maxi(best_stage, 38); stage = 25; sub = 1; in_boss = false; boss_retry = false
+				cores += 1500; diamonds += 3000; scrap += 60000; rec_prestiges = maxi(rec_prestiges, 5); matched = true
+	# TODO: сюда легитимные лончевые промо-коды (кампании/инфлюенсеры), НЕ читы
+	if not matched:
+		_popup_center(_t("promo_bad"), Color("#ff4d4d"), 1.6)
+		return
+	_track("promo", {"code": c})
 	_save()
 	_popup_center(_t("promo_ok"), Color("#3ad97a"), 2.0)
 	await get_tree().create_timer(1.4).timeout
@@ -6417,6 +6425,12 @@ func _open_shop() -> void:
 			"first2":  tagtxt = _t("shop_first_x2");   tagcol = Color("#3ad97a")
 			"popular": tagtxt = _t("shop_popular");    tagcol = Color("#7adfff")
 			"best":    tagtxt = _t("shop_best_value"); tagcol = Color("#ffd24a")
+		# 💚 видимая ВЫГОДА (фидбэк Дианы: показать что большой пак выгоднее) — на плитках без своего тега
+		if tagtxt == "":
+			var pr := float(str(pack[1]).trim_suffix("$"))
+			var mult := (float(amt) / pr) / (100.0 / 0.99)   # алм/$ этого пака ÷ базового
+			if mult >= 1.05:
+				tagtxt = _t("shop_value_mult") % mult; tagcol = Color("#3ad97a")
 		var gtx := "gems_%d" % (pi + 1)   # каждый пак = своя иконка прогрессии (gems_1..6), фидбэк Дианы
 		var lines := "%s 💎\n%s%s" % [_gsep(amt), pack[1], ("\n" + tagtxt) if tagtxt != "" else ""]
 		var tile := _art_tile(gtx, "💎", lines, Color(0.14, 0.16, 0.22), tagcol, 118, func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]), false, Color("#e8ecf5"))
