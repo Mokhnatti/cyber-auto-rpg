@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.116" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.117" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
@@ -153,6 +153,10 @@ var _session_start_t := 0.0       # для длительности сессии
 var _analytics_buf := []          # батч-буфер событий для временного ntfy-стока (без блокирующего HTTP в горячем цикле)
 var _analytics_http: HTTPRequest  # отдельный реквест под аналитику (не конкурирует с телеметрией/firebase)
 const ANALYTICS_BATCH := 8        # размер батча перед POST в ntfy-сток
+# 📊 ОНБОРДИНГ-ВОРОНКА + РЕТЕНШН (приоритет №1 по ресёрчу: успех решает первая сессия, не мультиплеер)
+var install_ts := 0.0             # timestamp первого запуска → когорта + ретеншн D1/D3/D7
+var session_count := 0            # счётчик сессий (растёт на каждый session_start)
+var funnel_seen := {}             # {step: true} — маркеры «первого раза» (срабатывают 1 раз за всё время), персистятся
 var nick_panel: Control
 var restart_confirm: Control
 var _offline_gold := 0.0
@@ -3149,6 +3153,21 @@ func _track(event: String, params: Dictionary = {}) -> void:
 	}
 	for k in params: all_params[k] = params[k]
 	_analytics_sink(event, all_params)
+	# первый платёж (конверсия) — единая точка: любая покупка шлёт iap_* → ловим тут (без рекурсии: funnel≠iap)
+	if (event == "iap_real" or event == "iap_purchase") and not bool(funnel_seen.get("first_purchase", false)):
+		_funnel("first_purchase", {"item": params.get("item", "")})
+
+# 📊 маркер онбординг-воронки: срабатывает ОДИН раз на шаг (за всё время игрока), с номером дня-когорты.
+# Даёт видеть, ГДЕ сыпется первая сессия: first_battle → tutorial_done → first_gacha → first_shop → first_purchase.
+func _funnel(step: String, extra: Dictionary = {}) -> void:
+	if bot or bool(funnel_seen.get(step, false)): return
+	funnel_seen[step] = true
+	var day := 0
+	if install_ts > 0.0: day = int((_qa_now() - install_ts) / 86400.0)
+	var p := {"step": step, "day": day, "sess": session_count}
+	for k in extra: p[k] = extra[k]
+	_track("funnel", p)
+	_save()
 
 # ЕДИНСТВЕННОЕ место отправки события наружу.
 func _analytics_sink(event: String, params: Dictionary) -> void:
@@ -3565,7 +3584,15 @@ func _ready() -> void:
 		starter_offer_seen = true; _save(); _show_starter_offer()
 	if not bot and _x2_active():   # активный x2 пережил перезаход → вернуть скорость (фикс C2)
 		_set_speed(2.0)
-	_track("session_start", {"stage": stage})   # KPI: старт сессии (после загрузки сейва)
+	# 📊 когорта + ретеншн: install_ts на первом запуске, day_n = дней с установки (D1/D3/D7)
+	if install_ts <= 0.0:
+		install_ts = _qa_now()
+		_funnel("install")
+	session_count += 1
+	var day_n := int((_qa_now() - install_ts) / 86400.0) if install_ts > 0.0 else 0
+	_track("session_start", {"stage": stage, "day": day_n, "sess": session_count, "is_new": session_count == 1, "paid": firstbuy_bought or starter_bought or _vip_active()})
+	_track("retention", {"day": day_n})   # коллектор бакетит уникальные ники по day → D1/D3/D7
+	_save()
 
 func _setup_font() -> void:
 	# DejaVu (кириллица) + NotoColorEmoji как fallback → эмодзи рендерятся
@@ -4205,7 +4232,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "music_on": music_on, "sfx_on": sfx_on, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "cb_day": cb_day, "cb_used": cb_used, "cd_day": cd_day, "cd_gem": cd_gem, "cg_charges": cg_charges, "cg_ts": cg_ts, "gem_confirm_skip_day": gem_confirm_skip_day, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "firstbuy_bought": firstbuy_bought, "firstbuy_until": firstbuy_until, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "cb_day": cb_day, "cb_used": cb_used, "cd_day": cd_day, "cd_gem": cd_gem, "cg_charges": cg_charges, "cg_ts": cg_ts, "gem_confirm_skip_day": gem_confirm_skip_day, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "firstbuy_bought": firstbuy_bought, "firstbuy_until": firstbuy_until, "install_ts": install_ts, "session_count": session_count, "funnel_seen": funnel_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -4246,7 +4273,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
-	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); firstbuy_bought = bool(d.get("firstbuy_bought", false)); firstbuy_until = float(d.get("firstbuy_until", 0.0)); iap_granted = d.get("iap_granted", []); cb_day = int(d.get("cb_day", -1)); cb_used = int(d.get("cb_used", 0)); cd_day = int(d.get("cd_day", -1)); cd_gem = int(d.get("cd_gem", 0)); cg_charges = int(d.get("cg_charges", CG_MAX)); cg_ts = float(d.get("cg_ts", 0.0)); gem_confirm_skip_day = int(d.get("gem_confirm_skip_day", -1))
+	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); firstbuy_bought = bool(d.get("firstbuy_bought", false)); firstbuy_until = float(d.get("firstbuy_until", 0.0)); install_ts = float(d.get("install_ts", 0.0)); session_count = int(d.get("session_count", 0)); funnel_seen = d.get("funnel_seen", {}); iap_granted = d.get("iap_granted", []); cb_day = int(d.get("cb_day", -1)); cb_used = int(d.get("cb_used", 0)); cd_day = int(d.get("cd_day", -1)); cd_gem = int(d.get("cd_gem", 0)); cg_charges = int(d.get("cg_charges", CG_MAX)); cg_ts = float(d.get("cg_ts", 0.0)); gem_confirm_skip_day = int(d.get("gem_confirm_skip_day", -1))
 	formation_pos = d.get("formation_pos", [0, 1, 2, 3])
 	if formation_pos.size() != 4: formation_pos = [0, 1, 2, 3]
 	formation_pos = formation_pos.map(func(x): return int(x))
@@ -4410,6 +4437,7 @@ func _spawn_wave() -> void:
 	marked_enemy = null   # 💻 сброс метки хакера при новой волне (старая цель мертва)
 	for hh in heroes: hh["oc_n"] = 0   # ⏩ сброс разгона «Оверклок» между волнами
 	squad_spd_t = 0.0
+	if not endless_active: _funnel("first_battle", {"stage": stage})   # 📊 самое первое начало боя
 	if endless_active:
 		_spawn_endless_wave()
 		return
@@ -6014,6 +6042,7 @@ func _tut_finish() -> void:   # скип/завершение — больше �
 	_tut_t = 0.0
 	if tut_layer: tut_layer.visible = false
 	_track("tutorial_step", {"step": "tut_done"})
+	_funnel("tutorial_done")   # 📊 туториал пройден (ключевой шаг воронки первой сессии)
 	_save()
 
 # x2 активна (выдана за рекламу, таймер) / x3 куплена навсегда
@@ -6339,6 +6368,7 @@ func _buy_event_offer() -> void:
 	_popup_center(_t("event_offer_pop") % 1000, Color("#7adfff"), 2.4)
 
 func _open_shop() -> void:
+	_funnel("first_shop")   # 📊 первое открытие магазина (верх монетизац. воронки)
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
 	var dim := ColorRect.new(); dim.color = Color(0, 0, 0, 0.6); dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
@@ -6458,6 +6488,7 @@ func _gacha_pull(n: int) -> Array:
 	var cost: int = _event_gacha_cost(GACHA_COST1 if n == 1 else GACHA_COST10)   # 💎 Гача-неделя: -20%
 	if diamonds < cost: return []
 	diamonds -= cost
+	_funnel("first_gacha", {"kind": "gear"})   # 📊 первая крутка гачи
 	_stat_add("pulls", n)   # ачивка: гача-пуллы
 	_sfx("gacha", -7.0)
 	var results := []
@@ -6529,6 +6560,7 @@ func _hg_heroes_of(rar: int) -> Array:
 	return out
 
 func _hero_gacha_pull(n: int) -> Array:
+	_funnel("first_gacha", {"kind": "hero"})   # 📊 первая крутка (герои)
 	_sfx("gacha", -7.0)
 	var results := []
 	for i in n:
