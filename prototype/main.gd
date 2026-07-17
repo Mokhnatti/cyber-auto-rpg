@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.120" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.121" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
@@ -1102,7 +1102,7 @@ const TR := {
 	"bp_free_hdr":  {"ru": "🆓 БЕСПЛАТНО", "en": "🆓 FREE"},
 	"bp_prem_hdr":  {"ru": "💎 ПРЕМИУМ", "en": "💎 PREMIUM"},
 	"bp_prem_cost": {"ru": "(за 500💎)", "en": "(for 500💎)"},
-	"bp_stage_n":   {"ru": "ст.%d", "en": "stg %d"},
+	"bp_stage_n":   {"ru": "Стадия %d", "en": "Stage %d"},
 	# ачивки
 	"ach_title":     {"ru": "📖 ДОСТИЖЕНИЯ", "en": "📖 ACHIEVEMENTS"},
 	"ach_sub":       {"ru": "Готово к забору: %d   ·   награда → 💎/♻", "en": "Ready to claim: %d   ·   reward → 💎/♻"},
@@ -6506,7 +6506,7 @@ func _shop_tab_weekly(v: VBoxContainer, panel: Control) -> void:
 		pb.pressed.connect(func(): if diamonds >= BP_PREMIUM_COST: diamonds -= BP_PREMIUM_COST; bp_premium = true; _bp_cache_stage = -1; _save(); refresh.call())
 		v.add_child(pb)
 	var hdr := HBoxContainer.new(); hdr.add_theme_constant_override("separation", 8); hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(hdr)
-	var sp := Control.new(); sp.custom_minimum_size = Vector2(46, 0); hdr.add_child(sp)
+	var sp := Control.new(); sp.custom_minimum_size = Vector2(72, 0); hdr.add_child(sp)
 	var fh := _lbl(_t("bp_free_hdr"), 12, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); fh.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hdr.add_child(fh)
 	var ph := _lbl(_t("bp_prem_hdr") + (" ✓" if bp_premium else ""), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); ph.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hdr.add_child(ph)
 	var scroll := ScrollContainer.new(); scroll.custom_minimum_size = Vector2(400, 330); scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(scroll)
@@ -7406,7 +7406,7 @@ func _bp_tier_row(m: int, panel: Control, refresh := Callable()) -> Control:
 	sb.border_color = Color("#ffd24a") if reached else Color("#2a2f45"); sb.set_border_width_all(1)
 	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(380, 0); box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; box.add_child(row)
-	var sl := _lbl(_t("bp_stage_n") % m, 13, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT); sl.custom_minimum_size = Vector2(46, 0); row.add_child(sl)
+	var sl := _lbl(_t("bp_stage_n") % m, 12, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT); sl.custom_minimum_size = Vector2(72, 0); row.add_child(sl)
 	# бесплатная награда
 	var fclaimed: bool = m in bp_claimed
 	var fb := Button.new(); fb.custom_minimum_size = Vector2(110, 40); fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL; fb.add_theme_font_size_override("font_size", 12)
