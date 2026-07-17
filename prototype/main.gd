@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.119" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.120" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
@@ -6495,10 +6495,31 @@ func _shop_tab_free(v: VBoxContainer, panel: Control) -> void:
 	var dtag := _t("shop_free_daily_rdy") if _daily_available() else _t("shop_free_daily_wait")
 	g.add_child(_art_tile("", "🎁", "%s\n%s" % [_t("shop_free_daily"), dtag], Color(0.16, 0.13, 0.03), Color("#ffd24a"), 110, func(): panel.queue_free(); _show_daily(), false, Color("#e8ecf5")))
 
-# 🎟 НЕДЕЛЯ — season pass (батлпасс)
+# 🎟 НЕДЕЛЯ — season pass ПРЯМО во вкладке: слева Free, справа Premium (спека Дианы, реф-скрин)
 func _shop_tab_weekly(v: VBoxContainer, panel: Control) -> void:
-	var b := _art_tile("", "🎟", _t("shop_weekly_pass"), Color(0.14, 0.10, 0.20), Color("#a06cff"), 130, func(): panel.queue_free(); _open_battlepass(), false, Color("#e8ecf5"))
-	v.add_child(b)
+	_bp_check_season()
+	var refresh := func(): panel.queue_free(); _open_shop()
+	v.add_child(_lbl("🎟 " + _t("bp_season") % _fmt_dur(_bp_season_secs_left()), 12, Color("#c9b06a"), HORIZONTAL_ALIGNMENT_CENTER))
+	if not bp_premium:
+		var pb := _prim_btn(_t("bp_buy_btn") % BP_PREMIUM_COST, Color("#8a52e0"), 40, 14)
+		pb.disabled = diamonds < BP_PREMIUM_COST
+		pb.pressed.connect(func(): if diamonds >= BP_PREMIUM_COST: diamonds -= BP_PREMIUM_COST; bp_premium = true; _bp_cache_stage = -1; _save(); refresh.call())
+		v.add_child(pb)
+	var hdr := HBoxContainer.new(); hdr.add_theme_constant_override("separation", 8); hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(hdr)
+	var sp := Control.new(); sp.custom_minimum_size = Vector2(46, 0); hdr.add_child(sp)
+	var fh := _lbl(_t("bp_free_hdr"), 12, Color("#7ee08a"), HORIZONTAL_ALIGNMENT_CENTER); fh.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hdr.add_child(fh)
+	var ph := _lbl(_t("bp_prem_hdr") + (" ✓" if bp_premium else ""), 12, Color("#ffd24a"), HORIZONTAL_ALIGNMENT_CENTER); ph.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hdr.add_child(ph)
+	var scroll := ScrollContainer.new(); scroll.custom_minimum_size = Vector2(400, 330); scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(scroll)
+	var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6); list.size_flags_horizontal = Control.SIZE_EXPAND_FILL; scroll.add_child(list)
+	var m := BP_STEP; var topm: int = (int(_bp_prog() / BP_STEP) + 5) * BP_STEP
+	while m <= topm:
+		list.add_child(_bp_tier_row(m, panel, refresh))
+		m += BP_STEP
+	var unc := _bp_unclaimed_count()
+	if unc > 0:
+		var ca := _prim_btn(_t("ach_claim_all") % unc, Color("#c9971e"), 40, 14)
+		ca.pressed.connect(func(): _bp_claim_all(); refresh.call())
+		v.add_child(ca)
 
 # === ОФЛАЙН-РЕАКТОР: экспон. сток алмазов (×1.5/ур), расширяет окно офлайн-дохода на +2 ч/ур ===
 func _reactor_cost() -> int:
@@ -7377,29 +7398,30 @@ func _open_battlepass() -> void:
 	else:
 		var bc := Button.new(); bc.text = _t("close_x"); bc.custom_minimum_size = Vector2(200, 42); bc.position = Vector2(W * 0.5 - 100, 706); bc.pressed.connect(func(): panel.queue_free()); panel.add_child(bc)
 
-func _bp_tier_row(m: int, panel: Control) -> Control:
+func _bp_tier_row(m: int, panel: Control, refresh := Callable()) -> Control:
+	if not refresh.is_valid(): refresh = func(): panel.queue_free(); _open_battlepass()   # дефолт: рефреш standalone-пасса
 	var reached: bool = _bp_prog() >= m
 	var box := PanelContainer.new()
 	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.10, 0.11, 0.17, 0.95) if reached else Color(0.06, 0.06, 0.09, 0.9); sb.set_corner_radius_all(8); sb.set_content_margin_all(8)
 	sb.border_color = Color("#ffd24a") if reached else Color("#2a2f45"); sb.set_border_width_all(1)
-	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(420, 0)
-	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); box.add_child(row)
-	row.add_child(_lbl(_t("bp_stage_n") % m, 14, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT))
+	box.add_theme_stylebox_override("panel", sb); box.custom_minimum_size = Vector2(380, 0); box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; box.add_child(row)
+	var sl := _lbl(_t("bp_stage_n") % m, 13, Color("#ffd24a") if reached else Color("#5a6a8a"), HORIZONTAL_ALIGNMENT_LEFT); sl.custom_minimum_size = Vector2(46, 0); row.add_child(sl)
 	# бесплатная награда
 	var fclaimed: bool = m in bp_claimed
-	var fb := Button.new(); fb.custom_minimum_size = Vector2(166, 40); fb.add_theme_font_size_override("font_size", 12)
+	var fb := Button.new(); fb.custom_minimum_size = Vector2(110, 40); fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL; fb.add_theme_font_size_override("font_size", 12)
 	fb.add_theme_color_override("font_color", Color("#6a6f85") if fclaimed else Color("#7ee08a"))   # забранное — серым
 	fb.text = ("✓ " if fclaimed else "🆓 ") + _bp_reward_text(_bp_free_reward(m))
 	fb.disabled = fclaimed or not reached
 	var mm := m
-	fb.pressed.connect(func(): _bp_claim(mm, false); panel.queue_free(); _open_battlepass())
+	fb.pressed.connect(func(): _bp_claim(mm, false); refresh.call())
 	row.add_child(fb)
 	# премиум награда
 	var pclaimed: bool = m in bp_claimed_prem
-	var pbn := Button.new(); pbn.custom_minimum_size = Vector2(166, 40); pbn.add_theme_font_size_override("font_size", 12); pbn.add_theme_color_override("font_color", Color("#6a6f85") if pclaimed else Color("#ffd24a"))   # забранное — серым
+	var pbn := Button.new(); pbn.custom_minimum_size = Vector2(110, 40); pbn.size_flags_horizontal = Control.SIZE_EXPAND_FILL; pbn.add_theme_font_size_override("font_size", 12); pbn.add_theme_color_override("font_color", Color("#6a6f85") if pclaimed else Color("#ffd24a"))   # забранное — серым
 	pbn.text = ("✓ " if pclaimed else "💎 ") + _bp_reward_text(_bp_prem_reward(m))
 	pbn.disabled = pclaimed or not reached or not bp_premium
-	pbn.pressed.connect(func(): _bp_claim(mm, true); panel.queue_free(); _open_battlepass())
+	pbn.pressed.connect(func(): _bp_claim(mm, true); refresh.call())
 	row.add_child(pbn)
 	return box
 
