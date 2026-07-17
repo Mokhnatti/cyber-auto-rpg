@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.124" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.125" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
@@ -1300,6 +1300,10 @@ const TR := {
 	"shop_x2_first":     {"ru": "🔥 ×2 БОНУС", "en": "🔥 ×2 BONUS"},
 	"shop_free_daily_btn": {"ru": "Забрать бесплатно: %s", "en": "Claim free: %s"},
 	"shop_x3_value":     {"ru": "💜 ×3 ВЫГОДА", "en": "💜 ×3 VALUE"},
+	"shop_free_once":    {"ru": "раз в день", "en": "once a day"},
+	"free_claim_btn":    {"ru": "ЗАБРАТЬ", "en": "CLAIM"},
+	"shop_free_taken":   {"ru": "Забрано", "en": "Claimed"},
+	"shop_free_tmrw":    {"ru": "завтра снова", "en": "back tomorrow"},
 	"shop_free_boost":   {"ru": "Бустеры\n(за просмотр)", "en": "Boosts\n(watch)"},
 	"shop_free_daily":   {"ru": "Награда за вход", "en": "Daily reward"},
 	"shop_free_daily_rdy": {"ru": "✅ готова", "en": "✅ ready"},
@@ -6513,26 +6517,28 @@ func _shop_tab_special(v: VBoxContainer, panel: Control) -> void:
 	g.add_child(_art_tile("offer_event", "📅", "%s\n4.99$" % _t("offer_event"), Color("#0a2a3a"), Color("#7adfff"), 122, func(): _buy_event_offer(); panel.queue_free(); _open_shop()))
 	g.add_child(_art_tile("reactor", "🔋", "%s\n%d💎" % [_t("reactor_short"), _reactor_cost()], Color(0.10, 0.16, 0.20), Color("#7adfff"), 122, func(): panel.queue_free(); _open_offline_reactor()))
 
-# 💎 РЕСУРСЫ — паки алмазов (×2 на первую покупку каждого) + гача
+# 💎 РЕСУРСЫ — паки алмазов КАРТОЧКАМИ-БАННЕРАМИ (спека Дианы: картинка+кол-во+бейдж+кнопка покупки)
 func _shop_tab_resources(v: VBoxContainer, panel: Control) -> void:
-	var grid := GridContainer.new(); grid.columns = 3; grid.add_theme_constant_override("h_separation", 8); grid.add_theme_constant_override("v_separation", 8); grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(grid)
-	grid.add_child(_shop_free_tile("resources", panel))   # 🎁 первая плитка = бесплатные алмазы раз в день (спека Дианы)
+	var grid := GridContainer.new(); grid.columns = 2; grid.add_theme_constant_override("h_separation", 10); grid.add_theme_constant_override("v_separation", 10); grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(grid)
+	# 🎁 первая карточка = бесплатные алмазы раз в день
+	if _shop_free_avail("resources"):
+		grid.add_child(_gem_card("", "🎁", "+25 💎", _t("shop_free_once"), Color("#7ee08a"), "🎁 " + _t("free_claim_btn"), Color("#2f9e56"), func(): _shop_claim_free("resources"); panel.queue_free(); _open_shop()))
+	else:
+		grid.add_child(_gem_card("", "🎁", _t("shop_free_taken"), _t("shop_free_tmrw"), Color("#6a6f85"), "✅", Color("#3a4050"), func(): pass))
 	var _packs := [[100, "0.99$"], [550, "4.99$"], [1200, "9.99$"], [6500, "49.99$"], [15000, "99.99$"], [40000, "199.99$"]]
 	for pi in _packs.size():
 		var pack: Array = _packs[pi]
 		var amt: int = pack[0]
 		var first: bool = not bool(packs_bought.get(str(amt), false))
-		var tagtxt := ""; var tagcol := Color("#39405a"); var lines := ""
-		if first:   # ×2 на первую покупку — показываем удвоенное кол-во + бейдж
-			tagtxt = _t("shop_x2_first"); tagcol = Color("#ffd24a")
-			lines = "%s 💎\n%s\n%s" % [_gsep(amt * 2), pack[1], tagtxt]
+		var badge := ""; var bcol := Color("#7adfff"); var amount := ""
+		if first:   # ×2 на первую покупку — крупное удвоенное кол-во + бейдж
+			badge = _t("shop_x2_first"); bcol = Color("#ffd24a"); amount = "+%s 💎" % _gsep(amt * 2)
 		else:
-			var pr := float(str(pack[1]).trim_suffix("$"))
-			var mult := (float(amt) / pr) / (100.0 / 0.99)
-			if mult >= 1.05: tagtxt = _t("shop_value_mult") % mult; tagcol = Color("#3ad97a")
-			lines = "%s 💎\n%s%s" % [_gsep(amt), pack[1], ("\n" + tagtxt) if tagtxt != "" else ""]
+			amount = "+%s 💎" % _gsep(amt)
+			var pr := float(str(pack[1]).trim_suffix("$")); var mult := (float(amt) / pr) / (100.0 / 0.99)
+			if mult >= 1.05: badge = _t("shop_value_mult") % mult; bcol = Color("#3ad97a")
 		var gtx := "gems_%d" % (pi + 1)
-		grid.add_child(_art_tile(gtx, "💎", lines, Color(0.14, 0.16, 0.22), tagcol, 128, func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]), false, Color("#e8ecf5")))
+		grid.add_child(_gem_card(gtx, "💎", amount, badge, bcol, pack[1], Color("#2f9e56"), func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1])))
 
 # 🎰 ПРИЗЫВ — сундук снаряжения + вербовка бойцов (перенесено из Ресурсов; спека Дианы)
 func _shop_tab_summon(v: VBoxContainer, panel: Control) -> void:
@@ -8635,6 +8641,27 @@ func _art_tile(texname: String, emoji: String, lines: String, bgc: Color, accent
 	t.disabled = done
 	if not done: t.pressed.connect(cb)
 	return t
+
+# 🛒 КАРТОЧКА-БАННЕР (спека Дианы): карточка ПРОДАЁТ предложение, а не показывает предмет.
+# Иерархия: крупная картинка (главный герой) → крупное кол-во → бейдж → ШИРОКАЯ кнопка ПОКУПКИ (CTA).
+func _gem_card(texname: String, emoji: String, amount_txt: String, badge_txt: String, badge_col: Color, buy_txt: String, buy_col: Color, cb: Callable) -> Control:
+	var card := PanelContainer.new(); card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sb := StyleBoxFlat.new(); sb.bg_color = Color(0.15, 0.17, 0.22); sb.set_corner_radius_all(16); sb.set_content_margin_all(8)
+	card.add_theme_stylebox_override("panel", sb)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 4); card.add_child(v)
+	var tex := _shop_tex(texname)
+	if tex != null:   # иллюстрация крупная — главный герой карточки (~50% высоты)
+		var tr := TextureRect.new(); tr.texture = tex; tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.custom_minimum_size = Vector2(0, 96); tr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(tr)
+	else:
+		v.add_child(_lbl(emoji, 44, badge_col.lightened(0.2), HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(amount_txt, 20, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))   # крупное кол-во
+	if badge_txt != "":
+		v.add_child(_lbl(badge_txt, 12, badge_col, HORIZONTAL_ALIGNMENT_CENTER))   # бейдж
+	var buy := _prim_btn(buy_txt, buy_col, 40, 16); v.add_child(buy)                # ШИРОКАЯ кнопка покупки (CTA)
+	buy.pressed.connect(cb)
+	return card
 
 # красный бейдж-счётчик новых вещей в углу слота (Диана) — невидим пока 0
 func _new_badge(pos: Vector2) -> Label:
