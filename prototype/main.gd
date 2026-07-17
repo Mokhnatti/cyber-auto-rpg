@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.123" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.124" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
@@ -8584,13 +8584,15 @@ func _lbl(txt: String, sz: int, col: Color, align := HORIZONTAL_ALIGNMENT_LEFT) 
 	return l
 
 # 🎨 ЕДИНЫЙ ЧИСТЫЙ СТИЛЬ (фидбэк Дианы): графитово-серая карточка + неон-акцент
-func _grey_style(accent := Color("#00f0ff")) -> StyleBoxFlat:
+func _grey_style(_accent := Color("#00f0ff")) -> StyleBoxFlat:
+	# UI-PRINCIPLES: чистый тёмный ФЛЭТ — без рамок, мягкая тень, единый крупный радиус, воздух.
+	# «Возвышение» карточки над фоном — за счёт контраста заливки (карта темнее плиток), не обводок.
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.20, 0.23, 0.30)
-	sb.set_corner_radius_all(18)
-	sb.border_color = accent; sb.set_border_width_all(3)
-	sb.set_content_margin_all(20)
-	sb.shadow_color = Color(0, 0, 0, 0.5); sb.shadow_size = 10
+	sb.bg_color = Color(0.09, 0.10, 0.14)
+	sb.set_corner_radius_all(22)
+	sb.set_border_width_all(0)
+	sb.set_content_margin_all(22)
+	sb.shadow_color = Color(0, 0, 0, 0.30); sb.shadow_size = 7
 	return sb
 
 # цветная кнопка чистого стиля (белый текст)
@@ -8615,8 +8617,11 @@ func _shop_tex(nm: String) -> Texture2D:
 func _art_tile(texname: String, emoji: String, lines: String, bgc: Color, accent: Color, minh: int, cb: Callable, done := false, txtcol := Color(0, 0, 0, 0)) -> Button:
 	var tc := accent.lightened(0.35) if txtcol.a == 0.0 else txtcol
 	var t := Button.new(); t.custom_minimum_size = Vector2(0, minh); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var sbx := StyleBoxFlat.new(); sbx.bg_color = bgc; sbx.set_corner_radius_all(12); sbx.border_color = accent; sbx.set_border_width_all(2); sbx.set_content_margin_all(4)
-	for st in ["normal", "hover", "pressed", "focus", "disabled"]: t.add_theme_stylebox_override(st, sbx)
+	# UI-PRINCIPLES: плоская плитка БЕЗ обводки, единый радиус, чуть светлее карточки (контраст заливки, не рамка)
+	var sbx := StyleBoxFlat.new(); sbx.bg_color = bgc; sbx.set_corner_radius_all(16); sbx.set_border_width_all(0); sbx.set_content_margin_all(8)
+	var sbxh := StyleBoxFlat.new(); sbxh.bg_color = bgc.lightened(0.06); sbxh.set_corner_radius_all(16); sbxh.set_content_margin_all(8)   # лёгкий отклик на нажатие
+	for st in ["normal", "focus", "disabled"]: t.add_theme_stylebox_override(st, sbx)
+	for st in ["hover", "pressed"]: t.add_theme_stylebox_override(st, sbxh)
 	var vb := VBoxContainer.new(); vb.set_anchors_preset(Control.PRESET_FULL_RECT); vb.add_theme_constant_override("separation", 1); vb.alignment = BoxContainer.ALIGNMENT_CENTER; vb.mouse_filter = Control.MOUSE_FILTER_IGNORE; t.add_child(vb)
 	var tex := _shop_tex(texname)
 	if tex != null:
