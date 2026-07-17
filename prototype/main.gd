@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.118" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.119" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
@@ -1293,6 +1293,16 @@ const TR := {
 	"shop_best_value":   {"ru": "🔥 ЛУЧШАЯ ЦЕНА", "en": "🔥 BEST VALUE"},
 	"shop_popular":      {"ru": "⭐ ПОПУЛЯРНОЕ", "en": "⭐ POPULAR"},
 	"shop_value_mult":   {"ru": "💚 выгоднее ×%.1f", "en": "💚 ×%.1f value"},
+	"shop_tab_special":  {"ru": "🎁 Спец", "en": "🎁 Special"},
+	"shop_tab_res":      {"ru": "💎 Ресурсы", "en": "💎 Resources"},
+	"shop_tab_free":     {"ru": "🎉 Бесплатно", "en": "🎉 Free"},
+	"shop_tab_weekly":   {"ru": "🎟 Неделя", "en": "🎟 Weekly"},
+	"shop_x2_first":     {"ru": "🔥 ×2 БОНУС", "en": "🔥 ×2 BONUS"},
+	"shop_free_boost":   {"ru": "Бустеры\n(за просмотр)", "en": "Boosts\n(watch)"},
+	"shop_free_daily":   {"ru": "Награда за вход", "en": "Daily reward"},
+	"shop_free_daily_rdy": {"ru": "✅ готова", "en": "✅ ready"},
+	"shop_free_daily_wait":{"ru": "⏳ завтра", "en": "⏳ tomorrow"},
+	"shop_weekly_pass":  {"ru": "СЕЗОННЫЙ ПРОПУСК\nнаграды каждую неделю", "en": "SEASON PASS\nweekly rewards"},
 	"shop_first_x2":     {"ru": "🎁 ×2 ЗА 1-Ю ПОКУПКУ", "en": "🎁 ×2 FIRST BUY"},
 	"offer_starter":     {"ru": "Старт-пак", "en": "Starter"},
 	"offer_vip":         {"ru": "Кибер-пропуск", "en": "Cyber-Pass"},
@@ -1438,6 +1448,8 @@ func _qa_poll() -> void:
 		lang = ("en" if lang == "ru" else "ru"); _apply_lang(); return
 	if cmd == "notut":   # QA: скип форсед-туториала для чистых скринов
 		tut_step = 99; onboarded = true; onboard_hidden = true; return
+	if cmd.begins_with("shoptab_"):   # QA: открыть магазин на конкретной вкладке (скрины)
+		shop_tab = cmd.substr(8); _open_shop(); return
 	if cmd == "firstbuy":   # QA: активировать окно первой покупки + открыть магазин (скрин баннера)
 		firstbuy_bought = false; firstbuy_until = _qa_now() + FIRSTBUY_WINDOW; _open_shop(); return
 	if cmd == "fboffer":   # QA: попап первой покупки
@@ -2463,6 +2475,9 @@ var firstbuy_until := 0.0          # окно оффера истекает в �
 const FIRSTBUY_DIAMONDS := 200
 const FIRSTBUY_SPEED_SECS := 86400.0   # 24ч x2-скорость
 const FIRSTBUY_WINDOW := 86400.0       # оффер доступен 24ч с момента показа
+# 💎 ×2 НА ПЕРВУЮ ПОКУПКУ каждого пака алмазов (спека Дианы/референс) + вкладки магазина
+var packs_bought := {}          # {amt(str): true} — какие паки уже куплены (×2 только на первую покупку каждого)
+var shop_tab := "resources"     # активная вкладка магазина: special/resources/free/weekly
 # РЕКЛАМА-БУСТЫ (Диана): добровольные, 30 мин, % растёт с числом просмотров. ad_boosts[b] = {"until":sec, "lvl":int}
 var ad_boosts := {}
 var clan_boosts := {}  # 🎖 клан-магаз бусты: {"dmg": {"until": sec}, ...}
@@ -3623,7 +3638,7 @@ func _reset() -> void:
 	scrap = 0
 	cores = 0
 	cores_peak = 0.0
-	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; firstbuy_bought = false; firstbuy_until = 0.0; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}   # 💰 боевая экономика (тест-буст 100k закрыт 10.07 по команде Рамиля)
+	diamonds = 50; x3_unlocked = false; x2_until = 0.0; vip_until = 0.0; starter_bought = false; starter_offer_seen = false; firstbuy_bought = false; firstbuy_until = 0.0; packs_bought = {}; gacha_pity = 0; offline_cap_lvl = 0; last_discovered = ""; ad_boosts = {}; clan_boosts = {}   # 💰 боевая экономика (тест-буст 100k закрыт 10.07 по команде Рамиля)
 	quanta = 0; meta_lvl = {}; singularity_count = 0; meta_unlocked = false; _apply_meta()
 	bp_claimed = []; bp_claimed_prem = []; bp_premium = false; bp_season = -1; bp_boost = 0; ach_claimed = {}; daily_day = 0; daily_streak = 0; daily_total = 0; squad_pick = {}; heroes_owned = {}; hero_ranks = {}; hero_shards = {}; hg_pity = 0
 	seen_intro = false; nick_asked = false; wipe_streak = 0; last_wipe_stage = 0; dialog_seen.clear()
@@ -4240,7 +4255,7 @@ func _save() -> void:
 		hs.append({"level": hh["level"], "lvl_cost": hh["lvl_cost"], "gear": hh["gear"], "equip": hh["equip"]})
 	var d := {
 		"v": 1, "ts": int(_qa_now()), "nick": nick, "lang": lang, "show_dmg": show_dmg, "show_cd": show_cd, "music_on": music_on, "sfx_on": sfx_on, "gold": gold, "gold_ps": gold_ps, "stage": stage, "sub": sub,
-		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "cb_day": cb_day, "cb_used": cb_used, "cd_day": cd_day, "cd_gem": cd_gem, "cg_charges": cg_charges, "cg_ts": cg_ts, "gem_confirm_skip_day": gem_confirm_skip_day, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "firstbuy_bought": firstbuy_bought, "firstbuy_until": firstbuy_until, "install_ts": install_ts, "session_count": session_count, "funnel_seen": funnel_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
+		"best_stage": best_stage, "endless_best": endless_best, "scrap": scrap, "cores": cores, "cores_peak": cores_peak, "cores_total": cores_total, "diamonds": diamonds, "x3_unlocked": x3_unlocked, "x2_until": x2_until, "vip_until": vip_until, "cb_day": cb_day, "cb_used": cb_used, "cd_day": cd_day, "cd_gem": cd_gem, "cg_charges": cg_charges, "cg_ts": cg_ts, "gem_confirm_skip_day": gem_confirm_skip_day, "starter_bought": starter_bought, "starter_offer_seen": starter_offer_seen, "firstbuy_bought": firstbuy_bought, "firstbuy_until": firstbuy_until, "packs_bought": packs_bought, "install_ts": install_ts, "session_count": session_count, "funnel_seen": funnel_seen, "iap_granted": iap_granted, "gacha_pity": gacha_pity, "offline_cap_lvl": offline_cap_lvl, "ad_boosts": ad_boosts, "clan_boosts": clan_boosts, "quanta": quanta, "meta_lvl": meta_lvl, "singularity_count": singularity_count, "meta_unlocked": meta_unlocked, "seen_intro": seen_intro, "nick_asked": nick_asked, "onboarded": onboarded, "onboard_hidden": onboard_hidden, "onboard_upg_done": onboard_upg_done, "tut_step": tut_step, "bp_boost": bp_boost, "bp_claimed": bp_claimed, "bp_claimed_prem": bp_claimed_prem, "bp_premium": bp_premium, "bp_season": bp_season, "ach_claimed": ach_claimed, "daily_day": daily_day, "daily_streak": daily_streak, "daily_total": daily_total, "squad_pick": squad_pick, "formation_pos": formation_pos, "heroes_owned": heroes_owned, "hero_ranks": hero_ranks, "hero_shards": hero_shards, "hg_pity": hg_pity,
 		"cur_location": cur_location, "quest_done": quest_done, "tone_counts": tone_counts, "moral_choices": moral_choices, "karma": karma,
 		"frag_flags": frag_flags, "case_solved": case_solved, "endgame_mode": endgame_mode, "milestones_hit": milestones_hit, "power_peak": power_peak, "player_clan": player_clan, "clan_tokens": clan_tokens, "boss_claimed": boss_claimed,
 		"dq_day": dq_day, "dq_idx": dq_idx, "dq_base": dq_base, "dq_claimed": dq_claimed,
@@ -4281,7 +4296,7 @@ func _load() -> void:
 	gold = float(d.get("gold", 0.0)); gold_ps = float(d.get("gold_ps", 2.0))
 	stage = int(d.get("stage", 1)); sub = int(d.get("sub", 1)); in_boss = false
 	best_stage = int(d.get("best_stage", 1)); endless_best = int(d.get("endless_best", 0)); scrap = int(d.get("scrap", 0)); cores = int(d.get("cores", 0)); cores_peak = float(d.get("cores_peak", 0.0)); cores_total = float(d.get("cores_total", 0.0))
-	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); firstbuy_bought = bool(d.get("firstbuy_bought", false)); firstbuy_until = float(d.get("firstbuy_until", 0.0)); install_ts = float(d.get("install_ts", 0.0)); session_count = int(d.get("session_count", 0)); funnel_seen = d.get("funnel_seen", {}); iap_granted = d.get("iap_granted", []); cb_day = int(d.get("cb_day", -1)); cb_used = int(d.get("cb_used", 0)); cd_day = int(d.get("cd_day", -1)); cd_gem = int(d.get("cd_gem", 0)); cg_charges = int(d.get("cg_charges", CG_MAX)); cg_ts = float(d.get("cg_ts", 0.0)); gem_confirm_skip_day = int(d.get("gem_confirm_skip_day", -1))
+	diamonds = int(d.get("diamonds", 50)); x3_unlocked = bool(d.get("x3_unlocked", false)); x2_until = float(d.get("x2_until", 0.0)); vip_until = float(d.get("vip_until", 0.0)); starter_bought = bool(d.get("starter_bought", false)); starter_offer_seen = bool(d.get("starter_offer_seen", false)); firstbuy_bought = bool(d.get("firstbuy_bought", false)); firstbuy_until = float(d.get("firstbuy_until", 0.0)); packs_bought = d.get("packs_bought", {}); install_ts = float(d.get("install_ts", 0.0)); session_count = int(d.get("session_count", 0)); funnel_seen = d.get("funnel_seen", {}); iap_granted = d.get("iap_granted", []); cb_day = int(d.get("cb_day", -1)); cb_used = int(d.get("cb_used", 0)); cd_day = int(d.get("cd_day", -1)); cd_gem = int(d.get("cd_gem", 0)); cg_charges = int(d.get("cg_charges", CG_MAX)); cg_ts = float(d.get("cg_ts", 0.0)); gem_confirm_skip_day = int(d.get("gem_confirm_skip_day", -1))
 	formation_pos = d.get("formation_pos", [0, 1, 2, 3])
 	if formation_pos.size() != 4: formation_pos = [0, 1, 2, 3]
 	formation_pos = formation_pos.map(func(x): return int(x))
@@ -6220,9 +6235,10 @@ func _iap_grant(pid: String, token: String, acked: bool) -> void:
 		if iap_granted.size() > 60: iap_granted.pop_front()
 	if IAP_DIAMONDS.has(pid):
 		if fresh:
-			diamonds += int(IAP_DIAMONDS[pid])
-			_track("iap_real", {"item": pid})
-			_popup_center(_t("shop_buy_pop") % int(IAP_DIAMONDS[pid]), Color("#ffd24a"), 1.6)
+			var got := _pack_grant_amount(int(IAP_DIAMONDS[pid]))   # ×2 первая покупка пака
+			diamonds += got
+			_track("iap_real", {"item": pid, "granted": got})
+			_popup_center(_t("shop_buy_pop") % got, Color("#ffd24a"), 1.6)
 		iap.consume_purchase(token)   # расходник: consume → можно купить снова
 	elif pid == "starter_pack":
 		if fresh and not starter_bought:
@@ -6254,10 +6270,11 @@ func _iap_buy_diamonds(pid: String, amt: int, price: String) -> void:
 	if iap != null and iap_ready:
 		iap.purchase(pid)   # грант придёт в on_purchase_updated
 		return
-	diamonds += amt   # стаб (web/тест)
-	_track("iap_purchase", {"item": pid, "amount": amt, "price": price})
+	var got := _pack_grant_amount(amt)   # ×2 первая покупка пака (стаб web/тест)
+	diamonds += got
+	_track("iap_purchase", {"item": pid, "amount": got, "price": price})
 	_save(); _refresh_hud()
-	_popup_center(_t("shop_buy_pop") % amt, Color("#ffd24a"), 1.6)
+	_popup_center(_t("shop_buy_pop") % got, Color("#ffd24a"), 1.6)
 
 func _buy_vip() -> void:
 	# 👑 Кибер-пропуск — месячная подписка. Android: реальный биллинг; иначе стаб.
@@ -6375,6 +6392,14 @@ func _buy_event_offer() -> void:
 	_save(); _refresh_hud()
 	_popup_center(_t("event_offer_pop") % 1000, Color("#7adfff"), 2.4)
 
+# 💎 ×2 на ПЕРВУЮ покупку каждого пака: возвращает выданное кол-во и помечает пак купленным
+func _pack_grant_amount(amt: int) -> int:
+	if not bool(packs_bought.get(str(amt), false)):
+		packs_bought[str(amt)] = true
+		return amt * 2
+	return amt
+
+# 🛒 МАГАЗИН в 4 вкладки (спека Дианы: Спец / Ресурсы / Бесплатно / Неделя), киберпанк, щедро и чисто
 func _open_shop() -> void:
 	_funnel("first_shop")   # 📊 первое открытие магазина (верх монетизац. воронки)
 	var panel := Control.new(); panel.set_anchors_preset(Control.PRESET_FULL_RECT); panel.z_index = 3400; hud.add_child(panel)
@@ -6382,66 +6407,98 @@ func _open_shop() -> void:
 	dim.gui_input.connect(func(ev): if ev is InputEventMouseButton and ev.pressed: panel.queue_free())
 	panel.add_child(dim)
 	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _grey_style(Color("#ffd24a"))); card.custom_minimum_size = Vector2(410, 0)
-	var crow := HBoxContainer.new(); crow.alignment = BoxContainer.ALIGNMENT_CENTER; crow.position = Vector2(0, 140); crow.size = Vector2(W, 0); crow.add_child(card); panel.add_child(crow)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 12); card.add_child(v)
-	v.add_child(_lbl(_t("shop_title") % diamonds, 23, Color("#ffe089"), HORIZONTAL_ALIGNMENT_CENTER))
-	v.add_child(_lbl(_t("shop_note"), 13, Color("#b3aecc"), HORIZONTAL_ALIGNMENT_CENTER))
-	# 🎯 ПЕРВАЯ ПОКУПКА — заметный баннер с таймером наверху магазина (пока окно активно), спека Дианы
-	if _firstbuy_active():
-		var fb := PanelContainer.new()
-		var fsb := StyleBoxFlat.new(); fsb.bg_color = Color(0.16, 0.13, 0.03); fsb.set_corner_radius_all(12); fsb.border_color = Color("#ffcf3a"); fsb.set_border_width_all(3); fsb.set_content_margin_all(10)
-		fb.add_theme_stylebox_override("panel", fsb); v.add_child(fb)
-		var fv := VBoxContainer.new(); fv.add_theme_constant_override("separation", 5); fb.add_child(fv)
-		fv.add_child(_lbl(_t("firstbuy_tile") + " — 0.99$", 19, Color("#ffe089"), HORIZONTAL_ALIGNMENT_CENTER))
-		fv.add_child(_lbl(_t("firstbuy_perks") % FIRSTBUY_DIAMONDS, 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
-		var ft := _lbl("", 14, Color("#ff9a3c"), HORIZONTAL_ALIGNMENT_CENTER); fv.add_child(ft)
-		var fbuy := _prim_btn(_t("firstbuy_btn"), Color("#c9971e"), 48, 16); fv.add_child(fbuy)
-		fbuy.pressed.connect(func(): _buy_firstbuy(); panel.queue_free())
-		var fupd := func():
-			var left := int(max(0.0, firstbuy_until - _qa_now()))
-			ft.text = _t("firstbuy_timer") % ("%02d:%02d:%02d" % [left / 3600, (left % 3600) / 60, left % 60])
-		fupd.call()
-		var ftmr := Timer.new(); ftmr.wait_time = 1.0; ftmr.autostart = true; fb.add_child(ftmr)
-		ftmr.timeout.connect(func(): if is_instance_valid(ft): fupd.call())
-	# 🎁 ОФФЕРЫ — сетка из 3 плиток на всю ширину (фидбэк Дианы)
-	var ogrid := GridContainer.new(); ogrid.columns = 3; ogrid.add_theme_constant_override("h_separation", 8); ogrid.add_theme_constant_override("v_separation", 8); ogrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ogrid)
+	card.add_theme_stylebox_override("panel", _grey_style(Color("#ffd24a"))); card.custom_minimum_size = Vector2(430, 0)
+	var crow := HBoxContainer.new(); crow.alignment = BoxContainer.ALIGNMENT_CENTER; crow.position = Vector2(0, 110); crow.size = Vector2(W, 0); crow.add_child(card); panel.add_child(crow)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); card.add_child(v)
+	v.add_child(_lbl(_t("shop_title") % diamonds, 22, Color("#ffe089"), HORIZONTAL_ALIGNMENT_CENTER))
+	# 🗂 ВКЛАДКИ
+	var tabs := HBoxContainer.new(); tabs.add_theme_constant_override("separation", 5); tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(tabs)
+	var _mktab := func(id: String, label: String, accent: Color) -> void:
+		var tb := Button.new(); tb.text = label; tb.custom_minimum_size = Vector2(0, 38); tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tb.add_theme_font_size_override("font_size", 12)
+		var active: bool = shop_tab == id
+		var sbx := StyleBoxFlat.new(); sbx.bg_color = accent if active else Color(0.13, 0.15, 0.20); sbx.set_corner_radius_all(9); sbx.set_content_margin_all(3)
+		for st in ["normal", "hover", "pressed", "focus"]: tb.add_theme_stylebox_override(st, sbx)
+		tb.add_theme_color_override("font_color", Color.WHITE if active else Color("#8990a5"))
+		if not active: tb.pressed.connect(func(): shop_tab = id; panel.queue_free(); _open_shop())
+		tabs.add_child(tb)
+	_mktab.call("special", _t("shop_tab_special"), Color("#e0409a"))
+	_mktab.call("resources", _t("shop_tab_res"), Color("#2ea9e0"))
+	_mktab.call("free", _t("shop_tab_free"), Color("#3ad97a"))
+	_mktab.call("weekly", _t("shop_tab_weekly"), Color("#a06cff"))
+	var content := VBoxContainer.new(); content.add_theme_constant_override("separation", 9); v.add_child(content)
+	match shop_tab:
+		"special":   _shop_tab_special(content, panel)
+		"resources": _shop_tab_resources(content, panel)
+		"free":      _shop_tab_free(content, panel)
+		"weekly":    _shop_tab_weekly(content, panel)
+	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 40, 14); v.add_child(bc)
+	bc.pressed.connect(func(): panel.queue_free())
+
+# 🎯 баннер первой покупки с таймером (переиспользуется)
+func _shop_firstbuy_banner(v: VBoxContainer, panel: Control) -> void:
+	var fb := PanelContainer.new()
+	var fsb := StyleBoxFlat.new(); fsb.bg_color = Color(0.16, 0.13, 0.03); fsb.set_corner_radius_all(12); fsb.border_color = Color("#ffcf3a"); fsb.set_border_width_all(3); fsb.set_content_margin_all(10)
+	fb.add_theme_stylebox_override("panel", fsb); v.add_child(fb)
+	var fv := VBoxContainer.new(); fv.add_theme_constant_override("separation", 5); fb.add_child(fv)
+	fv.add_child(_lbl(_t("firstbuy_tile") + " — 0.99$", 19, Color("#ffe089"), HORIZONTAL_ALIGNMENT_CENTER))
+	fv.add_child(_lbl(_t("firstbuy_perks") % FIRSTBUY_DIAMONDS, 12, Color("#cfe6ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	var ft := _lbl("", 14, Color("#ff9a3c"), HORIZONTAL_ALIGNMENT_CENTER); fv.add_child(ft)
+	var fbuy := _prim_btn(_t("firstbuy_btn"), Color("#c9971e"), 46, 16); fv.add_child(fbuy)
+	fbuy.pressed.connect(func(): _buy_firstbuy(); panel.queue_free())
+	var fupd := func():
+		var left := int(max(0.0, firstbuy_until - _qa_now()))
+		ft.text = _t("firstbuy_timer") % ("%02d:%02d:%02d" % [left / 3600, (left % 3600) / 60, left % 60])
+	fupd.call()
+	var ftmr := Timer.new(); ftmr.wait_time = 1.0; ftmr.autostart = true; fb.add_child(ftmr)
+	ftmr.timeout.connect(func(): if is_instance_valid(ft): fupd.call())
+
+# 🎁 СПЕЦ — премиум-баннеры (первая покупка, старт, VIP, ивент, оффлайн-реактор)
+func _shop_tab_special(v: VBoxContainer, panel: Control) -> void:
+	if _firstbuy_active(): _shop_firstbuy_banner(v, panel)
+	var g := GridContainer.new(); g.columns = 2; g.add_theme_constant_override("h_separation", 8); g.add_theme_constant_override("v_separation", 8); g.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(g)
 	if starter_bought:
-		ogrid.add_child(_art_tile("offer_starter", "🎁", "%s\n%s" % [_t("offer_starter"), _t("offer_bought")], Color(0.1, 0.12, 0.1), Color("#4a6a4a"), 118, func(): pass, true))
+		g.add_child(_art_tile("offer_starter", "🎁", "%s\n%s" % [_t("offer_starter"), _t("offer_bought")], Color(0.1, 0.12, 0.1), Color("#4a6a4a"), 122, func(): pass, true))
 	else:
-		ogrid.add_child(_art_tile("offer_starter", "🎁", "%s\n2.99$" % _t("offer_starter"), Color("#0e3a1c"), Color("#3ad97a"), 118, func(): _buy_starter(); panel.queue_free(); _open_shop()))
+		g.add_child(_art_tile("offer_starter", "🎁", "%s\n2.99$" % _t("offer_starter"), Color("#0e3a1c"), Color("#3ad97a"), 122, func(): _buy_starter(); panel.queue_free(); _open_shop()))
 	var vip_price := (_t("offer_vip_on") % int((vip_until - _qa_now()) / 86400.0)) if _vip_active() else "4.99$/мес"
-	ogrid.add_child(_art_tile("offer_vip", "👑", "%s\n%s" % [_t("offer_vip"), vip_price], Color("#3a2e0a"), Color("#ffd24a"), 118, func(): _buy_vip(); panel.queue_free(); _open_shop()))
-	ogrid.add_child(_art_tile("offer_event", "📅", "%s\n4.99$" % _t("offer_event"), Color("#0a2a3a"), Color("#7adfff"), 118, func(): _buy_event_offer(); panel.queue_free(); _open_shop()))
-	# value-ladder: 4 ступени $0.99→$49.99 с тегами-нуджами (UI Этап 3): старт=×2 за 1-ю покупку (визуальный хук), средний=популярное, топ=лучшая цена/алмаз
-	# 💎 ПАКИ АЛМАЗОВ — СЕТКА плиток (фидбэк Дианы: блоки по 3 в ряд, не строчки)
+	g.add_child(_art_tile("offer_vip", "👑", "%s\n%s" % [_t("offer_vip"), vip_price], Color("#3a2e0a"), Color("#ffd24a"), 122, func(): _buy_vip(); panel.queue_free(); _open_shop()))
+	g.add_child(_art_tile("offer_event", "📅", "%s\n4.99$" % _t("offer_event"), Color("#0a2a3a"), Color("#7adfff"), 122, func(): _buy_event_offer(); panel.queue_free(); _open_shop()))
+	g.add_child(_art_tile("reactor", "🔋", "%s\n%d💎" % [_t("reactor_short"), _reactor_cost()], Color(0.10, 0.16, 0.20), Color("#7adfff"), 122, func(): panel.queue_free(); _open_offline_reactor()))
+
+# 💎 РЕСУРСЫ — паки алмазов (×2 на первую покупку каждого) + гача
+func _shop_tab_resources(v: VBoxContainer, panel: Control) -> void:
 	var grid := GridContainer.new(); grid.columns = 3; grid.add_theme_constant_override("h_separation", 8); grid.add_theme_constant_override("v_separation", 8); grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(grid)
-	var _packs := [[100, "0.99$", "first2"], [550, "4.99$", "popular"], [1200, "9.99$", ""], [6500, "49.99$", "best"], [15000, "99.99$", ""], [40000, "199.99$", "best"]]
+	var _packs := [[100, "0.99$"], [550, "4.99$"], [1200, "9.99$"], [6500, "49.99$"], [15000, "99.99$"], [40000, "199.99$"]]
 	for pi in _packs.size():
 		var pack: Array = _packs[pi]
-		var amt: int = pack[0]; var tag: String = pack[2]
-		var tagtxt := ""; var tagcol := Color("#39405a")
-		match tag:
-			"first2":  tagtxt = _t("shop_first_x2");   tagcol = Color("#3ad97a")
-			"popular": tagtxt = _t("shop_popular");    tagcol = Color("#7adfff")
-			"best":    tagtxt = _t("shop_best_value"); tagcol = Color("#ffd24a")
-		# 💚 видимая ВЫГОДА (фидбэк Дианы: показать что большой пак выгоднее) — на плитках без своего тега
-		if tagtxt == "":
+		var amt: int = pack[0]
+		var first: bool = not bool(packs_bought.get(str(amt), false))
+		var tagtxt := ""; var tagcol := Color("#39405a"); var lines := ""
+		if first:   # ×2 на первую покупку — показываем удвоенное кол-во + бейдж
+			tagtxt = _t("shop_x2_first"); tagcol = Color("#ffd24a")
+			lines = "%s 💎\n%s\n%s" % [_gsep(amt * 2), pack[1], tagtxt]
+		else:
 			var pr := float(str(pack[1]).trim_suffix("$"))
-			var mult := (float(amt) / pr) / (100.0 / 0.99)   # алм/$ этого пака ÷ базового
-			if mult >= 1.05:
-				tagtxt = _t("shop_value_mult") % mult; tagcol = Color("#3ad97a")
-		var gtx := "gems_%d" % (pi + 1)   # каждый пак = своя иконка прогрессии (gems_1..6), фидбэк Дианы
-		var lines := "%s 💎\n%s%s" % [_gsep(amt), pack[1], ("\n" + tagtxt) if tagtxt != "" else ""]
-		var tile := _art_tile(gtx, "💎", lines, Color(0.14, 0.16, 0.22), tagcol, 118, func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]), false, Color("#e8ecf5"))
-		grid.add_child(tile)
-	# разделы магазина — ПЛИТКИ с крупными иконками (фидбэк Дианы: блоки, не строчки)
-	var ngrid := GridContainer.new(); ngrid.columns = 3; ngrid.add_theme_constant_override("h_separation", 8); ngrid.add_theme_constant_override("v_separation", 8); ngrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ngrid)
+			var mult := (float(amt) / pr) / (100.0 / 0.99)
+			if mult >= 1.05: tagtxt = _t("shop_value_mult") % mult; tagcol = Color("#3ad97a")
+			lines = "%s 💎\n%s%s" % [_gsep(amt), pack[1], ("\n" + tagtxt) if tagtxt != "" else ""]
+		var gtx := "gems_%d" % (pi + 1)
+		grid.add_child(_art_tile(gtx, "💎", lines, Color(0.14, 0.16, 0.22), tagcol, 128, func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]), false, Color("#e8ecf5")))
+	var ngrid := GridContainer.new(); ngrid.columns = 2; ngrid.add_theme_constant_override("h_separation", 8); ngrid.add_theme_constant_override("v_separation", 8); ngrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ngrid)
 	ngrid.add_child(_art_tile("crate_gear", "🎰", _t("shop_gacha_short"), Color(0.14, 0.16, 0.22), Color("#ff7adf"), 110, func(): panel.queue_free(); _open_gacha(), false, Color("#e8ecf5")))
 	ngrid.add_child(_art_tile("crate_heroes", "🦸", _t("hg_short"), Color(0.14, 0.16, 0.22), Color("#00f0ff"), 110, func(): panel.queue_free(); _open_hero_gacha(), false, Color("#e8ecf5")))
-	ngrid.add_child(_art_tile("reactor", "🔋", _t("reactor_short"), Color(0.14, 0.16, 0.22), Color("#7adfff"), 110, func(): panel.queue_free(); _open_offline_reactor(), false, Color("#e8ecf5")))
-	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 44, 15); v.add_child(bc)
-	bc.pressed.connect(func(): panel.queue_free())
+
+# 🎉 БЕСПЛАТНО — бусты за рекламу + ежедневная награда
+func _shop_tab_free(v: VBoxContainer, panel: Control) -> void:
+	var g := GridContainer.new(); g.columns = 2; g.add_theme_constant_override("h_separation", 8); g.add_theme_constant_override("v_separation", 8); g.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(g)
+	g.add_child(_art_tile("", "📺", _t("shop_free_boost"), Color(0.10, 0.16, 0.12), Color("#3ad97a"), 110, func(): panel.queue_free(); _open_ad_boosts(), false, Color("#e8ecf5")))
+	var dtag := _t("shop_free_daily_rdy") if _daily_available() else _t("shop_free_daily_wait")
+	g.add_child(_art_tile("", "🎁", "%s\n%s" % [_t("shop_free_daily"), dtag], Color(0.16, 0.13, 0.03), Color("#ffd24a"), 110, func(): panel.queue_free(); _show_daily(), false, Color("#e8ecf5")))
+
+# 🎟 НЕДЕЛЯ — season pass (батлпасс)
+func _shop_tab_weekly(v: VBoxContainer, panel: Control) -> void:
+	var b := _art_tile("", "🎟", _t("shop_weekly_pass"), Color(0.14, 0.10, 0.20), Color("#a06cff"), 130, func(): panel.queue_free(); _open_battlepass(), false, Color("#e8ecf5"))
+	v.add_child(b)
 
 # === ОФЛАЙН-РЕАКТОР: экспон. сток алмазов (×1.5/ур), расширяет окно офлайн-дохода на +2 ч/ур ===
 func _reactor_cost() -> int:
