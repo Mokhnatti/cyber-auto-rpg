@@ -137,7 +137,7 @@ var save_t := 5.0         # автосейв-таймер
 var hud_t := 0.0          # троттл HUD в бою (перф-ревью): _refresh_hud тяжёлый (сканы врагов/боссов/бейджи/строки) → в бою обновляем ~15 Гц, а не каждый кадр
 # ТЕЛЕМЕТРИЯ (тест на друзьях): ник + отправка прогресса в Google-таблицу
 const TELEMETRY_URL := "https://ntfy.sh/cyberautorpg-tt-9f3a7k"   # секретный топик ntfy (читаю curl-ом)
-const VERSION := "1.9.121" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
+const VERSION := "1.9.122" # версия билда (показывается в игре: тестер видит совпадает ли с последней → надо ли обновиться). Бампить КАЖДЫЙ деплой.
 # 🔒 LEAN-V1: кланы спрятаны за «Скоро» на первый запуск (решение Рамиля+Дианы+ресёрч 15.07).
 # Причины: соло-Firebase-реалтайм рискован на старте (баги/эксплойты/дюп), клан-краны ломают
 # калибровку экономики, соц-слой чинит D30 а не D1/D7. Включить обратно = true (кланы готовы в коде).
@@ -1295,7 +1295,7 @@ const TR := {
 	"shop_value_mult":   {"ru": "💚 выгоднее ×%.1f", "en": "💚 ×%.1f value"},
 	"shop_tab_special":  {"ru": "🎁 Спец", "en": "🎁 Special"},
 	"shop_tab_res":      {"ru": "💎 Ресурсы", "en": "💎 Resources"},
-	"shop_tab_free":     {"ru": "🎉 Бесплатно", "en": "🎉 Free"},
+	"shop_tab_summon":   {"ru": "🎰 Призыв", "en": "🎰 Summon"},
 	"shop_tab_weekly":   {"ru": "🎟 Неделя", "en": "🎟 Weekly"},
 	"shop_x2_first":     {"ru": "🔥 ×2 БОНУС", "en": "🔥 ×2 BONUS"},
 	"shop_free_boost":   {"ru": "Бустеры\n(за просмотр)", "en": "Boosts\n(watch)"},
@@ -6423,13 +6423,13 @@ func _open_shop() -> void:
 		tabs.add_child(tb)
 	_mktab.call("special", _t("shop_tab_special"), Color("#e0409a"))
 	_mktab.call("resources", _t("shop_tab_res"), Color("#2ea9e0"))
-	_mktab.call("free", _t("shop_tab_free"), Color("#3ad97a"))
+	_mktab.call("summon", _t("shop_tab_summon"), Color("#ff7adf"))
 	_mktab.call("weekly", _t("shop_tab_weekly"), Color("#a06cff"))
 	var content := VBoxContainer.new(); content.add_theme_constant_override("separation", 9); v.add_child(content)
 	match shop_tab:
 		"special":   _shop_tab_special(content, panel)
 		"resources": _shop_tab_resources(content, panel)
-		"free":      _shop_tab_free(content, panel)
+		"summon":    _shop_tab_summon(content, panel)
 		"weekly":    _shop_tab_weekly(content, panel)
 	var bc := _prim_btn(_t("close_x"), Color(0.28, 0.31, 0.38), 40, 14); v.add_child(bc)
 	bc.pressed.connect(func(): panel.queue_free())
@@ -6484,16 +6484,12 @@ func _shop_tab_resources(v: VBoxContainer, panel: Control) -> void:
 			lines = "%s 💎\n%s%s" % [_gsep(amt), pack[1], ("\n" + tagtxt) if tagtxt != "" else ""]
 		var gtx := "gems_%d" % (pi + 1)
 		grid.add_child(_art_tile(gtx, "💎", lines, Color(0.14, 0.16, 0.22), tagcol, 128, func(): _iap_buy_diamonds("diamonds_%d" % amt, amt, pack[1]), false, Color("#e8ecf5")))
-	var ngrid := GridContainer.new(); ngrid.columns = 2; ngrid.add_theme_constant_override("h_separation", 8); ngrid.add_theme_constant_override("v_separation", 8); ngrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(ngrid)
-	ngrid.add_child(_art_tile("crate_gear", "🎰", _t("shop_gacha_short"), Color(0.14, 0.16, 0.22), Color("#ff7adf"), 110, func(): panel.queue_free(); _open_gacha(), false, Color("#e8ecf5")))
-	ngrid.add_child(_art_tile("crate_heroes", "🦸", _t("hg_short"), Color(0.14, 0.16, 0.22), Color("#00f0ff"), 110, func(): panel.queue_free(); _open_hero_gacha(), false, Color("#e8ecf5")))
 
-# 🎉 БЕСПЛАТНО — бусты за рекламу + ежедневная награда
-func _shop_tab_free(v: VBoxContainer, panel: Control) -> void:
+# 🎰 ПРИЗЫВ — сундук снаряжения + вербовка бойцов (перенесено из Ресурсов; спека Дианы)
+func _shop_tab_summon(v: VBoxContainer, panel: Control) -> void:
 	var g := GridContainer.new(); g.columns = 2; g.add_theme_constant_override("h_separation", 8); g.add_theme_constant_override("v_separation", 8); g.size_flags_horizontal = Control.SIZE_EXPAND_FILL; v.add_child(g)
-	g.add_child(_art_tile("", "📺", _t("shop_free_boost"), Color(0.10, 0.16, 0.12), Color("#3ad97a"), 110, func(): panel.queue_free(); _open_ad_boosts(), false, Color("#e8ecf5")))
-	var dtag := _t("shop_free_daily_rdy") if _daily_available() else _t("shop_free_daily_wait")
-	g.add_child(_art_tile("", "🎁", "%s\n%s" % [_t("shop_free_daily"), dtag], Color(0.16, 0.13, 0.03), Color("#ffd24a"), 110, func(): panel.queue_free(); _show_daily(), false, Color("#e8ecf5")))
+	g.add_child(_art_tile("crate_gear", "🎰", _t("shop_gacha_short"), Color(0.14, 0.16, 0.22), Color("#ff7adf"), 132, func(): panel.queue_free(); _open_gacha(), false, Color("#e8ecf5")))
+	g.add_child(_art_tile("crate_heroes", "🦸", _t("hg_short"), Color(0.14, 0.16, 0.22), Color("#00f0ff"), 132, func(): panel.queue_free(); _open_hero_gacha(), false, Color("#e8ecf5")))
 
 # 🎟 НЕДЕЛЯ — season pass ПРЯМО во вкладке: слева Free, справа Premium (спека Дианы, реф-скрин)
 func _shop_tab_weekly(v: VBoxContainer, panel: Control) -> void:
