@@ -11,7 +11,7 @@
 
 **[Closed Testing] Cyberpunk idle/auto-RPG — need 12 testers (14 days), happy to test yours back**
 
-Hey! I'm an indie dev finishing my first game — **Cyber Auto-RPG: Neon Squad**, a cyberpunk idle/auto-battler (your 4-fighter squad fights automatically, you upgrade, collect loot, pull gacha, clear stages). Android, F2P.
+Hey! I'm an indie dev finishing my first game — **Neon Squad: Cyber Idle RPG**, a cyberpunk idle/auto-battler (your 4-fighter squad fights automatically, you upgrade, collect loot, pull gacha, clear stages). Android, F2P.
 
 I need **12 testers for Google's 14-day closed test** before I can go to production. Ask is small: join the test, keep it installed, open it now and then over 14 days.
 
@@ -29,7 +29,7 @@ Thanks a ton — comment "in" and I'll test yours too!
 
 **[Закрытый тест] Киберпанк idle/авто-RPG — нужно 12 тестеров на 14 дней, тестю в ответ**
 
-Привет! Инди-разработчик, доделываю первую игру — **Cyber Auto-RPG: Neon Squad**, киберпанк idle/авто-баттлер (отряд из 4 бойцов сам сражается, ты качаешь, собираешь лут, крутишь гачу, проходишь стадии). Android, F2P.
+Привет! Инди-разработчик, доделываю первую игру — **Neon Squad: Cyber Idle RPG**, киберпанк idle/авто-баттлер (отряд из 4 бойцов сам сражается, ты качаешь, собираешь лут, крутишь гачу, проходишь стадии). Android, F2P.
 
 Нужно **12 тестеров на 14-дневный закрытый тест Google** перед выходом в продакшен. Просьба минимальная: подключиться по ссылке, не удалять и иногда заходить в течение 14 дней.
 
